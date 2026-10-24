@@ -187,7 +187,7 @@ const FURN = [
   { id: 'calendar', x: 42, y: 8, w: 16, h: 16, draw: drawCalendar },
   { id: 'window1', x: 66, y: 6, w: 34, h: 20, draw: drawWindow },
   { id: 'plant1', x: 100, y: 30, w: 14, h: 20, solid: true, draw: drawPlant },
-  { id: 'desk', x: 26, y: 64, w: 50, h: 20, solid: true, act: 'trade', label: '종목 차트 보기 · 💻 여기서 B 매수 · S 매도 (1주씩) · 1·2·3 종목', draw: drawDesk },
+  { id: 'desk', x: 26, y: 64, w: 50, h: 20, solid: true, act: 'trade', label: '💻 컴퓨터 켜기 (증권 HTS: 시세·차트·호가·주문) · 여기서 B/S로 1주 바로 거래', draw: drawDesk },
   { id: 'catbed', x: 6, y: 140, w: 28, h: 20, solid: true, draw: drawCatBed },
   { id: 'chalkboard', x: 130, y: 5, w: 34, h: 24, act: 'rules', label: '🧑‍🏫 칠판 — 게임 규칙', draw: drawChalkboard },
   { id: 'tv', x: 170, y: 14, w: 36, h: 30, solid: true, act: 'news', label: '📺 뉴스 TV — 배우기 읽기', draw: drawTV },

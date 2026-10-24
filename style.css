@@ -96,11 +96,6 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px d
   background: rgba(224, 62, 62, .9); color: #fff; border: 3px solid var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* 책상 컴퓨터 차트 */
-.chart-card { padding: 6px; margin-bottom: 6px; border: 3px solid transparent; }
-.chart-card.sel { border-color: var(--gold); background: #fff3c4; }
-.chart-title { margin: 0 0 4px; font-size: 13px; color: var(--mute); }
-.chart { display: block; width: 100%; height: auto; border: 3px solid var(--ink); }
 .rules { margin: 0; padding-left: 18px; }
 .rules li { margin-bottom: 3px; }
 
@@ -145,3 +140,79 @@ th { color: var(--mute); font-weight: normal; }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
 @keyframes hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-16px); } }
 @keyframes sink { to { transform: translateY(20px); } }
+
+/* 책상 컴퓨터: 개미증권 HTS (베이지 모니터 + 어두운 증권 화면) */
+.pc { position: fixed; inset: 0; z-index: 7; display: grid; place-items: center; padding: 12px; background: rgba(16, 16, 32, .7); }
+.pc[hidden] { display: none; }
+.pc-monitor {
+  position: relative; width: min(1180px, 100%); max-height: calc(100vh - 24px); overflow: auto;
+  padding: 16px 16px 26px; background: #d8d0bc; border: 4px solid var(--ink); box-shadow: 8px 8px 0 #000;
+}
+.pc-monitor::after { content: ""; position: absolute; right: 22px; bottom: 9px; width: 8px; height: 8px; background: #22e05a; box-shadow: 0 0 0 2px var(--ink); }
+.pc-screen {
+  position: relative; background: #0b1426; color: #d7e3ff; border: 4px solid #2a2a35; font-size: 13px; line-height: 1.4;
+}
+.pc-screen::before { /* 정지된 주사선 무늬 */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .025) 0 1px, transparent 1px 3px);
+}
+.pc .up { color: #ff6b6b; } .pc .down { color: #6ba8ff; }
+.pc-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 8px; background: #1f3a8a; color: #fff; font-weight: bold; }
+.pc button { font: inherit; color: inherit; cursor: pointer; }
+.pc-x { background: #c0392b; border: 2px solid var(--ink); padding: 1px 10px; color: #fff; }
+.pc-body {
+  display: grid; grid-template-columns: 200px minmax(0, 1fr) 150px 230px; gap: 8px; padding: 8px;
+  height: min(560px, calc(100vh - 150px));
+}
+@media (max-width: 1000px) { .pc-body { grid-template-columns: minmax(0, 1fr); height: auto; } }
+.pc-box { background: #111d35; border: 2px solid #24365e; padding: 6px 8px; overflow: auto; min-width: 0; }
+.pc-box h3 { margin: 4px 0 6px; font-size: 13px; color: #f7c948; }
+.pc-box h3 small { color: #7d8db3; font-weight: normal; }
+.pc-watch { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.pc-w {
+  display: grid; grid-template-columns: 20px 1fr auto; grid-template-areas: "i n n" "i p c"; gap: 0 6px; align-items: center;
+  text-align: left; padding: 4px 6px; background: #0b1426; border: 2px solid #24365e;
+}
+.pc-w img { grid-area: i; }
+.pc-w .n { grid-area: n; font-weight: bold; }
+.pc-w .p { grid-area: p; font-variant-numeric: tabular-nums; }
+.pc-w .c { grid-area: c; font-size: 12px; }
+.pc-w.sel { border-color: #f7c948; background: #1b2a4d; }
+.pc-dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 0; font-size: 12px; }
+.pc-dl dt { color: #7d8db3; }
+.pc-dl dd { margin: 0; text-align: right; font-weight: bold; font-variant-numeric: tabular-nums; }
+.pc-main { display: flex; flex-direction: column; gap: 6px; }
+.pc-q-head { display: flex; gap: 8px; align-items: baseline; }
+.pc-q-head b { font-size: 16px; color: #fff; }
+.pc-sector, .pc-q-meta, .pc-legend, .pc-sub { color: #7d8db3; font-size: 12px; margin: 0; }
+.pc-q-price { display: flex; gap: 10px; align-items: baseline; font-weight: bold; }
+.pc-q-price .big { font-size: 26px; font-variant-numeric: tabular-nums; }
+.pc-chart { display: block; width: 100%; height: auto; border: 2px solid #24365e; }
+.pc-tabs { display: flex; gap: 4px; }
+.pc-tabs button { padding: 3px 12px; background: #0b1426; border: 2px solid #24365e; color: #9aa8c7; }
+.pc-tabs button[aria-selected="true"] { background: #1f3a8a; color: #fff; border-color: #3b82f6; }
+.pc-tab { flex: 1; min-height: 70px; }
+.pc-tab table, .pc-book { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pc-tab td { padding: 2px 6px; border-bottom: 1px solid #24365e; white-space: nowrap; color: inherit; }
+.pc-tab .th td { color: #7d8db3; }
+.pc-tab p { margin: 4px 0; }
+.pc-empty { color: #7d8db3; }
+.pc-news { font-size: 12px; }
+.pc-book td { padding: 2px 4px; border: 1px solid #0b1426; text-align: right; color: #d7e3ff; }
+.pc-book .ask td { background: #142a52; }
+.pc-book .bid td { background: #3a1626; }
+.pc-book .pr { text-align: center; font-weight: bold; }
+.pc-book .pr.near { outline: 2px solid #f7c948; outline-offset: -2px; }
+.pc-book .vol { background-image: linear-gradient(90deg, rgba(255, 255, 255, .15) var(--w), transparent var(--w)) !important; font-size: 11px; }
+.pc-order { display: flex; flex-direction: column; gap: 6px; }
+.pc-order-name { margin: 0; font-weight: bold; color: #fff; }
+.pc-qty input { width: 90px; font: inherit; font-weight: bold; padding: 3px 6px; background: #0b1426; color: #fff; border: 2px solid #3b82f6; }
+.pc-quick { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.pc-quick button { padding: 3px; background: #0b1426; border: 2px solid #24365e; color: #d7e3ff; font-size: 12px; }
+.pc-order-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pc-buy, .pc-sell { padding: 10px; font-weight: bold; font-size: 15px; border: 3px solid var(--ink); box-shadow: 3px 3px 0 #000; color: #fff !important; }
+.pc-buy { background: var(--up); } .pc-sell { background: var(--down); }
+.pc-buy:active:not(:disabled), .pc-sell:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: none; }
+.pc-msg { margin: 0; min-height: 3em; padding: 4px 6px; font-size: 12px; background: #0b1426; border: 2px solid #24365e; }
+.pc-statusbar { padding: 3px 8px; font-size: 12px; color: #9aa8c7; background: #111d35; border-top: 2px solid #24365e; }
+.pc button:focus-visible, .pc input:focus-visible { outline: 3px dashed #f7c948; outline-offset: 1px; }

@@ -72,6 +72,57 @@
   </div>
 </div>
 
+<div id="pc" class="pc" hidden>
+  <div class="pc-monitor" role="dialog" aria-modal="true" aria-label="컴퓨터: 개미증권 HTS">
+    <div class="pc-screen">
+      <div class="pc-titlebar">
+        <span>📈 개미증권 HTS</span>
+        <span id="pcClock"></span>
+        <button id="pcClose" class="pc-x">로그아웃 <kbd>Esc</kbd></button>
+      </div>
+      <div class="pc-body">
+        <section class="pc-box pc-watch-box" aria-label="관심 종목과 계좌">
+          <h3>관심 종목 <small>↑↓</small></h3>
+          <div id="pcWatch" class="pc-watch"></div>
+          <h3>내 계좌</h3>
+          <dl id="pcAccount" class="pc-dl"></dl>
+        </section>
+        <section class="pc-box pc-main" aria-label="현재가와 차트">
+          <div id="pcQuote" class="pc-quote"></div>
+          <canvas id="pcChart" class="px pc-chart" width="300" height="90" role="img" aria-label="선택한 종목의 일봉 차트"></canvas>
+          <p class="pc-legend">일봉: 빨강 상승 · 파랑 하락 · 주황 점선 = 내 평단</p>
+          <div class="pc-tabs" role="tablist">
+            <button data-tab="hold" role="tab">잔고</button>
+            <button data-tab="log" role="tab">체결 내역</button>
+            <button data-tab="info" role="tab">기업 정보</button>
+          </div>
+          <div id="pcTab" class="pc-tab"></div>
+        </section>
+        <section class="pc-box" aria-label="호가">
+          <h3>호가 <small>잔량</small></h3>
+          <table id="pcBook" class="pc-book"></table>
+        </section>
+        <section class="pc-box pc-order" aria-label="주문">
+          <h3>주문</h3>
+          <p id="pcOrderName" class="pc-order-name"></p>
+          <label class="pc-qty">수량 <input id="pcQty" type="number" min="1" step="1" value="1" inputmode="numeric"> 주</label>
+          <div class="pc-quick">
+            <button data-q="1">1주</button><button data-q="10">10주</button>
+            <button data-q="max">최대 매수</button><button data-q="all">전량</button>
+          </div>
+          <dl id="pcOrderInfo" class="pc-dl"></dl>
+          <div class="pc-order-btns">
+            <button id="pcBuy" class="pc-buy">매수</button>
+            <button id="pcSell" class="pc-sell">매도</button>
+          </div>
+          <p id="pcMsg" class="pc-msg" aria-live="polite"></p>
+        </section>
+      </div>
+      <div id="pcStatus" class="pc-statusbar"></div>
+    </div>
+  </div>
+</div>
+
 <template id="tpl-rules">
   <ul class="rules">
     <li>시작 자금 <b>100만 원</b>. 1거래일은 1.2초씩 흐르고 최대 <b>60거래일</b>입니다.</li>
