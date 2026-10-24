@@ -109,10 +109,10 @@ function drawGround(cam, W, H) {
     for (let tx = Math.floor(cam.x / t); tx * t < cam.x + W; tx++)
       ctx.drawImage(tileImage(tx, ty), tx * t - cam.x, ty * t - cam.y, t, t);
 }
-// 나무·집: 발밑(y) 가운데(x)를 기준으로 세움
+// 건물·나무: 발밑(y) 가운데(x)를 기준으로 세움
 function drawThing(t, cam) {
-  const k = S * ART, w = t.img.width * k, h = t.img.height * k;
-  ctx.drawImage(t.img, Math.round(t.x * S - cam.x - w / 2), Math.round(t.y * S - cam.y - h), w, h);
+  const img = thingArt(t), k = S * ART, w = img.width * k, h = img.height * k;
+  ctx.drawImage(img, Math.round(t.x * S - cam.x - w / 2), Math.round(t.y * S - cam.y - h), w, h);
 }
 function drawPlayer(p, cam, now) {
   const k = S * SPRITE.scale;   // 캐릭터 픽셀 1칸 = k px
@@ -180,8 +180,8 @@ function frame(now) {
   // 카메라: 늘 나를 화면 가운데에 (땅이 끝없으니 멈추는 곳 없음)
   const cam = { x: Math.round(f.x - W / 2), y: Math.round(f.y - SPRITE.h * S * SPRITE.scale / 2 - H / 2) };
   drawGround(cam, W, H);
-  // 나무·집·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
-  const scene = [...THINGS.map(t => ({ y: t.y, draw: () => drawThing(t, cam) })), { y: me.y, draw: () => drawPlayer(me, cam, now) }];
+  // 건물·나무·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
+  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.y, draw: () => drawThing(t, cam) })), { y: me.y, draw: () => drawPlayer(me, cam, now) }];
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
   drawName(me, cam);
   drawToast(W);
