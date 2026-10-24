@@ -3,10 +3,12 @@
 // 캐릭터 그림은 sprites.js(부위별 픽셀 그림), 여기서는 겹쳐 그리기·이동·바닥만 함
 {
 const cv = document.getElementById('game'), ctx = cv.getContext('2d');
-const MAP = 30;                         // 마을 크기: 30×30칸
 const TILE_W = 32, TILE_H = 16;         // 바닥 한 칸(마름모)의 픽셀 크기
+const COLS = 40, ROWS = 40;             // 마을 크기: 가로 40칸 × 세로 40칸(마름모를 엇갈려 쌓아 전체는 직사각형)
+const MAP_W = COLS * TILE_W, MAP_H = ROWS * TILE_H;   // 마을 크기(픽셀): 1280 × 640
 const SPEED = 240;                      // 화면에서 1초에 걷는 거리(px)
-const me = { name: '', x: MAP / 2, y: MAP / 2, look: DEFAULT_LOOK, back: false, left: false, moving: false };
+// 위치는 마을 픽셀 좌표(왼쪽 위 = 0, 0). 발밑 자리
+const me = { name: '', x: MAP_W / 2, y: MAP_H / 2, look: DEFAULT_LOOK, back: false, left: false, moving: false };
 let S = 3;                              // 픽셀 배율 (픽셀 1칸 = S px). 낮은 화면은 2
 
 // ===== 로그인 확인: 안 했거나 로그아웃하면 메인으로 =====
@@ -109,15 +111,19 @@ const grass = (() => {
   return c;
 })();
 
-// ===== 대각선 시점 좌표: 마을 칸(x, y) → 화면 픽셀 =====
-const toScreen = (x, y) => ({ x: (x - y) * TILE_W / 2 * S, y: (x + y) * TILE_H / 2 * S });
+// ===== 마을 픽셀 좌표 → 화면 픽셀 =====
+const toScreen = (x, y) => ({ x: x * S, y: y * S });
 
 // ===== 그리기 =====
+// 바닥: 마름모를 반 칸씩 엇갈려 쌓고, 직사각형 밖으로 나간 반쪽은 잘라 냄 → 마을 테두리가 반듯한 직사각형
 function drawGround(cam) {
-  for (let j = 0; j < MAP; j++) for (let i = 0; i < MAP; i++) {
-    const p = toScreen(i, j);
-    ctx.drawImage(grass, Math.round(p.x - TILE_W / 2 * S - cam.x), Math.round(p.y - cam.y), TILE_W * S, TILE_H * S);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(-cam.x, -cam.y, MAP_W * S, MAP_H * S); ctx.clip();
+  for (let r = 0; r <= ROWS * 2; r++) for (let c = 0; c <= COLS; c++) {
+    const x = (c * TILE_W - (r % 2 ? 0 : TILE_W / 2)) * S - cam.x, y = (r * TILE_H / 2 - TILE_H / 2) * S - cam.y;
+    ctx.drawImage(grass, Math.round(x), Math.round(y), TILE_W * S, TILE_H * S);
   }
+  ctx.restore();
 }
 function drawPlayer(p, cam, now) {
   const step = p.moving ? 1 + (Math.floor(now / 160) % 2) : 0;
@@ -146,18 +152,19 @@ function drawToast(W) {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  // 입력은 화면 방향(위 = 화면 위쪽). 대각선도 같은 빠르기
-  let vx = stick.x + held.has('R') - held.has('L'), vy = stick.y + held.has('D') - held.has('U');
+  // 입력: 한 방향 키는 화면 방향(위 = 화면 위쪽). 두 키를 같이 누르면(↑→ 등) 바닥 마름모의 비스듬한 선을 따라 걸음(가로 2 : 세로 1)
+  let vx = held.has('R') - held.has('L'), vy = held.has('D') - held.has('U');
+  if (vx && vy) vy /= 2;
+  vx += stick.x; vy += stick.y;
   const len = Math.hypot(vx, vy);
-  if (len > 1) { vx /= len; vy /= len; }
+  if (len > 1) { vx /= len; vy /= len; }   // 대각선도 같은 빠르기
   me.moving = len > 0.1;
   if (me.moving) {
     if (Math.abs(vx) > 0.1) me.left = vx < 0;
     if (Math.abs(vy) > 0.1) me.back = vy < 0;
-    // 화면 이동(px) → 마을 칸 이동: 마름모 좌표를 거꾸로 계산
-    const sx = vx * SPEED * dt, sy = vy * SPEED * dt, tw = TILE_W * S, th = TILE_H * S;
-    me.x = Math.min(MAP - 0.3, Math.max(0.3, me.x + sx / tw + sy / th));
-    me.y = Math.min(MAP - 0.3, Math.max(0.3, me.y + sy / th - sx / tw));
+    const m = 6;   // 마을 끝에서 몸이 반쯤 나가지 않게 남기는 여백(픽셀)
+    me.x = Math.min(MAP_W - m, Math.max(m, me.x + vx * SPEED / S * dt));
+    me.y = Math.min(MAP_H - 2, Math.max(SPRITE.h / 2, me.y + vy * SPEED / S * dt));
   }
 
   const k = devicePixelRatio || 1, W = cv.width / k, H = cv.height / k;
@@ -165,7 +172,9 @@ function frame(now) {
   ctx.imageSmoothingEnabled = false;      // 픽셀이 번지지 않고 또렷하게
   ctx.fillStyle = '#1d2a1b'; ctx.fillRect(0, 0, W, H);   // 마을 바깥
   const f = toScreen(me.x, me.y);
-  const cam = { x: Math.round(f.x - W / 2), y: Math.round(f.y - H / 2 - SPRITE.h * S / 2) };   // 나를 화면 가운데에
+  // 카메라: 나를 화면 가운데에. 마을 끝에 가까우면 바깥이 안 보이게 멈춤(마을이 화면보다 작으면 마을을 가운데에)
+  const fitCam = (p, view, size) => Math.round(size > view ? Math.min(size - view, Math.max(0, p - view / 2)) : (size - view) / 2);
+  const cam = { x: fitCam(f.x, W, MAP_W * S), y: fitCam(f.y - SPRITE.h * S / 2, H, MAP_H * S) };
   drawGround(cam);
   drawPlayer(me, cam, now);
   drawToast(W);
