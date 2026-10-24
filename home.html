@@ -46,8 +46,6 @@
     @keyframes nudge { 50% { transform: translateY(7px); } }
   }
   .tag { margin: 26px auto 0; max-width: 34em; font-size: clamp(13px, 1.1vw, 15px); letter-spacing: .12em; line-height: 1.8; }
-  .live { margin: 22px 0 0; font-size: 13px; font-weight: bold; letter-spacing: .06em; }
-  .live::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: #000; vertical-align: 1px; }
 
   /* 검은 덩어리(별 점 포함)와 선 그림: 화면 폭(vw)에 맞춰 같이 커지고 작아짐 */
   .deco { position: absolute; z-index: 1; display: block; pointer-events: none; }
@@ -55,7 +53,7 @@
   .blob circle, .blob .spark { fill: #fff; }
   .b1 { width: clamp(220px, 27vw, 420px); top: 5%; right: 5%; transform: rotate(8deg); }
   .b2 { width: clamp(110px, 13vw, 200px); top: 30%; left: -3%; transform: rotate(-20deg); }
-  /* 아래쪽 두 덩어리는 영역 1 아래 끝을 넘어 영역 2까지 이어짐(잘리지 않음). 영역 2의 게임 상자보다는 뒤 */
+  /* 아래쪽 두 덩어리는 영역 1 아래 끝을 넘어 영역 2까지 이어짐(잘리지 않음). 영역 2의 로그인 카드보다는 뒤 */
   .b3 { width: clamp(260px, 32vw, 500px); bottom: -14%; left: -8%; transform: rotate(150deg); }
   .b4 { width: clamp(260px, 34vw, 540px); bottom: -22%; right: -9%; transform: rotate(40deg); }
   .line { fill: #fff; stroke: #000; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
@@ -73,8 +71,8 @@
   @media (max-width: 640px) { .b3 { bottom: -5%; } .b4 { bottom: -7%; } .play { padding-top: 72px; } }
   @media (max-width: 640px) { .work, .coins, .hobby { display: none; } .study { top: 6%; } .person { width: 48px; bottom: 3%; right: 7%; } }   /* 휴대폰: 글자를 가리지 않게 */
 
-  /* ===== 영역 2: PC·모바일 어디서나 + 게임 입장 화면 =====
-     PC: 왼쪽 글(입체 제목·소개·기기별 조작) / 오른쪽 게임 입장 상자. 좁은 화면(900px 이하): 글 위, 상자 아래 */
+  /* ===== 영역 2: PC·모바일 어디서나 + 로그인 =====
+     PC: 왼쪽 글(입체 제목·소개·기기별 조작) / 오른쪽 로그인 카드. 좁은 화면(900px 이하): 글 위, 카드 아래 */
   .play { overflow-x: clip; }
   .play-grid {
     position: relative; z-index: 2; width: min(1240px, calc(100% - 48px)); display: grid; align-items: center; gap: clamp(28px, 4vw, 64px);
@@ -98,39 +96,17 @@
     .b5 { top: auto; bottom: 4%; left: -20%; }
   }
 
-  /* 게임 입장 화면: 지금 마을 바깥 풍경을 게임 그림 그대로 실시간으로 그림.
-     크기: 칸 폭에 맞추고 그림 비율(320:176) 그대로. 폭은 화면 높이에도 맞춰 줄어 한 화면 안에 들어옴.
-     좁은 화면은 비율대로면 로그인 칸이 안 들어가서 최소 높이 480px(이때만 그림 양옆이 잘림).
-     그림은 칸을 꽉 채우고 넘치는 부분만 잘림(object-fit: cover) → 어떤 해상도에서도 빈 곳·찌그러짐 없음 */
-  .stage {
-    position: relative; width: 100%; max-width: calc((100svh - 64px) * 320 / 176); aspect-ratio: 320 / 176; min-height: 480px;
-    margin: 0 auto; border-radius: 18px; border: 3px solid #000; overflow: hidden; background: #6fb35f; box-shadow: 8px 8px 0 #000;
-  }
-  .stage canvas { display: block; width: 100%; height: 100%; object-fit: cover; transition: filter .8s; }
-  .stage.mono canvas { filter: grayscale(1) contrast(1.05); }   /* 로그인 전엔 흑백 → 로그인하면 컬러 (두 번째 인생 시작) */
-  /* 전광판 글자: 그림의 전광판 화면 칸 위에 띄움. 위치·크기는 그림 배율(--k: 그림 1칸 = k px)에 맞춰 스크립트가 정함 */
-  .bb { position: absolute; padding: calc(var(--k) * 1px) calc(var(--k) * 2px); color: #ffb347; font: calc(var(--k) * 4.2px)/1.4 Consolas, monospace; overflow: hidden; pointer-events: none; }
-  .bb ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column; grid-template-rows: repeat(5, auto); column-gap: calc(var(--k) * 3px); }
-  .bb li { display: grid; grid-template-columns: calc(var(--k) * 5px) 1fr auto; gap: calc(var(--k) * 1.2px); white-space: nowrap; text-shadow: 0 0 calc(var(--k) * 1px) #ff8a00; }
-  .bb .nm { overflow: hidden; text-overflow: ellipsis; }
-  .bb .rk { color: #ff6b6b; }
-
-  /* 가운데 칸 (로그인 / 게임 시작) */
-  .center { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 16px; }   /* 칸 너비 = 화면 너비 - 여백 → 카드가 좁은 화면을 넘지 않음 */
-  .center[hidden] { display: none; }
-  .center { overflow-y: auto; place-items: safe center; scrollbar-width: none; }
-  .center::-webkit-scrollbar { display: none; }   /* 넘칠 때도 스크롤은 되고 막대만 숨김 */   /* 카드가 상자보다 길어지면 위가 잘리지 않고 상자 안에서 스크롤 */
-  .card:has(.pw-login[open]) .logo3d.big { display: none; }   /* 닉네임 로그인을 펼치면 카드 위 로고는 접어 공간 확보 */
+  /* 로그인 칸(오른쪽): 흑백 느낌에 맞춘 흰 카드 + 검은 테두리 + 검은 그림자 */
+  .account { display: grid; place-items: center; }
+  .account [hidden] { display: none; }
   .card {
-    width: min(360px, 100%); box-sizing: border-box; background: #fff; color: #000; border-radius: 18px; padding: 28px 28px 24px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, .25); text-align: center;
+    width: min(380px, 100%); box-sizing: border-box; background: #fff; color: #000; border-radius: 18px; padding: 30px 30px 26px;
+    border: 3px solid #000; box-shadow: 8px 8px 0 #000; text-align: center;
   }
   .card .logo3d.big { margin: 0 auto 12px; font-size: 32px; }   /* 카드 맨 위 입체 글자 로고 */
   .card h1 { margin: 10px 0 4px; font-size: 22px; }
   .card p { margin: 0 0 18px; color: #555; font-size: 14px; line-height: 1.5; }
 
-  /* 로그아웃 상태: 마을 위에 흰 블러 */
-  .veil { background: rgba(255, 255, 255, .45); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
   form { display: grid; gap: 10px; text-align: left; }
   label { font-size: 13px; font-weight: bold; }
   input {
@@ -160,13 +136,10 @@
   #nameForm { display: grid; gap: 10px; text-align: left; }
   #nameForm[hidden] { display: none; }
   #nameForm h1, #nameForm p { text-align: center; }
-  .hint { margin: 12px 0 0 !important; font-size: 12px !important; color: #777 !important; }
-
-  @media (prefers-reduced-motion: reduce) { .veil { transition: none; } }
 </style>
 </head>
 <body>
-<!-- 메인 홈페이지 (/): 흰 메뉴바 + 흑백 일러스트 히어로(입체 제목) + 게임 입장 화면. 게임은 /play -->
+<!-- 메인 홈페이지 (/): 메뉴바 + 흑백 일러스트 히어로(입체 제목) + PC·모바일 안내와 로그인 -->
 <header class="menubar">
   <a class="brand" href="/"><span class="logo3d">나의 두번째 인생</span></a>
   <nav aria-label="메뉴"><a id="account" href="#login" hidden>로그인</a></nav>
@@ -211,9 +184,8 @@
   <div class="hero-text">
     <h1 class="extrude" id="heroTitle"><span>나의 두번째</span><span>인생</span></h1>
     <p class="tag">공부하고, 일하고, 취미를 즐기고, 투자도 하는 작은 마을. 이곳에서 또 하나의 인생을 살아 보세요.</p>
-    <p class="live" id="people">마을에 연결하는 중</p>
   </div>
-  <a class="next" href="#play" aria-label="게임 입장 화면으로 내려가기"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v15M5 12l7 7 7-7"/></svg></a>
+  <a class="next" href="#play" aria-label="로그인 영역으로 내려가기"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v15M5 12l7 7 7-7"/></svg></a>
 </section>
 
 <section class="panel play" id="play" aria-labelledby="playTitle">
@@ -233,12 +205,9 @@
       </li>
     </ul>
   </div>
-<div class="stage mono" id="stage">
-  <canvas id="town" width="1280" height="704" aria-hidden="true"></canvas>
-  <div class="bb" id="bb" aria-hidden="true"><ol id="bbList"></ol></div>
-
-  <!-- 로그아웃 상태: 흰 블러 + 로그인 -->
-  <div class="center veil" id="veil" hidden>
+  <div class="account">
+  <!-- 로그아웃 상태: 로그인 카드 -->
+  <div id="veil" hidden>
     <div class="card" id="login">
       <p class="logo3d big" aria-hidden="true">나의 두번째 인생</p>
       <!-- 1단계: 구글로 로그인 (닉네임·비밀번호는 눌렀을 때만 펼침) -->
@@ -269,23 +238,19 @@
     </div>
   </div>
 
-  <!-- 로그인 상태: 마을 그대로 + 게임 시작 -->
-  <div class="center" id="gate" hidden>
+  <!-- 로그인 상태: 환영 인사 -->
+  <div id="gate" hidden>
     <div class="card">
       <p class="logo3d big" aria-hidden="true">나의 두번째 인생</p>
-      <h1 id="hello">다시 오셨네요</h1>
-      <p>마을 사람들이 기다리고 있어요.</p>
-      <a class="btn" href="/play">게임 시작</a>
+      <h1 id="hello">환영해요</h1>
+      <p>새로운 마을을 준비하고 있어요.</p>
     </div>
   </div>
-</div>
+  </div>
   </div>
 </section>
 
 <script src="/site.js"></script>
-<!-- 마을 그림은 게임과 같은 그리기 코드를 씀 -->
-<script src="/pixel.js"></script>
-<script src="/hd.js"></script>
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
@@ -334,8 +299,7 @@ document.addEventListener('click', e => {
 function applyAuth(me) {
   $('veil').hidden = !!me;
   $('gate').hidden = !me;
-  $('stage').classList.toggle('mono', !me);
-  if (me) $('hello').textContent = `${me.name}님, 다시 오셨네요`;
+  if (me) $('hello').textContent = `${me.name}님, 환영해요`;
 }
 document.addEventListener('auth', e => applyAuth(e.detail));
 if (window.authState) applyAuth(window.authState.me);   // 이 스크립트보다 먼저 결과가 나왔으면 그것으로
@@ -405,57 +369,6 @@ fetch('/api/config').then(r => r.json()).then(({ googleClientId }) => {
   s.onerror = () => { $('gmsg').textContent = '구글 로그인 버튼을 불러오지 못했어요. 닉네임·비밀번호로 로그인할 수 있어요.'; };
   document.head.append(s);
 }).catch(() => {});
-
-// ===== 실시간 마을 풍경 =====
-let ST = null;
-const people = new Map();   // 밖에 있는 사람: 받은 위치(tx,ty)까지 걷듯 따라감
-async function poll() {
-  try { ST = await (await fetch('/api/poll?peek')).json(); } catch { return; }   // peek: 이 페이지는 접속자로 세지 않음
-  $('people').textContent = `지금 ${ST.players.length}명이 이 마을에 살고 있어요`;
-  const out = ST.players.filter(p => p.scene === 'outside');
-  for (const p of out) {
-    const o = people.get(p.id);
-    if (!o || Math.hypot(o.x - p.pos.x, o.y - p.pos.y) > 80) people.set(p.id, { x: p.pos.x, y: p.pos.y, tx: p.pos.x, ty: p.pos.y, p });
-    else Object.assign(o, { tx: p.pos.x, ty: p.pos.y, p });
-  }
-  for (const id of people.keys()) if (!out.some(p => p.id === id)) people.delete(id);
-  // 전광판: 모든 계정의 자산 순위 TOP 10
-  $('bbList').replaceChildren(...ST.top10.map((p, k) => {
-    const li = document.createElement('li');
-    for (const [c, t] of [['rk', k + 1], ['nm', p.name], ['am', `${Math.round(p.total / 10000).toLocaleString('ko-KR')}만`]]) { const sp = document.createElement('span'); sp.className = c; sp.textContent = t; li.append(sp); }
-    return li;
-  }));
-}
-// 전광판 글자 칸을 그림 위 화면 칸(BILLBOARD.screen)에 맞춤. 그림은 칸을 덮도록(cover) 커지고 가운데 정렬되므로 같은 계산을 함
-function placeBillboard() {
-  const W = cv.clientWidth, H = cv.clientHeight, k = Math.max(W / 320, H / 176), ox = (W - 320 * k) / 2, oy = (H - 176 * k) / 2, sc = BILLBOARD.screen;
-  const bb = $('bb');
-  Object.assign(bb.style, { left: `${ox + sc.x * k}px`, top: `${oy + sc.y * k}px`, width: `${sc.w * k}px`, height: `${sc.h * k}px` });
-  bb.style.setProperty('--k', k);
-}
-const cv = $('town'), ctx = cv.getContext('2d');
-const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-let last = performance.now();
-function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  // 캔버스 해상도: 칸을 덮는 크기(가로·세로 중 큰 쪽 기준) × 화면 배율, 최대 2560px
-  const cover = Math.max(cv.clientWidth, cv.clientHeight * 320 / 176);
-  const w = Math.min(2560, Math.round(cover * (devicePixelRatio || 1)));
-  if (w && cv.width !== w) { cv.width = w; cv.height = Math.round(w * 176 / 320); }
-  placeBillboard();
-  if (ST) {
-    const ants = [...people.values()].map(o => {
-      const dx = o.tx - o.x, dy = o.ty - o.y, d = Math.hypot(dx, dy);
-      if (d) { const step = Math.min(d, Math.max(60, d * 4) * dt); o.x += dx / d * step; o.y += dy / d * step; }
-      const r = o.p.total / (o.p.base || 1000000) - 1;
-      return { id: o.p.id, x: o.x, y: o.y, color: o.p.color, mood: r > 0.01 ? 'happy' : r < -0.01 ? 'sad' : 'normal', bob: !still && d > 0.5 && Math.floor(now / 150) % 2 === 0 };
-    });
-    drawRoomHD(ctx, { scene: 'outside', clock: ST.clock, coins: ST.coins, weather: ST.weather, anim: still ? 0 : Math.floor(now / 120), ants, blink: !still && Math.floor(now / 400) % 2 === 0 });
-  }
-  requestAnimationFrame(frame);
-}
-poll(); setInterval(poll, 1000);
-requestAnimationFrame(frame);
 </script>
 </body>
 </html>
