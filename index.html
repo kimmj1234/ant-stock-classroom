@@ -13,6 +13,12 @@
   <div class="settings">
     <span id="who" class="who"></span>
     <button id="logoutBtn" class="mini" hidden>로그아웃</button>
+    <label>그래픽
+      <select id="gfx">
+        <option value="hd">고화질</option>
+        <option value="pixel">픽셀</option>
+      </select>
+    </label>
     <label><input type="checkbox" id="mute"> 소리 끄기</label>
     <label><input type="checkbox" id="reduce"> 움직임 줄이기</label>
   </div>
@@ -40,6 +46,7 @@
     <div id="roomWrap" class="room-wrap">
       <canvas id="room" class="px room" width="320" height="176" role="img"
         aria-label="개미 투자자들의 사무실. 방향키로 개미를 움직이고 물건 앞에서 E를 누릅니다."></canvas>
+      <canvas id="roomHD" class="room room-hd" width="1280" height="704" hidden aria-hidden="true"></canvas>
       <div id="billboard" class="billboard" hidden aria-label="자산 순위 TOP 10 전광판">
         <p class="bb-title">💰 자산 순위 TOP 10</p>
         <ol id="bbList" class="bb-list"></ol>
@@ -324,6 +331,7 @@
 <div id="fx" class="fx" aria-hidden="true"><div class="fx-box"><img id="fxAnt" class="px" width="128" height="128" alt=""><span id="fxText"></span></div></div>
 
 <script src="pixel.js"></script>
+<script src="hd.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

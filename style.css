@@ -414,3 +414,11 @@ body.reduce .tv-live { animation: none; }
 .term-tip { background: #2a2610; border-left: 4px solid #f7c948; padding: 6px 8px; }
 .term-search { font: inherit; padding: 5px 8px; background: #0b1426; color: #fff; border: 2px solid #3b82f6; }
 @media (max-width: 1000px) { .split-app { grid-template-columns: minmax(0, 1fr); height: auto; } .split-list { max-height: 200px; } }
+
+/* 고화질 그래픽: 부드럽게 확대, 화면 테두리도 조금 둥글게 */
+.room-hd { image-rendering: auto; }
+.room[hidden] { display: none; }
+body.gfx-hd .panel, body.gfx-hd .room-wrap, body.gfx-hd .prompt, body.gfx-hd .modal-card, body.gfx-hd .result-card,
+body.gfx-hd .pc-monitor, body.gfx-hd .tv-body, body.gfx-hd .book, body.gfx-hd .online-btn, body.gfx-hd .scoreboard,
+body.gfx-hd .msg, body.gfx-hd .tag, body.gfx-hd .settings select, body.gfx-hd .mini { border-radius: 8px !important; }
+body.gfx-hd .room-wrap { overflow: hidden; }

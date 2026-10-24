@@ -17,7 +17,7 @@ const upDown = n => (n > 0 ? 'up' : n < 0 ? 'down' : '');
 // ===== 이 브라우저의 설정 (카드 4): 소리 끄기·움직임 줄이기 =====
 // 기록·배운 개념은 계정(서버)에 저장되어 내 것만 보입니다.
 function loadStore() {
-  const d = { settings: { mute: false, reduce: matchMedia('(prefers-reduced-motion: reduce)').matches } };
+  const d = { settings: { mute: false, reduce: matchMedia('(prefers-reduced-motion: reduce)').matches, gfx: 'hd' } };
   let raw;
   try { raw = localStorage.getItem(STORE_KEY); } catch { return { store: d, note: '저장소를 쓸 수 없어 기본 설정으로 시작합니다.' }; }
   if (raw === null) return { store: d, note: '' };
@@ -28,6 +28,7 @@ function loadStore() {
   const s = v.settings && typeof v.settings === 'object' ? v.settings : {};
   if (typeof s.mute === 'boolean') d.settings.mute = s.mute;
   if (typeof s.reduce === 'boolean') d.settings.reduce = s.reduce;
+  if (s.gfx === 'pixel' || s.gfx === 'hd') d.settings.gfx = s.gfx;
   return { store: d, note: '' };
 }
 function save() {
@@ -734,16 +735,18 @@ $('onlineBtn').addEventListener('click', () => { boardOpen = !boardOpen; render(
 function fitRoom() {
   const col = $('roomCol');
   const availW = col.parentElement.clientWidth - 8;
-  const availH = innerHeight - col.getBoundingClientRect().top - $('prompt').offsetHeight - 30;
+  const availH = innerHeight - col.getBoundingClientRect().top - $('prompt').offsetHeight - 20;
   const raw = Math.min(availW / 320, availH / 176);
   const scale = raw >= 2 ? Math.floor(raw) : Math.max(1, raw);   // 아주 작은 화면만 소수 배율
   const w = `${Math.floor(320 * scale) + 8}px`;
   if (col.style.width !== w) col.style.width = w;
 }
+let fitW = 0, fitH = 0;
 addEventListener('resize', fitRoom);
 const fitObserver = new ResizeObserver(fitRoom);
 fitObserver.observe(document.querySelector('.hud'));
 fitObserver.observe($('prompt'));
+fitObserver.observe(document.documentElement);
 
 // 집 밖 전광판: 모든 계정의 자산 순위 TOP 10 (그림의 화면 칸 위치에 맞춰 띄움)
 function renderBillboard() {
@@ -779,6 +782,14 @@ function renderLabels(ants) {
 
 // ===== 이동 (방향키를 누르고 있는 동안) =====
 const roomCtx = $('room').getContext('2d');
+const roomHDCtx = $('roomHD').getContext('2d');
+// 그래픽 선택: 고화질(hd.js) / 픽셀(pixel.js). 지도·충돌은 같고 그리는 방법만 다름
+function applyGfx() {
+  const hd = store.settings.gfx === 'hd';
+  $('room').hidden = hd;
+  $('roomHD').hidden = !hd;
+  document.body.classList.toggle('gfx-hd', hd);
+}
 let lastSent = 0, sentX = 0, sentY = 0, sentScene = '', lastCoin = null;
 function update(dt, now) {
   const canMove = loggedIn() && !anyOpen() && $('login').hidden;
@@ -811,6 +822,7 @@ function update(dt, now) {
 let last = performance.now();
 function loop(now) {
   update(Math.min(0.05, (now - last) / 1000), now); // 탭 복귀 직후 순간이동 방지
+  if (innerWidth !== fitW || innerHeight !== fitH) { fitW = innerWidth; fitH = innerHeight; fitRoom(); }   // 창 크기가 바뀌면 방 크기 다시 맞춤
   last = now;
   if (META && ST) {
     const still = store.settings.reduce;
@@ -824,7 +836,8 @@ function loop(now) {
         mood: now < shockUntil ? 'shock' : r > 0.01 ? 'happy' : r < -0.01 ? 'sad' : 'normal',
         bob: !still && (P.moving || isOpen('work')) && Math.floor(now / 150) % 2 === 0 });
     }
-    drawRoom(roomCtx, {
+    const draw = store.settings.gfx === 'hd' ? drawRoomHD : drawRoom;
+    draw(store.settings.gfx === 'hd' ? roomHDCtx : roomCtx, {
       scene: P.scene, clock: ST.clock, night: isNight(ST.clock), coins: ST.coins, day: ST.index.length, weather: ST.weather, anim: still ? 0 : Math.floor(now / 120), flash: now < shockUntil,
       hist: ST.hist[sel], unread: hasUnread(), near, myColor: ME?.color,
       blink: !still && Math.floor(now / 400) % 2 === 0, ants,
@@ -920,6 +933,12 @@ $('reduce').addEventListener('change', e => { store.settings.reduce = e.target.c
 $('mute').checked = store.settings.mute;
 $('reduce').checked = store.settings.reduce;
 applyReduce();
+$('gfx').value = store.settings.gfx;
+applyGfx();
+$('gfx').addEventListener('change', e => {
+  store.settings.gfx = e.target.value; save(); applyGfx();
+  say(e.target.value === 'hd' ? '고화질 그래픽으로 바꿨어요.' : '픽셀 그래픽으로 바꿨어요.');
+});
 if (note) { $('notice').textContent = '⚠ ' + note; $('notice').hidden = false; }
 $('logo').src = antURL('happy');
 connect();
