@@ -25,8 +25,9 @@ const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');   // 별명·소금�
 const STATE_FILE = path.join(DATA_DIR, 'state.json');         // 시장과 각자의 계좌
 // / = 메인 홈페이지, /play = 게임
 const FILES = { '/': 'home.html', '/play': 'index.html', '/index.html': 'index.html', '/style.css': 'style.css', '/pixel.js': 'pixel.js', '/hd.js': 'hd.js', '/game.js': 'game.js' };
+FILES['/logo.svg'] = 'assets/logo.svg';   // 로고: 픽셀 하트 두 개 (목숨 두 개 = 두 번째 인생)
 for (const c of ['red', 'blue', 'yellow', 'white', 'black']) FILES[`/assets/person-${c}.png`] = `assets/person-${c}.png`;   // 고화질 캐릭터 그림
-const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml' };
 
 const readJSONFile = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
 function writeJSONFile(file, data) {

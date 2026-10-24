@@ -748,10 +748,9 @@ function drawNewsStudio(mood, up) {
   if (cv.width !== 96) { cv.width = 96; cv.height = 54; }
   drawStudio(cv.getContext('2d'), mood, up);
 }
-// 한 번만 넣어 두는 그림(바탕화면 아이콘·로고)은 그래픽을 바꿀 때 다시 넣음
+// 한 번만 넣어 두는 그림(바탕화면 아이콘)은 그래픽을 바꿀 때 다시 넣음. 로고는 /logo.svg 고정
 function refreshIcons() {
   document.querySelectorAll('.desk-icon').forEach(b => { const app = APPS[b.dataset.app]; b.querySelector('img').src = isHD() && app.emoji ? emojiURL(app.emoji) : icon(app.icon); });
-  $('logo').src = isHD() ? emojiURL(EMOJI.ant) : antURL('happy');
 }
 // 창에 띄우는 캐릭터 그림: 고화질이면 그림 파일, 픽셀이면 도트
 const charImg = (mood, color = 'red') => (store.settings.gfx === 'hd' ? `assets/person-${color}.png` : personURL(mood, color));
