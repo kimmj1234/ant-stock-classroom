@@ -46,16 +46,17 @@
   .b3 { width: clamp(260px, 32vw, 500px); bottom: -14%; left: -8%; transform: rotate(150deg); }
   .b4 { width: clamp(260px, 34vw, 540px); bottom: -22%; right: -9%; transform: rotate(40deg); }
   .line { fill: #fff; stroke: #000; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
-  .chart { width: clamp(150px, 17vw, 260px); top: 13%; right: 9%; }
-  .chart .line { fill: none; stroke: #fff; }
+  .study { width: clamp(150px, 17vw, 260px); top: 13%; right: 9%; }   /* 검은 덩어리 안: 검은 바탕 + 흰 선 */
+  .study .line { fill: #000; stroke: #fff; }
   .coins { width: clamp(90px, 10vw, 150px); bottom: 15%; left: 12%; }
-  .house { width: clamp(90px, 10vw, 150px); top: 16%; left: 9%; }
+  .work { width: clamp(84px, 9vw, 140px); top: 16%; left: 9%; }
+  .hobby { width: clamp(84px, 9vw, 140px); top: 44%; right: 7%; transform: rotate(-10deg); }
   .person { width: clamp(56px, 6vw, 92px); height: auto; bottom: 14%; right: 17%; filter: grayscale(1) contrast(1.15); transform: rotate(-14deg); }
   @media (prefers-reduced-motion: no-preference) {
     .person { animation: float 6s ease-in-out infinite; }   /* 떠다니는 캐릭터 하나만 천천히 움직임 */
     @keyframes float { 50% { transform: rotate(-8deg) translateY(-14px); } }
   }
-  @media (max-width: 640px) { .house, .coins { display: none; } .chart { top: 6%; } .person { width: 48px; bottom: 3%; right: 7%; } }   /* 휴대폰: 글자를 가리지 않게 */
+  @media (max-width: 640px) { .work, .coins, .hobby { display: none; } .study { top: 6%; } .person { width: 48px; bottom: 3%; right: 7%; } }   /* 휴대폰: 글자를 가리지 않게 */
 
   /* ===== 게임 입장 화면 =====
      지금 마을 바깥 풍경을 게임 그림 그대로 실시간으로 그림.
@@ -121,10 +122,13 @@
   <svg class="deco blob b3" viewBox="0 0 200 200" aria-hidden="true"><path d="M139 18c31 12 52 44 55 78 3 37-14 74-46 92-30 17-71 15-101-3C17 167 2 133 6 98 10 62 33 28 66 15c23-9 50-6 73 3z"/><circle cx="60" cy="100" r="1.4"/><circle cx="120" cy="50" r="1"/><path class="spark" d="M100 120l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z"/></svg>
   <svg class="deco blob b4" viewBox="0 0 200 200" aria-hidden="true"><path d="M96 8c34 0 62 14 80 42 16 26 20 60 4 88-16 30-50 46-84 52-30 6-62-4-80-28C0 138 2 104 14 76 28 44 58 8 96 8z"/><circle cx="50" cy="60" r="1.6"/><circle cx="90" cy="110" r="1.1"/><circle cx="140" cy="70" r="1.3"/></svg>
 
-  <!-- 선 그림: 검은 덩어리 안 오르는 주식 차트, 동전 더미, 집, 떠다니는 캐릭터 -->
-  <svg class="deco chart" viewBox="0 0 160 110" aria-hidden="true">
-    <g class="line"><path d="M14 92h132M14 92V14"/><path d="M24 78l26-18 22 10 30-30 32-16"/><path d="M120 14h14v14"/></g>
-    <g fill="#fff"><rect x="30" y="58" width="7" height="20"/><rect x="58" y="52" width="7" height="22"/><rect x="86" y="38" width="7" height="26"/><rect x="110" y="26" width="7" height="22"/></g>
+  <!-- 선 그림: 마을에서 하는 네 가지 — 공부(검은 덩어리 안 펼친 책), 일(가방), 취미(팔레트와 붓), 투자(동전 더미) + 떠다니는 캐릭터 -->
+  <svg class="deco study" viewBox="0 0 160 110" aria-hidden="true">
+    <g class="line">
+      <path d="M80 32C62 20 36 18 14 24v68c22-6 48-4 66 8zM80 32c18-12 44-14 66-8v68c-22-6-48-4-66 8z"/>
+      <path d="M80 32v68"/><path d="M26 40c14-3 30-2 42 4M26 54c14-3 30-2 42 4M26 68c14-3 30-2 42 4M92 44c12-6 28-7 42-4M92 58c12-6 28-7 42-4M92 72c12-6 28-7 42-4"/>
+    </g>
+    <path fill="#fff" d="M120 2l3 8 8 3-8 3-3 8-3-8-8-3 8-3z"/>
   </svg>
   <svg class="deco coins" viewBox="0 0 120 110" aria-hidden="true">
     <g class="line">
@@ -134,14 +138,22 @@
     </g>
     <text x="78" y="37" text-anchor="middle" font-size="20" font-weight="bold" font-family="sans-serif">₩</text>
   </svg>
-  <svg class="deco house" viewBox="0 0 120 110" aria-hidden="true">
-    <g class="line"><path d="M14 52L60 14l46 38"/><path d="M24 44v56h72V44"/><path d="M50 100V72h20v28"/><rect x="32" y="56" width="14" height="12"/><rect x="74" y="56" width="14" height="12"/><path d="M82 30V16h10v22"/></g>
+  <svg class="deco work" viewBox="0 0 120 110" aria-hidden="true">
+    <g class="line"><path d="M44 38V28a6 6 0 0 1 6-6h20a6 6 0 0 1 6 6v10"/><rect x="12" y="38" width="96" height="60" rx="9"/><path d="M12 62h96"/><rect x="51" y="55" width="18" height="14" rx="3"/></g>
+  </svg>
+  <svg class="deco hobby" viewBox="0 0 130 110" aria-hidden="true">
+    <g class="line">
+      <path d="M58 12C29 12 8 32 8 57c0 22 17 39 38 39 11 0 13-8 9-14-4-7 0-13 9-13h14c18 0 32-12 32-29C110 23 88 12 58 12z"/>
+      <circle cx="36" cy="40" r="7"/><circle cx="60" cy="30" r="7"/><circle cx="84" cy="38" r="7"/><circle cx="32" cy="66" r="7"/>
+      <path d="M96 100l26-34"/><path d="M118 62l8-6 2 9-8 6z"/>
+    </g>
+    <g fill="#000"><circle cx="36" cy="40" r="3"/><circle cx="84" cy="38" r="3"/></g>
   </svg>
   <img class="deco person" src="/assets/person-red.png" width="90" height="192" alt="">
 
   <div class="hero-text">
     <h1 class="extrude" id="heroTitle"><span>나의 두번째</span><span>인생</span></h1>
-    <p class="tag">주식을 사고팔고, 편의점에서 일하고, 은행에 돈을 맡기는 작은 마을에서 또 하나의 인생을 살아 보세요.</p>
+    <p class="tag">공부하고, 일하고, 취미를 즐기고, 투자도 하는 작은 마을. 이곳에서 또 하나의 인생을 살아 보세요.</p>
     <p class="live" id="people">마을에 연결하는 중</p>
   </div>
 </section>
