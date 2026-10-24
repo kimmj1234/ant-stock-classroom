@@ -37,16 +37,18 @@
         <div><dt>배운 개념</dt><dd id="learned"></dd></div>
       </dl>
       <div class="goal">
-        <span>실패 85만</span>
+        <span>실패 85만(-15%)</span>
         <progress id="progress" max="100" value="50"></progress>
-        <span>성공 115만</span>
+        <span>성공 115만(+15%)</span>
       </div>
     </div>
 
     <div id="roomWrap" class="room-wrap">
       <canvas id="room" class="px room" width="320" height="176" role="img"
         aria-label="개미 투자자의 사무실. 방향키로 개미를 움직이고 물건 앞에서 Space를 누릅니다."></canvas>
+      <p id="ticker" class="ticker" hidden></p>
       <p id="prompt" class="prompt"></p>
+      <p id="msg" class="msg" aria-live="polite"></p>
     </div>
 
     <div class="panel">
@@ -56,35 +58,10 @@
         <button id="sellBtn" class="sell">1주 매도 <kbd>S</kbd></button>
         <button id="pauseBtn">일시정지 <kbd>P</kbd></button>
         <button id="restartBtn">다시 시작 <kbd>R</kbd></button>
+        <div id="stocks" class="stocks" aria-label="종목 (1·2·3)"></div>
       </div>
-      <p id="msg" class="msg" aria-live="polite"></p>
     </div>
   </section>
-
-  <aside class="side">
-    <section class="panel" aria-label="규칙 요약">
-      <h2>규칙</h2>
-      <ul class="rules">
-        <li>100만 원으로 시작 → 총자산 <b>115만(+15%)</b>이면 <b>성공</b></li>
-        <li><b>85만(-15%) 이하</b>이거나 <b>60거래일</b>이 지나면 <b>실패</b> (1일 = 1.2초)</li>
-        <li><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> 이동 · 물건 앞에서 <kbd>Space</kbd></li>
-        <li>💻 컴퓨터 책상 앞에서만 <kbd>B</kbd> 매수 · <kbd>S</kbd> 매도 (1주씩) · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 종목</li>
-        <li>📺 TV 배우기 · 📚 책장 용어 · 🧑‍🏫 칠판 규칙 · 🗂 캐비닛 기록 · 🛏 침대·<kbd>P</kbd> 일시정지 · <kbd>R</kbd> 다시 시작</li>
-      </ul>
-    </section>
-
-    <section class="panel" aria-label="종목과 차트">
-      <h2>종목</h2>
-      <div id="stocks" class="stocks"></div>
-      <p id="chartTitle" class="chart-title"></p>
-      <canvas id="chart" class="px chart" width="300" height="90" role="img" aria-label="선택한 종목의 픽셀 캔들 차트"></canvas>
-    </section>
-
-    <section class="panel" aria-label="뉴스">
-      <h2>뉴스</h2>
-      <ol id="news" class="news"><li class="empty">게임을 시작하면 뉴스가 도착합니다.</li></ol>
-    </section>
-  </aside>
 </main>
 
 <div id="modal" class="modal" hidden>

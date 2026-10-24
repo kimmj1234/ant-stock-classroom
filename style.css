@@ -22,11 +22,11 @@ header h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap:
 .notice { margin: 0; padding: 6px 16px; background: var(--gold); color: var(--ink); font-size: 14px; font-weight: bold; }
 
 .layout {
-  display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; padding: 10px 16px;
+  display: grid; grid-template-columns: minmax(0, 1fr); padding: 10px 16px;
 }
 .stage, .side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .panel { background: var(--panel); border: 3px solid var(--ink); box-shadow: 4px 4px 0 #000; padding: 8px 12px; min-width: 0; }
-@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } .room-wrap { width: 100%; } }
+@media (max-width: 900px) { .room-wrap { width: 100%; } }
 
 /* 상단 상태 */
 .hud { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
@@ -48,7 +48,7 @@ header h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap:
 /* 방 */
 /* 방은 가로를 꽉 채우되, 아래 조작 버튼이 화면 안에 남도록 화면 높이에 맞춰 줄어듦 */
 .room-wrap {
-  position: relative; align-self: center; width: min(100%, calc((100vh - 230px) * 320 / 176));
+  position: relative; align-self: center; width: min(100%, calc((100vh - 240px) * 320 / 176));
   border: 4px solid var(--ink); box-shadow: 4px 4px 0 #000; background: var(--ink);
 }
 .room { display: block; width: 100%; height: auto; }
@@ -60,46 +60,49 @@ header h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap:
 .prompt.on { background: var(--gold); color: var(--ink); }
 
 .controls { display: flex; flex-wrap: wrap; gap: 10px; }
-.controls button, .modal button, .result button {
+.controls > button, .modal button, .result button {
   font: inherit; font-weight: bold; padding: 8px 14px; border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink);
   background: #fff; color: var(--ink); cursor: pointer; flex: 1 1 110px;
 }
-.controls button:active:not(:disabled), .modal button:active, .result button:active, .stock:active { transform: translate(3px, 3px); box-shadow: none; }
+.controls > button:active:not(:disabled), .modal button:active, .result button:active, .stock:active { transform: translate(3px, 3px); box-shadow: none; }
 button:disabled { opacity: .4; cursor: not-allowed; }
 button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px dashed var(--accent); outline-offset: 3px; }
 .primary { background: var(--win) !important; color: #fff !important; }
 .buy { background: var(--up) !important; color: #fff !important; }
 .sell { background: var(--down) !important; color: #fff !important; }
-.msg { margin: 6px 0 0; min-height: 1.5em; font-size: 14px; color: var(--mute); }
+.msg { position: absolute; left: 8px; bottom: 44px; max-width: calc(100% - 16px); margin: 0; padding: 3px 10px; font-size: 14px; background: rgba(253, 246, 227, .92); color: var(--ink); border: 3px solid var(--ink); }
+.msg:empty { display: none; }
 
-/* 오른쪽 */
-.rules { margin: 0; padding-left: 18px; font-size: 13px; }
-.rules li { margin-bottom: 3px; }
-.stocks { display: flex; flex-direction: column; gap: 6px; }
+/* 종목 칩 (조작 줄 오른쪽) */
+.stocks { flex: 3 1 540px; display: flex; gap: 8px; min-width: 0; }
 .stock {
-  display: grid; grid-template-columns: 32px 1fr auto auto; gap: 0 8px; align-items: center; text-align: left; padding: 4px 8px;
-  border: 3px solid var(--ink); background: #fff; cursor: pointer; font: inherit; color: inherit; min-width: 0;
+  flex: 1 1 0; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 0 6px; align-items: center;
+  grid-template-areas: "ic nm ch" "ic pr ch" "hold hold hold"; line-height: 1.25; text-align: left; padding: 3px 8px;
+  border: 3px solid var(--ink); background: #fff; cursor: pointer; font: inherit; font-size: 13px; color: inherit; min-width: 0;
   box-shadow: 3px 3px 0 var(--ink);
 }
 .stock[aria-pressed="true"] { background: #fff3c4; box-shadow: 3px 3px 0 var(--ink), inset 0 0 0 3px var(--gold); }
-.stock .ic { grid-row: span 2; }
-.stock .nm { font-weight: bold; }
-.stock .pr { font-weight: bold; font-variant-numeric: tabular-nums; }
-.stock .ch { font-size: 13px; min-width: 60px; text-align: right; }
-.stock .hold { grid-column: 2 / -1; font-size: 12px; color: var(--mute); overflow-wrap: anywhere; }
-.chart-title { margin: 8px 0 4px; font-size: 12px; color: var(--mute); }
-.chart { display: block; width: 100%; height: auto; border: 3px solid var(--ink); }
+.stock .ic { grid-area: ic; display: block; width: 28px; height: 28px; }
+.stock .nm { grid-area: nm; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stock .pr { grid-area: pr; font-weight: bold; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stock .ch { grid-area: ch; white-space: nowrap; }
+.stock .hold { grid-area: hold; font-size: 11px; color: var(--mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.controls > button { flex: 0 1 auto; padding: 6px 12px; white-space: nowrap; }
+.controls { align-items: stretch; }
 
-.news { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
-.news li { border-bottom: 2px dashed var(--line); padding: 6px 2px; }
-.news .ic { float: left; margin: 2px 8px 0 0; }
-.news .empty { color: var(--mute); border: 0; }
-.news .t { font-weight: bold; }
-.news .d { font-size: 12px; color: var(--mute); margin-right: 6px; }
-.news .impact { font-size: 13px; }
-.news .learn { clear: both; font-size: 13px; background: #e6efff; border-left: 4px solid var(--accent); padding: 4px 8px; margin-top: 4px; }
-.news .learn.pending { background: #fff3c4; border-color: var(--gold); }
-.news .crash .t { color: var(--up); }
+/* 방 위 뉴스 자막 */
+.ticker {
+  position: absolute; left: 8px; right: 8px; top: 8px; margin: 0; padding: 4px 10px; font-size: 14px; font-weight: bold;
+  background: rgba(224, 62, 62, .9); color: #fff; border: 3px solid var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* 책상 컴퓨터 차트 */
+.chart-card { padding: 6px; margin-bottom: 6px; border: 3px solid transparent; }
+.chart-card.sel { border-color: var(--gold); background: #fff3c4; }
+.chart-title { margin: 0 0 4px; font-size: 13px; color: var(--mute); }
+.chart { display: block; width: 100%; height: auto; border: 3px solid var(--ink); }
+.rules { margin: 0; padding-left: 18px; }
+.rules li { margin-bottom: 3px; }
 
 /* 책장·칠판·TV·캐비닛 창 */
 .modal { position: fixed; inset: 0; background: rgba(16, 16, 32, .6); display: grid; place-items: center; padding: 16px; z-index: 6; }

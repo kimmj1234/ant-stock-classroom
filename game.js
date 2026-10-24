@@ -182,7 +182,6 @@ function restart() {
   held.clear();
   near = null;
   $('result').hidden = true;
-  clearNews();
   say('새 게임 준비 완료. [시작] 또는 Enter를 누르세요.');
   render();
   $('startBtn').focus();
@@ -289,7 +288,7 @@ function interact() {
   if (S.status === 'won' || S.status === 'lost') return;
   if (!near) return say('근처에 사용할 물건이 없어요. 방향키로 노란 화살표가 뜨는 곳까지 가 보세요.');
   switch (near.act) {
-    case 'trade': return say('💻 거래 컴퓨터 앞이에요. B 매수 · S 매도 · 1·2·3 종목 선택');
+    case 'trade': return openModal('💻 거래 컴퓨터 — 종목 차트', buildCharts());
     case 'news': return openNews();
     case 'glossary': return openModal('📚 주식 용어 사전', tpl('tpl-glossary'));
     case 'rules': return openModal('🧑‍🏫 게임 규칙', tpl('tpl-rules'));
@@ -315,7 +314,7 @@ function openNews() {
     div.querySelector('.sub').textContent = `${e.day}일차 · ${e.impact}`;
     div.querySelector('.learn').textContent = '📘 ' + e.n.lesson;
     frag.append(div);
-    if (!e.read) { e.read = true; showLesson(e); }
+    e.read = true;
     if (!store.learned.includes(e.idx)) store.learned.push(e.idx);
   }
   save();
@@ -418,28 +417,9 @@ function say(text) { $('msg').textContent = text; }
 function cell(tr, text, cls) { const td = document.createElement('td'); td.textContent = text; if (cls) td.className = cls; tr.append(td); }
 
 function addNews(e) {
-  const list = $('news');
-  list.querySelector('.empty')?.remove();
-  const li = document.createElement('li');
-  if (e.n.crash) li.className = 'crash';
-  li.innerHTML = '<img class="px ic" width="24" height="24" alt=""><span class="d"></span><span class="t"></span><div class="impact"></div><div class="learn pending"></div>';
-  li.querySelector('.ic').src = iconURL(e.n.icon);
-  li.querySelector('.d').textContent = `${e.day}일차`;
-  li.querySelector('.t').textContent = e.n.title;
-  li.querySelector('.impact').textContent = e.impact;
-  li.querySelector('.learn').textContent = '📺 TV 앞에서 Space를 누르면 배우기가 열려요';
-  e.li = li;
   S.news.unshift(e);
-  list.prepend(li);
-  while (list.children.length > 30) list.lastChild.remove();
+  if (S.news.length > 30) S.news.pop();
 }
-function showLesson(e) {
-  const el = e.li?.querySelector('.learn');
-  if (!el) return;
-  el.textContent = '📘 배우기: ' + e.n.lesson;
-  el.classList.remove('pending');
-}
-function clearNews() { $('news').innerHTML = '<li class="empty">게임을 시작하면 뉴스가 도착합니다.</li>'; }
 
 function buildStocks() {
   STOCKS.forEach((s, i) => {
@@ -477,10 +457,8 @@ function render() {
     chEl.className = 'ch ' + (ch > 0 ? 'up' : ch < 0 ? 'down' : '');
     b.querySelector('.hold').textContent = st.shares
       ? `보유 ${st.shares}주 · 평단 ${won(st.cost / st.shares)} · 손익 ${signed(st.shares * st.price - st.cost, won(st.shares * st.price - st.cost))}`
-      : `${st.sector} · 보유 0주`;
+      : '보유 0주';
   });
-  drawChart();
-
   const playing = S.status === 'playing', paused = S.status === 'paused';
   $('startBtn').disabled = S.status !== 'ready';
   $('buyBtn').disabled = $('sellBtn').disabled = !playing || !atDesk();
@@ -488,19 +466,34 @@ function render() {
   $('pauseBtn').firstChild.textContent = paused ? '계속 ' : '일시정지 ';
   $('diff').disabled = playing || paused;
   $('prompt').textContent = near
-    ? (near.act === 'trade' ? near.label : `[Space] ${near.label}`)
-    : '방향키로 개미를 움직여 물건 앞에서 Space를 누르세요.';
+    ? `[Space] ${near.label}`
+    : '←↑↓→ 이동 · 물건 앞에서 Space · 💻 책상 앞에서 B 매수/S 매도 · 1·2·3 종목 · P 일시정지 · R 다시 시작';
   $('prompt').classList.toggle('on', !!near);
+  const latest = S.news[0];
+  $('ticker').hidden = !latest;
+  if (latest) $('ticker').textContent = `📰 ${latest.day}일차 ${latest.n.title} — ${latest.impact}` + (S.news.some(e => !e.read) ? ' · 📺 TV에서 배우기!' : '');
 }
 
-function drawChart() {
-  const st = S.stocks[S.sel], h = st.hist;
-  const avg = st.shares ? st.cost / st.shares : null;
-  drawPixelChart(chartCtx, h, avg, MAX_DAY);
-  $('chartTitle').textContent = `${st.name} · 최고 ${won(Math.max(...h))} · 최저 ${won(Math.min(...h))} · 빨강 상승/파랑 하락` + (avg ? ' · 주황 점선 = 내 평단' : '');
+// 책상 컴퓨터: 세 종목의 픽셀 캔들 차트 (빨강 상승·파랑 하락, 주황 점선 = 내 평단)
+function buildCharts() {
+  const frag = document.createDocumentFragment();
+  S.stocks.forEach((st, i) => {
+    const h = st.hist, avg = st.shares ? st.cost / st.shares : null;
+    const div = document.createElement('div');
+    div.className = 'chart-card' + (i === S.sel ? ' sel' : '');
+    div.innerHTML = '<p class="chart-title"></p><canvas class="px chart" width="300" height="90"></canvas>';
+    div.querySelector('.chart-title').textContent = `${i + 1} ${st.name} (${st.sector}) · 현재 ${won(st.price)} · 최고 ${won(Math.max(...h))} · 최저 ${won(Math.min(...h))}`
+      + (avg ? ` · 평단 ${won(avg)}` : '');
+    drawPixelChart(div.querySelector('canvas').getContext('2d'), h, avg, MAX_DAY);
+    frag.append(div);
+  });
+  const p = document.createElement('p');
+  p.className = 'small';
+  p.textContent = '빨강 = 상승한 날, 파랑 = 하락한 날, 주황 점선 = 내 평균단가. 창을 닫고 B·S로 거래하세요.';
+  frag.append(p);
+  return frag;
 }
 
-const chartCtx = $('chart').getContext('2d');
 const roomCtx = $('room').getContext('2d');
 
 function mood(now) {
