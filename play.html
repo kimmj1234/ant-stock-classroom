@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>나의 두번째 인생 — 마을</title>
+<title>나의 두번째 인생 — 도시</title>
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/site.css">
 <link rel="stylesheet" href="/wordmark.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&text=%EB%82%98%EC%9D%98%EB%91%90%EB%B2%88%EC%A7%B8%EC%9D%B8%EC%83%9D&display=swap">
 <style>
-  /* 게임 화면: 위 얇은 메뉴바 + 나머지 전부 게임 캔버스(사각형 칸 픽셀 마을) */
+  /* 게임 화면: 위 얇은 메뉴바 + 나머지 전부 게임 캔버스(사각형 칸 픽셀 도시) */
   html, body { height: 100%; overflow: hidden; background: #1d2a1b; color: #000; }
   body { display: grid; grid-template-rows: auto 1fr; }
   .menubar { padding: 10px 18px; border-bottom: 3px solid #000; }
@@ -38,7 +38,7 @@
   <nav aria-label="메뉴"><span class="who" id="who"></span><a id="account" href="#" hidden>로그아웃</a></nav>
 </header>
 <main class="view">
-  <canvas id="game" tabindex="0" aria-label="마을 화면. 방향키나 WASD로 움직이고 E로 상호작용"></canvas>
+  <canvas id="game" tabindex="0" aria-label="도시 화면. 방향키나 WASD로 움직이고 E로 상호작용"></canvas>
   <p class="hint">방향키나 WASD로 움직이고, E 버튼으로 상호작용 · 숫자 키 0~9: 모자 · Q: 전신 스킨 (임시 미리 보기)</p>
   <div class="stick" id="stick" aria-hidden="true"><div class="knob" id="knob"></div></div>
   <button class="ebtn" id="ebtn" type="button" aria-label="상호작용">E</button>

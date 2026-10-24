@@ -1,10 +1,10 @@
 'use strict';
-// 기본 게임 화면: 마을(길·나무·집)을 픽셀 캐릭터가 8방향으로 걸어 다니고, 화면(카메라)이 따라감.
-// 캐릭터 그림은 sprites.js, 마을 배치·그림은 town.js. 여기서는 겹쳐 그리기·이동·부딪힘·앞뒤 순서만 함
+// 기본 게임 화면: 도시를 픽셀 캐릭터가 8방향으로 걸어 다니고, 화면(카메라)이 따라감.
+// 캐릭터 그림은 sprites.js, 도시 배치·그림은 town.js. 여기서는 겹쳐 그리기·이동·부딪힘·앞뒤 순서만 함
 {
 const cv = document.getElementById('game'), ctx = cv.getContext('2d');
 const SPEED = 240;                      // 화면에서 1초에 걷는 거리(px)
-// 위치는 마을 픽셀 좌표(왼쪽 위 = 0, 0). 발밑 자리
+// 위치는 도시 픽셀 좌표(왼쪽 위 = 0, 0). 발밑 자리
 const me = { name: '', x: START.x, y: START.y, look: DEFAULT_LOOK, dir: 'se', left: false, moving: false };   // dir: 보는 방향(sprites.js의 s·se·e·ne·n), left: 좌우 뒤집기
 let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). 가로로 눕힌 낮은 휴대폰 화면은 1
 
@@ -98,7 +98,7 @@ function sprite(look, dir, step) {   // step: 0 = 서 있음, 1·2 = 걸음 (왼
   return c;
 }
 
-// ===== 마을 픽셀 좌표 → 화면 픽셀 =====
+// ===== 도시 픽셀 좌표 → 화면 픽셀 =====
 const toScreen = (x, y) => ({ x: x * S, y: y * S });
 
 // ===== 그리기 =====
