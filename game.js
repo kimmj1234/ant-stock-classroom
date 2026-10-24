@@ -187,7 +187,7 @@ function buildRecords() {
   set('.r-learned', `${ME.learned.length} / ${META.lessons.length}`);
   set('.r-earned', won(ME.earned));
   set('.r-interest', won(ME.interest));
-  drawPixelChart(frag.querySelector('.r-chart').getContext('2d'), ME.assetHist.length ? ME.assetHist : [total], null, 120);
+  drawChart(frag.querySelector('.r-chart'), ME.assetHist.length ? ME.assetHist : [total], null, 120);
   const body = frag.querySelector('.r-log');
   if (!ME.log.length) body.append(row([['아직 거래 기록이 없습니다. 💻 컴퓨터에서 첫 주식을 사 보세요.']]));
   ME.log.slice(0, 50).forEach(l => body.append(row([[l.side === 'buy' ? '매수' : '매도', l.side === 'buy' ? 'up' : 'down'], [stockOf(symIndex(l.sym)).name],
@@ -243,7 +243,6 @@ function openBank() {
 // ===== 📺 TV: 개미뉴스 방송 =====
 const MACRO = ['rate', 'fx', 'oil', 'crash', 'rally'], INDUSTRY = ['chipCycle', 'evPolicy', 'flu'];
 const newsTag = n => (n.crash ? '속보' : n.key.startsWith('w_') ? '날씨' : MACRO.includes(n.key) ? '경제' : INDUSTRY.includes(n.key) ? '산업' : '기업');
-const studioCtx = $('tvStudio').getContext('2d');
 let tvId = null;   // 보고 있는 뉴스 (새 뉴스가 와도 화면이 바뀌지 않게 id로 기억)
 
 function openTV() {
@@ -263,9 +262,9 @@ function renderTV() {
   const k = Math.max(0, ST.news.findIndex(n => n.id === tvId)), n = ST.news[k];
   tvId = n.id;
   const sum = n.impacts.reduce((a, i) => a + i.j, 0);
-  drawStudio(studioCtx, n.crash ? 'shock' : sum >= 0 ? 'happy' : 'sad', sum >= 0);
+  drawNewsStudio(n.crash ? 'shock' : sum >= 0 ? 'happy' : 'sad', sum >= 0);
   $('tvWeather').textContent = `${ST.season} · ${META.weather[ST.weather].name}`;
-  $('tvIcon').src = iconURL(n.icon);
+  $('tvIcon').src = icon(n.icon);
   $('tvTag').textContent = newsTag(n);
   $('tvTag').className = 'tv-tag' + (n.crash ? ' breaking' : '');
   $('tvHeadline').textContent = n.title;
@@ -381,7 +380,7 @@ function openBook() { show('book', 'bookNext'); renderBook(); }
 function turnPage(step) { page = Math.max(0, Math.min(TERMS.length - 1, page + step)); renderBook(); }
 function renderBook() {
   const t = TERMS[page];
-  $('bookIcon').src = iconURL(t.icon);
+  $('bookIcon').src = icon(t.icon);
   $('bookTerm').textContent = t.term;
   $('bookLead').textContent = t.lead;
   $('bookDetail').textContent = t.detail;
@@ -394,7 +393,6 @@ function renderBook() {
 }
 
 // ===== 💻 책상 컴퓨터: 개미증권 HTS (시장은 멈추지 않음) =====
-const pcChartCtx = $('pcChart').getContext('2d');
 // 컴퓨터를 켜면 바탕화면 → 아이콘으로 앱(HTS / 내 주식)을 엶
 let pcApp = null;
 function openPC() {
@@ -406,8 +404,8 @@ function openPC() {
 const APPS = {
   hts: { el: 'appHts', name: '📈 개미증권 HTS', icon: 'up' },
   mine: { el: 'appMine', name: '📂 내 주식', icon: 'bag' },
-  news: { el: 'appNews', name: '📰 최근 뉴스', icon: 'rumor' },
-  terms: { el: 'appTerms', name: '📖 주식 용어', icon: 'doc' },
+  news: { el: 'appNews', name: '📰 최근 뉴스', icon: 'rumor', emoji: '📰' },
+  terms: { el: 'appTerms', name: '📖 주식 용어', icon: 'doc', emoji: '📖' },
 };
 function openApp(app) {
   pcApp = app;
@@ -430,14 +428,14 @@ function renderNewsApp() {
   if (!list.some(n => n.id === newsSel)) newsSel = list[0].id;
   $('newsList').replaceChildren(...list.map(n => {
     const b = el('button', 'split-item' + (n.id === newsSel ? ' sel' : '') + (ME && n.id > ME.readUpTo ? ' unread' : ''));
-    const img = el('img', 'px'); img.src = iconURL(n.icon); img.width = img.height = 16; img.alt = '';
+    const img = el('img', 'px'); img.src = icon(n.icon); img.width = img.height = 16; img.alt = '';
     b.append(img, el('span', 'si-tag', newsTag(n)), el('span', 'si-text', n.title));
     b.addEventListener('click', () => { newsSel = n.id; render(); });
     return b;
   }));
   const n = list.find(x => x.id === newsSel), v = $('newsView');
   const head = el('div', 'nv-head'), img = el('img', 'px');
-  img.src = iconURL(n.icon); img.width = img.height = 40; img.alt = '';
+  img.src = icon(n.icon); img.width = img.height = 40; img.alt = '';
   head.append(img, el('span', 'tv-tag' + (n.crash ? ' breaking' : ''), newsTag(n)));
   const imp = el('ul', 'tv-impacts');
   const max = Math.max(...n.impacts.map(i => Math.abs(i.j)), 0.01);
@@ -462,14 +460,14 @@ function renderTermsApp() {
   if (ids.length && !ids.includes(termSel)) termSel = ids[0];
   $('termList').replaceChildren(...(ids.length ? ids.map(i => {
     const b = el('button', 'split-item' + (i === termSel ? ' sel' : ''));
-    const img = el('img', 'px'); img.src = iconURL(TERMS[i].icon); img.width = img.height = 16; img.alt = '';
+    const img = el('img', 'px'); img.src = icon(TERMS[i].icon); img.width = img.height = 16; img.alt = '';
     b.append(img, el('span', 'si-text', TERMS[i].term));
     b.addEventListener('click', () => { termSel = i; render(); });
     return b;
   }) : [el('p', 'pc-empty', '찾는 용어가 없어요.')]));
   if (!ids.length) return $('termView').replaceChildren();
   const t = TERMS[termSel], img = el('img', 'px');
-  img.src = iconURL(t.icon); img.width = img.height = 48; img.alt = '';
+  img.src = icon(t.icon); img.width = img.height = 48; img.alt = '';
   $('termView').replaceChildren(img, el('h2', 'nv-title', t.term), el('p', 'tv-learn', t.lead),
     el('h3', '', '자세히 알아보기'), el('p', '', t.detail), el('h3', '', '게임에서 보면'), el('p', '', t.example), el('p', 'term-tip', '💡 ' + t.tip));
 }
@@ -513,12 +511,12 @@ function renderMine() {
   $('mineList').replaceChildren(...own.map(o => {
     const card = el('button', 'mine-card');
     const head = el('div', 'mc-head'), img = el('img', 'px');
-    img.src = iconURL(META.sectors[o.st.sector].icon); img.width = img.height = 20; img.alt = '';
+    img.src = icon(META.sectors[o.st.sector].icon); img.width = img.height = 20; img.alt = '';
     head.append(img, el('b', '', o.st.name), el('span', 'mc-sec', META.sectors[o.st.sector].name));
     const price = el('div', 'mc-price ' + upDown(o.c.diff));
     price.append(el('span', 'big', won(o.p)), el('span', '', `${o.c.diff > 0 ? '▲' : o.c.diff < 0 ? '▼' : '-'} ${pct(o.c.rate)}`));
     const cv = el('canvas', 'px mc-chart'); cv.width = 300; cv.height = 90;
-    drawPixelChart(cv.getContext('2d'), ST.hist[o.i], o.avg, 60);
+    drawChart(cv, ST.hist[o.i], o.avg, 60);
     const dl = el('dl', 'pc-dl');
     dlRows(dl, [['보유', `${o.qty}주`], ['평단', won(o.avg)], ['평가금액', won(o.value)],
       ['평가손익', signed(o.pl, won(o.pl)), upDown(o.pl)], ['수익률', pct(o.pl / o.cost * 100), upDown(o.pl)], ['비중', `${(o.value / value * 100).toFixed(1)}%`]]);
@@ -561,7 +559,7 @@ function renderPC() {
   [...$('pcSectors').children].forEach(b => b.setAttribute('aria-selected', b.dataset.sector === sector));
   $('pcWatch').replaceChildren(...visibleStocks().map(i => {
     const s = stockOf(i), c = changeOf(i), b = el('button', 'pc-w' + (i === sel ? ' sel' : ''));
-    const img = el('img', 'px'); img.src = iconURL(META.sectors[s.sector].icon); img.width = img.height = 16; img.alt = '';
+    const img = el('img', 'px'); img.src = icon(META.sectors[s.sector].icon); img.width = img.height = 16; img.alt = '';
     b.append(img, el('span', 'n', s.name + (ME?.hold[s.sym] ? ' ●' : '')), el('span', 'p ' + upDown(c.diff), won(priceOf(i))), el('span', 'c ' + upDown(c.diff), pct(c.rate)));
     b.addEventListener('click', () => select(i));
     return b;
@@ -579,7 +577,7 @@ function renderPC() {
   pr.append(el('span', 'big', won(price)), el('span', '', `${diff > 0 ? '▲' : diff < 0 ? '▼' : '-'} ${won(Math.abs(diff))} (${pct(rate)})`));
   const h = ST.hist[sel];
   q.append(head, pr, el('div', 'pc-q-meta', `최근 고가 ${won(Math.max(...h))} · 저가 ${won(Math.min(...h))}` + (mine ? ` · 보유 ${mine.qty}주 · 평단 ${won(avg)}` : '')));
-  drawPixelChart(pcChartCtx, h, mine ? avg : null, 60);
+  drawChart($('pcChart'), h, mine ? avg : null, 60);
 
   document.querySelectorAll('.pc-tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === pcTab));
   const tab = $('pcTab'); tab.replaceChildren();
@@ -670,6 +668,25 @@ function effect() {
   beep([[180, 0, .2], [140, .2, .3]]);
 }
 
+// 고화질/픽셀에 따라 아이콘·차트·TV 스튜디오를 골라 그림
+const isHD = () => store.settings.gfx === 'hd';
+const icon = name => (isHD() && EMOJI[name] ? emojiURL(EMOJI[name]) : iconURL(name));
+function drawChart(cv, hist, avg, maxDay) {
+  if (isHD()) return drawChartHD(cv, hist, avg, maxDay);
+  if (cv.width !== 300) { cv.width = 300; cv.height = 90; }
+  drawPixelChart(cv.getContext('2d'), hist, avg, maxDay);
+}
+function drawNewsStudio(mood, up) {
+  const cv = $('tvStudio');
+  if (isHD()) return drawStudioHD(cv, mood, up);
+  if (cv.width !== 96) { cv.width = 96; cv.height = 54; }
+  drawStudio(cv.getContext('2d'), mood, up);
+}
+// 한 번만 넣어 두는 그림(바탕화면 아이콘·로고)은 그래픽을 바꿀 때 다시 넣음
+function refreshIcons() {
+  document.querySelectorAll('.desk-icon').forEach(b => { const app = APPS[b.dataset.app]; b.querySelector('img').src = isHD() && app.emoji ? emojiURL(app.emoji) : icon(app.icon); });
+  $('logo').src = isHD() ? emojiURL(EMOJI.ant) : antURL('happy');
+}
 // 창에 띄우는 캐릭터 그림: 고화질이면 그림 파일, 픽셀이면 도트
 const charImg = (mood, color = 'red') => (store.settings.gfx === 'hd' ? `assets/person-${color}.png` : personURL(mood, color));
 
@@ -854,7 +871,6 @@ function loop(now) {
 $('modalClose').addEventListener('click', () => hide('modal'));
 document.querySelectorAll('.app-close').forEach(b => b.addEventListener('click', () => openApp(null)));
 document.querySelectorAll('.desk-icon').forEach(b => {
-  b.querySelector('img').src = iconURL(APPS[b.dataset.app].icon);
   b.addEventListener('click', () => openApp(b.dataset.app));
 });
 $('pcPower').addEventListener('click', () => hide('pc'));
@@ -939,11 +955,13 @@ applyReduce();
 $('gfx').value = store.settings.gfx;
 applyGfx();
 $('gfx').addEventListener('change', e => {
-  store.settings.gfx = e.target.value; save(); applyGfx();
+  store.settings.gfx = e.target.value; save(); applyGfx(); refreshIcons(); render();
+  if (isOpen('book')) renderBook();
+  if (!$('login').hidden) $('loginAnt').src = charImg('happy');
   say(e.target.value === 'hd' ? '고화질 그래픽으로 바꿨어요.' : '픽셀 그래픽으로 바꿨어요.');
 });
 if (note) { $('notice').textContent = '⚠ ' + note; $('notice').hidden = false; }
-$('logo').src = antURL('happy');
+refreshIcons();
 connect();
 api('me').then(d => { if (d.ok) { say('다시 오셨네요! 방향키로 움직이고, 물건 앞에서 E를 누르세요.'); render(); } else showLogin(); });
 fitRoom();

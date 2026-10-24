@@ -471,3 +471,83 @@ function drawRoomHD(ctx, v) {
   if (v.flash) { ctx.fillStyle = 'rgba(224, 62, 62, .18)'; ctx.fillRect(0, 0, ROOM_W, ROOM_H); }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
+
+// ===== 고화질 아이콘: 도트 아이콘 대신 컬러 이모지를 그림으로 만들어 씀 =====
+const EMOJI = {
+  tech: '💻', food: '🍜', energy: '🛢️', bank: '🏦', up: '📈', cloud: '☁️', coin: '🪙', rumor: '💬', fire: '🔥', crash: '📉',
+  pill: '💊', car: '🚗', bag: '💼', sun: '☀️', rain: '🌧️', snow: '❄️', storm: '⛈️', star: '⭐', doc: '📄', warn: '⚠️',
+  w_heat: '🌡️', w_cold: '🥶', w_downpour: '🌧️', w_typhoon: '🌀', w_dust: '😷', news: '📰', book: '📖', ant: '🐜',
+};
+const emojiCache = new Map();
+function emojiURL(e) {
+  if (!emojiCache.has(e)) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 96;
+    const ctx = cv.getContext('2d');
+    ctx.font = '76px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(e, 48, 54);
+    emojiCache.set(e, cv.toDataURL());
+  }
+  return emojiCache.get(e);
+}
+
+// ===== 고화질 캔들 차트 (300×90 기준을 4배 해상도로) =====
+function drawChartHD(cv, hist, avg, maxDay) {
+  const W = 300, H = 90, S = 4;
+  if (cv.width !== W * S) { cv.width = W * S; cv.height = H * S; }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(S, 0, 0, S, 0, 0);
+  ctx.fillStyle = vg(ctx, 0, H, '#101d36', '#0a1324'); ctx.fillRect(0, 0, W, H);
+  for (let gy = 10; gy < H; gy += 16) { ctx.fillStyle = 'rgba(160, 190, 255, .08)'; ctx.fillRect(0, gy, W, 0.4); }
+  let min = Math.min(...hist, avg ?? Infinity), max = Math.max(...hist, avg ?? -Infinity);
+  const pad = (max - min) * 0.12 || hist[hist.length - 1] * 0.05;
+  min -= pad; max += pad;
+  const y = v => 5 + (1 - (v - min) / (max - min)) * 80, step = 288 / maxDay, bw = Math.max(1.2, step * 0.62);
+  const xs = hist.map((_, i) => 6 + i * step);
+  // 종가를 잇는 은은한 선 + 아래 면
+  ctx.beginPath(); hist.forEach((c, i) => (i ? ctx.lineTo(xs[i], y(c)) : ctx.moveTo(xs[i], y(c))));
+  ctx.lineTo(xs[xs.length - 1], H); ctx.lineTo(xs[0], H); ctx.closePath();
+  ctx.fillStyle = vg(ctx, 0, H, 'rgba(120, 170, 255, .16)', 'rgba(120, 170, 255, 0)'); ctx.fill();
+  line(ctx, hist.map((c, i) => [xs[i], y(c)]), 'rgba(200, 220, 255, .35)', 0.5);
+  hist.forEach((c, i) => {
+    const o = i ? hist[i - 1] : c, top = y(Math.max(o, c)), bot = y(Math.min(o, c));
+    rr(ctx, xs[i] - bw / 2, top, bw, Math.max(0.8, bot - top), 0.4, c > o ? '#ff5f5f' : c < o ? '#4f8fff' : '#c9d1e0');
+  });
+  if (avg) {
+    ctx.setLineDash([3, 2]); line(ctx, [[0, y(avg)], [W, y(avg)]], '#f7a531', 0.6); ctx.setLineDash([]);
+    text(ctx, '평단', W - 9, y(avg) - 3, 4, '#f7a531', 700);
+  }
+  const lx = xs[xs.length - 1], ly = y(hist[hist.length - 1]);
+  oval(ctx, lx, ly, 2.4, 2.4, 'rgba(255, 255, 255, .2)'); oval(ctx, lx, ly, 1.2, 1.2, '#ffffff');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+// ===== 고화질 뉴스 스튜디오 (96×54 기준, 4배) =====
+function drawStudioHD(cv, mood, up) {
+  const W = 96, H = 54, S = 4;
+  if (cv.width !== W * S) { cv.width = W * S; cv.height = H * S; }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(S, 0, 0, S, 0, 0);
+  ctx.fillStyle = vg(ctx, 0, H, '#14366e', '#0a1a38'); ctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < 5; i++) { ctx.fillStyle = 'rgba(120, 180, 255, .06)'; ctx.beginPath(); ctx.moveTo(10 + i * 18, 0); ctx.lineTo(20 + i * 18, 0); ctx.lineTo(6 + i * 18, H); ctx.lineTo(-4 + i * 18, H); ctx.fill(); }
+  [[2, 22, 8], [11, 18, 7], [19, 25, 9], [70, 20, 8], [79, 15, 9], [89, 23, 7]].forEach(([x, top, w]) => rr(ctx, x, top, w, H - top, 0.6, 'rgba(30, 70, 140, .55)'));
+  // 오른쪽 큰 화면: 지수 흐름
+  rr(ctx, 54, 5, 38, 24, 2, vg(ctx, 5, 29, '#0b1730', '#081022'), 'rgba(140, 190, 255, .45)', 0.5);
+  const pts = (up ? [20, 18, 19, 15, 13, 10, 8, 6] : [7, 9, 8, 12, 14, 17, 19, 21]).map((v, i) => [57 + i * 4.6, 6 + v]);
+  line(ctx, pts, up ? '#ff6b6b' : '#6ba8ff', 0.9);
+  text(ctx, up ? '▲ 상승' : '▼ 하락', 73, 9.5, 3.2, up ? '#ff8a8a' : '#8ab8ff', 800);
+  // 앵커 (책상 뒤라 아랫몸은 책상에 가려짐)
+  const im = PERSON_IMG.blue;
+  if (im.complete && im.naturalWidth) {
+    const h = 44, w = h * im.naturalWidth / im.naturalHeight;
+    ctx.drawImage(im, 26 - w / 2, 8, w, h);
+  } else hdPersonShapes(ctx, { x: 26, y: 44, mood, color: 'blue' });
+  const icon = MOOD_ICON[mood];
+  if (icon) { rr(ctx, 33, 7, 6, 6, 2.4, 'rgba(255, 255, 255, .92)'); text(ctx, icon[0], 36, 10.2, 4, icon[1], 900); }
+  // 책상
+  rr(ctx, 4, 34, 50, 20, 2, vg(ctx, 34, 54, '#e8edf5', '#aab4c6'), 'rgba(0, 0, 0, .3)', 0.4);
+  rr(ctx, 4, 34, 50, 3, 1.5, '#c0392b');
+  text(ctx, 'ANT NEWS', 29, 45, 4.4, '#1f3a8a', 900);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}

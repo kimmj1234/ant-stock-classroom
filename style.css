@@ -425,3 +425,79 @@ body.gfx-hd .room-wrap { overflow: hidden; }
 /* 고화질 캐릭터 그림: 비율 유지, 부드럽게 */
 #loginAnt, #fxAnt { object-fit: contain; }
 body.gfx-hd #loginAnt, body.gfx-hd #fxAnt { image-rendering: auto; }
+
+/* ===== 고화질 그래픽일 때 창들도 매끈하게 (픽셀 모드는 위의 각진 스타일 그대로) ===== */
+body.gfx-hd { --soft: 0 10px 30px rgba(0, 0, 0, .35); --soft-sm: 0 3px 10px rgba(0, 0, 0, .25); }
+body.gfx-hd .px { image-rendering: auto; }
+body.gfx-hd .panel, body.gfx-hd .room-wrap, body.gfx-hd .prompt { border: 1px solid rgba(255, 255, 255, .12); box-shadow: var(--soft); }
+body.gfx-hd .panel { border-color: rgba(0, 0, 0, .12); }
+body.gfx-hd header h1 { text-shadow: none; }
+
+/* 공통 창 (칠판·캐비닛·은행·로그인) */
+body.gfx-hd .modal { background: rgba(10, 14, 30, .55); backdrop-filter: blur(3px); }
+body.gfx-hd .modal-card, body.gfx-hd .result-card {
+  border: 1px solid rgba(0, 0, 0, .1); border-radius: 18px !important; box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
+  background: linear-gradient(#fffdf7, #f6efdd);
+}
+body.gfx-hd .modal button, body.gfx-hd .result button, body.gfx-hd .login-card button, body.gfx-hd .b-btns button, body.gfx-hd .book-nav button, body.gfx-hd .tv-panel button {
+  border: 1px solid rgba(0, 0, 0, .15); border-radius: 10px !important; box-shadow: var(--soft-sm); transition: transform .08s;
+}
+body.gfx-hd .modal button:active, body.gfx-hd .result button:active, body.gfx-hd .book-nav button:active, body.gfx-hd .tv-panel button:active { transform: translateY(1px); box-shadow: none; }
+body.gfx-hd .login-card input, body.gfx-hd .b-label input { border: 1px solid #c9bfa6; border-radius: 10px !important; padding: 8px 10px; }
+body.gfx-hd .lesson, body.gfx-hd .news-card .learn { border-radius: 10px !important; }
+body.gfx-hd table th, body.gfx-hd table td { border-bottom-width: 1px; }
+body.gfx-hd .rec-sum div, body.gfx-hd .chart { border-radius: 10px !important; }
+body.gfx-hd .chart { border: 1px solid rgba(0, 0, 0, .2); }
+
+/* 💻 컴퓨터: 얇은 베젤의 요즘 모니터 */
+body.gfx-hd .pc { background: rgba(8, 12, 24, .6); backdrop-filter: blur(3px); }
+body.gfx-hd .pc-monitor {
+  background: linear-gradient(#2a2e38, #15171d); border: 1px solid #3a3f4b; border-radius: 20px !important;
+  padding: 12px 12px 22px; box-shadow: 0 30px 70px rgba(0, 0, 0, .6);
+}
+body.gfx-hd .pc-monitor::after { width: 6px; height: 6px; border-radius: 50% !important; box-shadow: 0 0 6px #22e05a; right: 50%; bottom: 8px; }
+body.gfx-hd .pc-screen { border: 0; border-radius: 10px !important; overflow: hidden; }
+body.gfx-hd .pc-screen::before { display: none; }
+body.gfx-hd .pc-titlebar { background: linear-gradient(#2c4fa8, #1f3a8a); }
+body.gfx-hd .pc-x, body.gfx-hd .power { border: 0; border-radius: 6px !important; }
+body.gfx-hd .pc-box, body.gfx-hd .pc-w, body.gfx-hd .pc-tabs button, body.gfx-hd .pc-quick button, body.gfx-hd .pc-sectors button,
+body.gfx-hd .pc-msg, body.gfx-hd .pc-qty input, body.gfx-hd .mine-card, body.gfx-hd .split-item, body.gfx-hd .split-list, body.gfx-hd .split-view,
+body.gfx-hd .mine-sum div, body.gfx-hd .mine-alloc, body.gfx-hd .term-search, body.gfx-hd .mine-go, body.gfx-hd .pc-chart { border-radius: 8px !important; border-width: 1px; }
+body.gfx-hd .pc-buy, body.gfx-hd .pc-sell { border: 0; border-radius: 10px !important; box-shadow: 0 4px 12px rgba(0, 0, 0, .35); }
+body.gfx-hd .pc-buy { background: linear-gradient(#ff6b6b, #d64545); } body.gfx-hd .pc-sell { background: linear-gradient(#5c9dff, #2f6fe0); }
+body.gfx-hd .pc-book td { border-color: #0b1426; }
+body.gfx-hd .desk { background:
+  radial-gradient(ellipse 60% 40% at 15% 105%, #3f9a4a 98%, transparent 100%),
+  radial-gradient(ellipse 70% 45% at 85% 108%, #57b05a 98%, transparent 100%),
+  radial-gradient(circle at 80% 20%, rgba(255, 240, 180, .9) 0 4%, rgba(255, 240, 180, 0) 14%),
+  linear-gradient(#2a6bd8, #8cc8f4 70%, #d4ecfb); }
+body.gfx-hd .pc .desk-icon { text-shadow: 0 1px 3px rgba(0, 0, 0, .8); border-radius: 10px !important; }
+body.gfx-hd .pc .desk-icon:hover, body.gfx-hd .pc .desk-icon:focus-visible { border: 1px solid rgba(255, 255, 255, .6); }
+body.gfx-hd .taskbar { background: rgba(20, 24, 36, .85); backdrop-filter: blur(6px); border-top: 1px solid rgba(255, 255, 255, .15); }
+body.gfx-hd .taskbar .start { border: 0; border-radius: 8px !important; }
+
+/* 📺 TV: 얇은 테두리의 평면 TV */
+body.gfx-hd .tv { background: rgba(8, 12, 24, .65); backdrop-filter: blur(3px); }
+body.gfx-hd .tv-antenna { display: none; }
+body.gfx-hd .tv-set { padding-top: 0; }
+body.gfx-hd .tv-body { background: linear-gradient(#25282f, #121318); border: 1px solid #3a3f4b; border-radius: 18px !important; box-shadow: 0 30px 70px rgba(0, 0, 0, .6); }
+body.gfx-hd .tv-screen { border: 0; outline: 0; border-radius: 8px !important; }
+body.gfx-hd .tv-screen::after { display: none; }
+body.gfx-hd .tv-lower, body.gfx-hd .tv-learn, body.gfx-hd .tv-graphic, body.gfx-hd .tv-studio { border-radius: 8px !important; border-width: 1px; }
+body.gfx-hd .tv-tag { border-radius: 6px 0 0 6px !important; }
+body.gfx-hd .tv-panel button { background: linear-gradient(#3a3f4b, #2a2e38); color: #fff; }
+body.gfx-hd .tv-panel .tv-off { background: linear-gradient(#e05a4a, #b8372b); }
+body.gfx-hd .tv-page { text-shadow: none; }
+body.gfx-hd .tv-knob { display: none; }
+body.gfx-hd .tv-legs { width: 30%; height: 14px; border: 0; background: linear-gradient(#2a2e38, #15171d); border-radius: 0 0 10px 10px !important; }
+
+/* 📚 책: 둥근 하드커버, 부드러운 종이 */
+body.gfx-hd .book-wrap { background: rgba(8, 12, 24, .6); backdrop-filter: blur(3px); }
+body.gfx-hd .book { background: linear-gradient(135deg, #8a4a32, #5a2a1e); border: 0; border-radius: 18px !important; box-shadow: 0 30px 70px rgba(0, 0, 0, .55); }
+body.gfx-hd .page { background-image: repeating-linear-gradient(0deg, transparent 0 27px, rgba(200, 180, 140, .35) 27px 28px); background-color: #fffaf0; }
+body.gfx-hd .page-left { border-radius: 10px 0 0 10px !important; border-right: 1px solid #e3d6b8; }
+body.gfx-hd .page-right { border-radius: 0 10px 10px 0 !important; }
+body.gfx-hd .book-tip { border-radius: 8px !important; }
+body.gfx-hd .book-nav button { background: #fffaf0; }
+/* 차트 캔버스는 칸 너비에 맞춰 늘고 줄어듦 (고화질은 내부 해상도가 4배라 꼭 필요) */
+.chart { display: block; width: 100%; height: auto; border: 3px solid var(--ink); }
