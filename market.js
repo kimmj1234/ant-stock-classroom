@@ -7,7 +7,10 @@ const VOL = 0.012;
 const MARKET_VOL = 0.008;   // 시장 전체가 같이 움직이는 폭
 const SECTOR_VOL = 0.006;   // 같은 업종끼리 같이 움직이는 폭
 const DRIFT_DECAY = 0.7;    // 사건의 여파가 다음 날로 남는 비율
-const REVERT = 0.015;       // 기준가 쪽으로 천천히 돌아오려는 힘 (60일 동안 끝없이 치솟거나 무너지지 않게)
+// 상장폐지 방지: 기준가(처음 가격)로 끌어당기는 힘은 없고(한 기업만 계속 높아져도 됨), 너무 떨어졌을 때만 받쳐 줌
+const FLOOR = 0.3;          // 처음 가격의 30% 아래로 떨어지면 다시 올라오려는 힘이 생김
+const FLOOR_PULL = 0.3;     // 그 힘의 세기 (하루 기준)
+const MIN_PRICE = 0.1;      // 처음 가격의 10% 아래로는 절대 내려가지 않음
 
 const SECTORS = {
   tech:    { name: 'IT·반도체',   icon: 'tech' },
@@ -314,7 +317,8 @@ function createMarket() {
 const monthOf = m => ((m.month0 - 1 + Math.floor(m.day / 20)) % 12) + 1; // 20거래일 ≈ 한 달
 const indexOf = m => +(1000 * m.stocks.reduce((a, st, i) => a + st.price / STOCK_DEFS[i].price, 0) / m.stocks.length).toFixed(2);
 function setPrice(m, st, raw) {
-  st.raw = raw;
+  st.raw = Math.max(raw, STOCK_DEFS.find(d => d.sym === st.sym).price * MIN_PRICE);   // 바닥 (상장폐지 없음)
+  raw = st.raw;
   st.price = roundTick(raw);
   if (m.open) st.hist[st.hist.length - 1] = st.price;   // 오늘 일봉의 현재가
 }
@@ -389,18 +393,21 @@ function stepTick(m) {
   const sec = Object.fromEntries(Object.keys(SECTORS).map(k => [k, gauss() * SECTOR_VOL / s]));
   m.stocks.forEach((st, i) => {
     const def = STOCK_DEFS[i];
-    const r = def.beta * mk + sec[def.sector] + gauss() * VOL / s + (st.drift + REVERT * Math.log(def.price / st.raw)) / TICKS_PER_DAY;
+    const r = def.beta * mk + sec[def.sector] + gauss() * VOL / s + (st.drift + floorPull(def, st)) / TICKS_PER_DAY;
     setPrice(m, st, st.raw * Math.exp(r));
   });
   m.index[m.index.length - 1] = indexOf(m);
   return happened;
 }
 
+// 처음 가격의 30% 아래일 때만 위로 받치는 힘 (하루 기준), 그 위에서는 0
+const floorPull = (def, st) => (st.raw < def.price * FLOOR ? FLOOR_PULL * Math.log(def.price * FLOOR / st.raw) : 0);
+
 // 종목마다 지금 작용하는 힘 (stepTick 식의 무작위가 아닌 부분, 하루 기준):
-// news = 지난 사건이 남긴 여파(종목 여파 + 베타 × 시장 여파), pull = 기준가 쪽으로 돌아오려는 힘
+// news = 지난 사건이 남긴 여파(종목 여파 + 베타 × 시장 여파), pull = 상장폐지를 막는 바닥 힘
 const forcesOf = m => m.stocks.map((st, i) => ({
   news: +(st.drift + STOCK_DEFS[i].beta * m.marketDrift).toFixed(4),
-  pull: +(REVERT * Math.log(STOCK_DEFS[i].price / st.raw)).toFixed(4),
+  pull: +floorPull(STOCK_DEFS[i], st).toFixed(4),
 }));
 
 // 하루 마감(자정): 사건 여파가 하루만큼 줄어듦
@@ -439,7 +446,7 @@ if (require.main === module) {
     m.news.forEach(n => seen.add(n.key));
     m.stocks.forEach((st, i) => {
       assert.strictEqual(st.hist.length, 61);
-      st.hist.forEach(p => assert.ok(Number.isFinite(p) && p > 0, `가격 오류 ${st.sym} ${p}`));
+      st.hist.forEach(p => assert.ok(Number.isFinite(p) && p >= STOCK_DEFS[i].price * MIN_PRICE * 0.99, `가격 오류·바닥 아래 ${st.sym} ${p}`));
       assert.strictEqual(st.price % tickSize(st.price), 0, '호가 단위');
       assert.strictEqual(st.hist[st.hist.length - 1], st.price, '오늘 일봉 = 현재가');
       stockRet.push(st.price / STOCK_DEFS[i].price - 1);

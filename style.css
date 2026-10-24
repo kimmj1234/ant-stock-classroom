@@ -118,7 +118,7 @@ th { color: var(--mute); font-weight: normal; }
 .pc { position: fixed; inset: 0; z-index: 7; display: grid; place-items: center; padding: 12px; background: rgba(16, 16, 32, .7); }
 .pc[hidden] { display: none; }
 .pc-monitor {
-  position: relative; width: min(1180px, 100%); max-height: calc(100vh - 24px); overflow: auto;
+  position: relative; width: 100%; max-height: calc(100vh - 24px); overflow: auto;   /* 화면을 거의 꽉 채움 */
   padding: 16px 16px 26px; background: #d8d0bc; border: 4px solid var(--ink); box-shadow: 8px 8px 0 #000;
 }
 .pc-monitor::after { content: ""; position: absolute; right: 22px; bottom: 9px; width: 8px; height: 8px; background: #22e05a; box-shadow: 0 0 0 2px var(--ink); }
@@ -135,7 +135,7 @@ th { color: var(--mute); font-weight: normal; }
 .pc-x { background: #c0392b; border: 2px solid var(--ink); padding: 1px 10px; color: #fff; }
 .pc-body {
   display: grid; grid-template-columns: 200px minmax(0, 1fr) 150px 230px; gap: 8px; padding: 8px;
-  height: min(560px, calc(100vh - 150px));
+  height: calc(100vh - 130px);
 }
 @media (max-width: 1000px) { .pc-body { grid-template-columns: minmax(0, 1fr); height: auto; } }
 .pc-box { background: #111d35; border: 2px solid #24365e; padding: 6px 8px; overflow: auto; min-width: 0; }
@@ -375,7 +375,7 @@ body.reduce .tv-live { animation: none; }
 /* 💻 컴퓨터 바탕화면 (개미 OS) */
 .app[hidden], .desk[hidden] { display: none; }
 .desk {
-  position: relative; height: min(600px, calc(100vh - 110px)); overflow: hidden;
+  position: relative; height: calc(100vh - 110px); overflow: hidden;
   background:
     radial-gradient(ellipse 45% 28% at 18% 100%, #3f8f3a 98%, transparent 100%),
     radial-gradient(ellipse 55% 34% at 82% 100%, #4f9a3f 98%, transparent 100%),
@@ -399,7 +399,7 @@ body.reduce .tv-live { animation: none; }
 .pc .power { background: #c0392b; color: #fff; border: 2px solid var(--ink); padding: 1px 8px; }
 
 /* 📂 내 주식 */
-.mine-body { height: min(560px, calc(100vh - 150px)); overflow-y: auto; padding: 10px; }
+.mine-body { height: calc(100vh - 130px); overflow-y: auto; padding: 10px; }
 .mine-sum { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin: 0 0 10px; }
 .mine-sum div { background: #111d35; border: 2px solid #24365e; padding: 4px 8px; }
 .mine-sum dt { color: #7d8db3; font-size: 12px; }
@@ -422,7 +422,7 @@ body.reduce .tv-live { animation: none; }
 @media (max-width: 1000px) { .mine-sum { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* 📰 뉴스 · 📖 용어 앱: 목록 + 내용 */
-.split-app { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 8px; padding: 8px; height: min(560px, calc(100vh - 150px)); }
+.split-app { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 8px; padding: 8px; height: calc(100vh - 130px); }
 .split-side { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
 .split-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; min-height: 0; background: #111d35; border: 2px solid #24365e; padding: 6px; }
 .split-app > .split-list { height: 100%; }

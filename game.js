@@ -603,7 +603,7 @@ function whyMoved(i) {
   line(`🌊 시장·업종 흐름과 일반 매매 → ${pct(rest * 100)}`, rest);
   const f = ST.forces?.[i];
   if (f && Math.abs(f.news) >= 0.001) line(`⏳ 지난 뉴스 여파: 하루 약 ${pct(f.news * 100)}씩 ${f.news > 0 ? '오르는' : '내리는'} 힘이 남아 있어요 (매일 30%씩 약해짐)`, f.news);
-  if (f && Math.abs(f.pull) >= 0.001) line(`🧲 기준가보다 ${f.pull < 0 ? '많이 올라 내려오려는' : '많이 내려 올라가려는'} 힘: 하루 약 ${pct(f.pull * 100)}`, f.pull);
+  if (f && f.pull >= 0.001) line(`🛟 처음 가격의 30% 아래로 떨어져 받쳐 주는 힘(상장폐지 방지): 하루 약 ${pct(f.pull * 100)}`, f.pull);
   return box;
 }
 
@@ -785,7 +785,7 @@ function render() {
   $('logoutBtn').hidden = !ME;
 
   const coin = nearCoin();
-  $('prompt').textContent = coin ? `[E] 🪙 동전 줍기 (${won(coin.value)})`
+  $('prompt').textContent = coin ? '[E] 🪙 동전 줍기 (???원)'
     : near ? (near.act === 'trade' ? `[E] 💻 컴퓨터 켜기 (HTS) · B 매수 · N 매도 — 선택 종목: ${stockOf(sel).name} ${won(priceOf(sel))}`
       : near.act === 'work' ? `[E] ${near.label} (시급 ${won(META.WAGE)}, 오늘 ${ME?.shiftsLeft ?? 0}번 남음)` : `[E] ${near.label}`)
     : P.scene === 'inside'

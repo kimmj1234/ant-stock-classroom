@@ -119,7 +119,8 @@ function saveState() {
 // ===== 상태 보내기 (Server-Sent Events) =====
 function publicState() {
   return {
-    season: market.seasonName(M), weather: M.weather, clock: M.clock, open: M.open, depositRate: M.depositRate, coins,
+    season: market.seasonName(M), weather: M.weather, clock: M.clock, open: M.open, depositRate: M.depositRate,
+    coins: coins.map(({ id, x, y }) => ({ id, x, y })),   // 금액은 보내지 않음 → 주운 뒤에야 알 수 있음
     // 전광판: 접속하지 않은 사람까지 모든 계정의 자산 순위 TOP 10
     top10: [...players.values()].map(p => ({ name: p.name, total: totalOf(p), base: baseOf(p) })).sort((a, b) => b.total - a.total).slice(0, 10),
     hist: M.stocks.map(s => s.hist), index: M.index, news: M.news.slice(0, 20), day: M.day, forces: market.forcesOf(M),

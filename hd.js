@@ -327,13 +327,6 @@ const HD_OUT = {
     rr(ctx, f.x + 2, f.y + 5, 1.4, 5, 0.4, '#3a3f4b'); rr(ctx, f.x + f.w - 3.4, f.y + 5, 1.4, 5, 0.4, '#3a3f4b');
     for (let i = 0; i < 3; i++) rr(ctx, f.x, f.y + i * 2.4, f.w, 2, 0.8, vg(ctx, f.y + i * 2.4, f.y + i * 2.4 + 2, '#c08a52', '#8b5a2b'), 'rgba(0, 0, 0, .3)', 0.25);
   },
-  lamp(ctx, f, v) {
-    const on = darkness(v.clock);
-    shadow(ctx, f.x + 2, f.y + f.h, 3, 1);
-    rr(ctx, f.x + 1, f.y + 4, 2, f.h - 4, 0.6, hg(ctx, f.x + 1, f.x + 3, '#2b2f38', '#5a6070'));
-    rr(ctx, f.x - 1.5, f.y - 0.5, 7, 5, 1.5, on ? '#ffe9a0' : '#c9ced8', INK, 0.4);
-    if (on) oval(ctx, f.x + 2, f.y + 2, 9, 9, rg(ctx, f.x + 2, f.y + 2, 9, 'rgba(255, 230, 150, .55)', 'rgba(255, 230, 150, 0)'));
-  },
   billboard(ctx, f) {
     shadow(ctx, f.x + f.w / 2, f.y + f.h, f.w / 2, 2.4, 0.25);
     [f.x + 14, f.x + f.w - 18].forEach(x => rr(ctx, x, f.y + 46, 4, f.h - 46, 0.8, hg(ctx, x, x + 4, '#2b2f38', '#5a6070')));
@@ -459,9 +452,6 @@ function drawRoomHD(ctx, v) {
   const dk = outside ? darkness(v.clock) : 0;
   if (dk) {
     ctx.fillStyle = `rgba(10, 16, 48, ${dk})`; ctx.fillRect(0, 0, ROOM_W, ROOM_H);
-    ctx.globalCompositeOperation = 'lighter';
-    for (const f of OUT_FURN.filter(f => f.id.startsWith('lamp'))) oval(ctx, f.x + 2, f.y + 14, 16, 18, rg(ctx, f.x + 2, f.y + 10, 18, 'rgba(255, 220, 140, .35)', 'rgba(255, 220, 140, 0)'));
-    ctx.globalCompositeOperation = 'source-over';
   }
   if (v.flash) { ctx.fillStyle = 'rgba(224, 62, 62, .18)'; ctx.fillRect(0, 0, ROOM_W, ROOM_H); }
   ctx.setTransform(1, 0, 0, 1, 0, 0);

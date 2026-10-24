@@ -384,10 +384,6 @@ function drawBench(ctx, f) {
   R(ctx, C.woodD, f.x + 2, f.y + 6, 2, 4); R(ctx, C.woodD, f.x + f.w - 4, f.y + 6, 2, 4);
   box(ctx, C.wood, f.x, f.y, f.w, 4); box(ctx, C.wood, f.x, f.y + 4, f.w, 3);
 }
-function drawLamppost(ctx, f, v) {
-  R(ctx, '#3a3f4b', f.x + 1, f.y + 4, 2, f.h - 4);
-  R(ctx, darkness(v.clock) ? '#ffe9a0' : '#9aa3b5', f.x - 1, f.y, 6, 5);
-}
 // 전광판: 글자는 game.js가 HTML로 이 자리(BILLBOARD.screen) 위에 띄움
 const BILLBOARD = { x: 210, y: 112, w: 106, h: 62, screen: { x: 214, y: 116, w: 98, h: 44 } };
 function drawBillboard(ctx, f) {
@@ -405,8 +401,6 @@ const OUT_FURN = [
   { id: 'tree1', x: 20, y: 118, w: 16, h: 22, solid: true, draw: drawTree },
   { id: 'tree3', x: 118, y: 140, w: 16, h: 22, solid: true, draw: drawTree },
   { id: 'bench', x: 44, y: 146, w: 26, h: 10, solid: true, draw: drawBench },
-  { id: 'lamp1', x: 150, y: 52, w: 4, h: 24, solid: true, draw: drawLamppost },
-  { id: 'lamp2', x: 190, y: 52, w: 4, h: 24, solid: true, draw: drawLamppost },
   { id: 'billboard', ...BILLBOARD, solid: true, draw: drawBillboard },
 ];
 function drawCoins(ctx, coins, blink) {
@@ -444,10 +438,7 @@ function drawRoom(ctx, v) {
   items.sort((a, b) => a.z - b.z).forEach(it => it.d());
   if (v.near) drawHighlight(ctx, v.near, v.blink);
   const dk = v.scene === 'outside' ? darkness(v.clock) : 0;
-  if (dk) {
-    R(ctx, `rgba(10,16,48,${dk})`, 0, 0, ROOM_W, ROOM_H);
-    for (const f of OUT_FURN.filter(f => f.id.startsWith('lamp'))) R(ctx, 'rgba(255,233,160,0.25)', f.x - 10, f.y + 2, 24, 30);
-  }
+  if (dk) R(ctx, `rgba(10,16,48,${dk})`, 0, 0, ROOM_W, ROOM_H);
 }
 
 // ===== 픽셀 캔들 차트 (300×90): 빨강 = 상승, 파랑 = 하락 =====
