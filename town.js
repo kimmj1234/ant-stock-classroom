@@ -27,9 +27,9 @@ const GROUND = [
   'RRRRRRRRZZRRZZRR',
   '........kkZZkk..',
   '.........kZZk...',
-  'gggqqqggg.RR.ppp',
-  'ggqqqqqgg.RR.ppp',
-  'gggqqqggg.RR.ppp',
+  '..........RR....',
+  '..........RR....',
+  '..........RR....',
 ];
 const MAIN = [7, 10], SIDE = [10, 11];  // 대로 줄 범위, 골목 칸 범위
 const inMap = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
@@ -46,32 +46,8 @@ function place(type, v, x, y, w = 1, d = 1, block = true) {
 const decal = (type, x, y, v = 0) => THINGS.push({ type, v, w: 1, d: 1, x: (x + 0.5) * TILE, y: (y + 1) * TILE, ground: true });   // 바닥 무늬(지나갈 수 있음)
 const deco = (type, x, y, v = 0, dy = 0) => THINGS.push({ type, v, w: 1, d: 1, x: (x + 0.5) * TILE, y: (y + 1) * TILE + dy });     // 작은 장식(지나갈 수 있음)
 
-// 북쪽 상가: 카페 · 약국 · 분식 · 꽃집 (+ 골목 건너 빌라). 바닥 2~4줄 차지, 앞면이 큰길을 봄
-place('cafe', 0, 0, 2, 3, 3);
-place('shop', 0, 3, 2, 2, 3);           // 약국
-place('shop', 2, 5, 2, 2, 3);           // 분식
-place('shop', 4, 7, 2, 2, 3);           // 꽃집
-place('villa', 0, 13, 2, 3, 3);
-place('vending', 0, 12, 1);             // 빌라 옆 자판기
-place('bin', 0, 12, 3);
-deco('aboard', 1, 5, 0, -6);            // 카페 앞 입간판
-deco('pots', 7, 5, 0, -8); deco('pots', 8, 5, 1, -8);   // 꽃집 앞 화분
-// 북쪽 보도 (차도 쪽 줄): 가로수 · 가로등 · 신호등
-place('tree', 0, 1, 6); place('lamp', 0, 3, 6); place('tree', 1, 5, 6); place('signal', 0, 7, 6);
-place('signal', 0, 14, 6); place('tree', 0, 15, 6);
-// 남쪽 보도: 가로수 · 가로등 · 버스 정류장 · 신호등
-place('tree', 1, 0, 11); place('lamp', 0, 2, 11); place('busstop', 0, 4, 11, 2, 1); place('tree', 0, 6, 11);
-place('signal', 0, 7, 11); place('signal', 0, 14, 11); place('tree', 1, 15, 11);
-// 볼라드: 횡단보도 앞 연석 (지나갈 수 있음)
-for (const x of [8, 9, 12, 13]) { deco('bollard', x, 6, 0, -2); deco('bollard', x, 10, 0, 12); }
-// 남서쪽 공원: 분수 광장 + 나무 + 벤치 + 가로등 + 꽃밭
-place('fountain', 0, 3, 13, 3, 2);
-place('ptree', 0, 0, 13); place('ptree', 1, 1, 15); place('ptree', 0, 7, 13); place('ptree', 1, 8, 15);
-place('bench', 0, 6, 15, 2, 1); place('lamp', 0, 2, 13);
-decal('flowers', 1, 14, 0); decal('flowers', 7, 14, 1); decal('flowers', 0, 15, 1);
-// 남동쪽 주차장: 주차된 차 두 대 + 주차 표지판 (차는 나중에 움직이는 차량 미리 보기)
-place('car', 0, 13, 13, 1, 2); place('car', 2, 15, 14, 1, 2);
-place('psign', 0, 12, 15);
+// 지금은 도로만: 건물·나무·구조물은 하나씩 정해서 다시 올릴 예정 (그림은 아래 ARTS에 남아 있어 place(...) 한 줄로 바로 놓을 수 있음)
+//   예) place('shop', 0, 3, 2, 2, 3)  → 약국을 3칸·2줄부터 가로 2칸 × 세로 3줄로
 // 차도 위 바닥 무늬: 맨홀 · 배수구
 decal('manhole', 3, 8); decal('manhole', 11, 2); decal('manhole', 13, 9);
 decal('drain', 5, 7, 0); decal('drain', 1, 10, 1); decal('drain', 14, 10, 1); decal('drain', 10, 14, 2);
