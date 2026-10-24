@@ -9,7 +9,7 @@ const MAP_W = COLS * TILE_W, MAP_H = ROWS * TILE_H;   // 마을 크기(픽셀): 
 const SPEED = 240;                      // 화면에서 1초에 걷는 거리(px)
 // 위치는 마을 픽셀 좌표(왼쪽 위 = 0, 0). 발밑 자리
 const me = { name: '', x: MAP_W / 2, y: MAP_H / 2, look: DEFAULT_LOOK, dir: 'se', left: false, moving: false };   // dir: 보는 방향(sprites.js의 s·se·e·ne·n), left: 좌우 뒤집기
-let S = 3;                              // 픽셀 배율 (픽셀 1칸 = S px). 낮은 화면은 2
+let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). 가로로 눕힌 낮은 휴대폰 화면은 1
 
 // ===== 로그인 확인: 안 했거나 로그아웃하면 메인으로 =====
 const onAuth = who => {
@@ -61,7 +61,7 @@ function interact() { toast = { text: '아직 상호작용할 물건이 없어�
 new ResizeObserver(() => {
   const k = devicePixelRatio || 1;
   cv.width = Math.round(cv.clientWidth * k); cv.height = Math.round(cv.clientHeight * k);
-  S = cv.clientHeight < 420 ? 2 : 3;
+  S = cv.clientHeight < 420 ? 1 : 2;
 }).observe(cv);
 
 // ===== 픽셀 그림 만들기 =====
@@ -131,15 +131,15 @@ function drawPlayer(p, cam, now) {
   const img = sprite(p.look, p.dir, step);
   const f = toScreen(p.x, p.y), x = Math.round(f.x - cam.x), y = Math.round(f.y - cam.y);   // 발밑 자리
   ctx.fillStyle = 'rgba(0, 0, 0, .22)';   // 그림자
-  ctx.beginPath(); ctx.ellipse(x, y, 6 * S, 2.5 * S, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x, y, SPRITE.w / 3 * S, SPRITE.w / 9 * S, 0, 0, Math.PI * 2); ctx.fill();
   ctx.save();
-  ctx.translate(x, y - (SPRITE.h - 1) * S);
+  ctx.translate(x, y - SPRITE.foot * S);   // 발바닥 줄이 발밑 자리에 오게
   if (p.left) ctx.scale(-1, 1);           // 왼쪽을 볼 때는 좌우 뒤집기
   ctx.drawImage(img, -SPRITE.w / 2 * S, 0, SPRITE.w * S, SPRITE.h * S);
   ctx.restore();
   ctx.font = 'bold 14px "Malgun Gothic", sans-serif'; ctx.textAlign = 'center';   // 머리 위 닉네임
-  ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.strokeText(p.name, x, y - SPRITE.h * S - 6);
-  ctx.fillStyle = '#000'; ctx.fillText(p.name, x, y - SPRITE.h * S - 6);
+  ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.strokeText(p.name, x, y - SPRITE.foot * S - 8);
+  ctx.fillStyle = '#000'; ctx.fillText(p.name, x, y - SPRITE.foot * S - 8);
 }
 function drawToast(W) {
   if (performance.now() > toast.until) return;
