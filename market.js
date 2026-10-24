@@ -301,9 +301,9 @@ const EVENT_WEIGHTS = Object.fromEntries(EVENTS.map((e, i) => [i, e.weight]));
 const LESSON_KEYS = [...EVENTS.map(e => ({ key: e.key, name: e.name })), ...Object.keys(WEATHER_EVENTS).map(k => ({ key: 'w_' + k, name: WEATHER[k].name }))];
 
 // ===== 시장 =====
-// 장은 닫히지 않습니다. 실제 5초마다 한 번(게임 하루 = 실제 48분 = 576번) 조금씩 움직이고, 자정~자정 하루가 일봉 하나가 됩니다.
-// 한 번 움직이는 크기를 √576로 나누므로, 횟수를 바꿔도 하루 변동성은 같습니다.
-const TICKS_PER_DAY = 576;
+// 장은 닫히지 않습니다. 실제 1초마다 한 번(게임 하루 = 실제 48분 = 2880번) 조금씩 움직이고, 자정~자정 하루가 일봉 하나가 됩니다.
+// 한 번 움직이는 크기를 √2880로 나누므로, 횟수를 바꿔도 하루 변동성은 같습니다.
+const TICKS_PER_DAY = 2880;
 const DEPOSIT_RATE = { base: 0.001, min: 0.0003, max: 0.003, step: 0.0005 };   // 은행 예금 하루 이자율
 
 function createMarket() {
@@ -378,7 +378,7 @@ function scheduleNews(m) {
   m.pending = NEWS_AT.filter(at => at > m.clock).map(at => ({ at, e: weighted(EVENT_WEIGHTS) }));
 }
 
-// 실제 5초마다: 예정 시각이 된 사건 → 시장·업종·종목 고유 움직임을 하루치의 1/TICKS_PER_DAY만큼
+// 실제 1초마다: 예정 시각이 된 사건 → 시장·업종·종목 고유 움직임을 하루치의 1/TICKS_PER_DAY만큼
 function stepTick(m) {
   if (!m.open) return [];
   m.tick++;
@@ -434,12 +434,13 @@ module.exports = {
   createMarket, openDay, stepTick, closeDay, stepDay, monthOf, seasonName, tickSize, forcesOf, scheduleNews,
 };
 
-// ===== 점검: node market.js → 60거래일 × 300판 모의 실행 =====
+// ===== 점검: node market.js → 60거래일 × 100판 모의 실행 (1초 시세라 하루 2880번, 약 1분 30초 걸림) =====
+const GAMES = 100;
 if (require.main === module) {
   const assert = require('assert');
   const seen = new Set(), weatherSeen = new Set(), idxRet = [], stockRet = [];
   let events = 0;
-  for (let g = 0; g < 300; g++) {
+  for (let g = 0; g < GAMES; g++) {
     const m = createMarket();
     for (let d = 0; d < 60; d++) { stepDay(m); weatherSeen.add(m.weather); }
     events += m.newsId;
@@ -457,7 +458,7 @@ if (require.main === module) {
   assert.strictEqual(STOCK_DEFS.length, 30);
   assert.strictEqual(new Set(STOCK_DEFS.map(s => s.sym)).size, 30);
   const q = (a, p) => { const s = [...a].sort((x, y) => x - y); return (s[Math.floor(p * (s.length - 1))] * 100).toFixed(1) + '%'; };
-  console.log(`판당 사건 ${(events / 300).toFixed(1)}건, 나온 사건 종류 ${seen.size}/${LESSON_KEYS.length}, 날씨 ${[...weatherSeen].join(' ')}`);
+  console.log(`판당 사건 ${(events / GAMES).toFixed(1)}건, 나온 사건 종류 ${seen.size}/${LESSON_KEYS.length}, 날씨 ${[...weatherSeen].join(' ')}`);
   console.log(`60일 지수 수익률: 하위10% ${q(idxRet, .1)} · 중앙 ${q(idxRet, .5)} · 상위10% ${q(idxRet, .9)}`);
   console.log(`60일 종목 수익률: 하위10% ${q(stockRet, .1)} · 중앙 ${q(stockRet, .5)} · 상위10% ${q(stockRet, .9)}`);
   console.log('점검 통과');
