@@ -1,11 +1,8 @@
 'use strict';
-// 기본 게임 화면: 사각형 칸 바닥 마을을 픽셀 캐릭터가 8방향으로 걸어 다니고, 화면(카메라)이 따라감.
-// 캐릭터 그림은 sprites.js(부위별 픽셀 그림), 여기서는 겹쳐 그리기·이동·바닥만 함
+// 기본 게임 화면: 마을(길·나무·집)을 픽셀 캐릭터가 8방향으로 걸어 다니고, 화면(카메라)이 따라감.
+// 캐릭터 그림은 sprites.js, 마을 배치·그림은 town.js. 여기서는 겹쳐 그리기·이동·부딪힘·앞뒤 순서만 함
 {
 const cv = document.getElementById('game'), ctx = cv.getContext('2d');
-const TILE = 32;                        // 바닥 한 칸(사각형)의 픽셀 크기
-const COLS = 40, ROWS = 20;             // 마을 크기: 가로 40칸 × 세로 20칸
-const MAP_W = COLS * TILE, MAP_H = ROWS * TILE;   // 마을 크기(픽셀): 1280 × 640
 const SPEED = 240;                      // 화면에서 1초에 걷는 거리(px)
 // 위치는 마을 픽셀 좌표(왼쪽 위 = 0, 0). 발밑 자리
 const me = { name: '', x: MAP_W / 2, y: MAP_H / 2, look: DEFAULT_LOOK, dir: 'se', left: false, moving: false };   // dir: 보는 방향(sprites.js의 s·se·e·ne·n), left: 좌우 뒤집기
@@ -101,25 +98,18 @@ function sprite(look, dir, step) {   // step: 0 = 서 있음, 1·2 = 걸음 (왼
   return c;
 }
 
-// 바닥 한 칸: 풀밭 사각형 (자리만 잡은 임시 그림 — 바닥 디자인이 정해지면 바꿀 곳)
-const grass = (() => {
-  const c = pixelCanvas(TILE, TILE), g = c.getContext('2d');
-  g.fillStyle = '#7cbf5a'; g.fillRect(0, 0, TILE, TILE);
-  g.fillStyle = '#88c966'; g.fillRect(0, 0, TILE, 1); g.fillRect(0, 0, 1, TILE);                 // 위·왼쪽 테두리는 밝게
-  g.fillStyle = '#6aad4a'; g.fillRect(0, TILE - 1, TILE, 1); g.fillRect(TILE - 1, 0, 1, TILE);   // 아래·오른쪽은 어둡게
-  g.fillStyle = '#5f9e45';                                                                    // 풀 점
-  for (const [x, y] of [[6, 7], [7, 6], [20, 11], [13, 22], [14, 21], [25, 25], [9, 16]]) g.fillRect(x, y, 1, 1);
-  return c;
-})();
-
 // ===== 마을 픽셀 좌표 → 화면 픽셀 =====
 const toScreen = (x, y) => ({ x: x * S, y: y * S });
 
 // ===== 그리기 =====
-// 바닥: 사각형 칸을 바둑판처럼 깔기
+// 바닥: 미리 그려 둔 마을 바닥 한 장(town.js의 GROUND)을 배율대로
 function drawGround(cam) {
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
-    ctx.drawImage(grass, c * TILE * S - cam.x, r * TILE * S - cam.y, TILE * S, TILE * S);
+  ctx.drawImage(GROUND, -cam.x, -cam.y, MAP_W * S, MAP_H * S);
+}
+// 나무·집: 발밑(y) 가운데(x)를 기준으로 세움
+function drawThing(t, cam) {
+  const k = S * ART, w = t.img.width * k, h = t.img.height * k;
+  ctx.drawImage(t.img, Math.round(t.x * S - cam.x - w / 2), Math.round(t.y * S - cam.y - h), w, h);
 }
 function drawPlayer(p, cam, now) {
   const k = S * SPRITE.scale;   // 캐릭터 픽셀 1칸 = k px
@@ -133,9 +123,13 @@ function drawPlayer(p, cam, now) {
   if (p.left) ctx.scale(-1, 1);           // 왼쪽을 볼 때는 좌우 뒤집기
   ctx.drawImage(img, -SPRITE.w / 2 * k, 0, SPRITE.w * k, SPRITE.h * k);
   ctx.restore();
-  ctx.font = 'bold 14px "Malgun Gothic", sans-serif'; ctx.textAlign = 'center';   // 머리 위 닉네임
-  ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.strokeText(p.name, x, y - SPRITE.foot * k - 8);
-  ctx.fillStyle = '#000'; ctx.fillText(p.name, x, y - SPRITE.foot * k - 8);
+}
+// 머리 위 닉네임: 나무·집에 가려지지 않게 맨 마지막에 그림
+function drawName(p, cam) {
+  const x = Math.round(p.x * S - cam.x), y = Math.round(p.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8;
+  ctx.font = 'bold 14px "Malgun Gothic", sans-serif'; ctx.textAlign = 'center';
+  ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.strokeText(p.name, x, y);
+  ctx.fillStyle = '#000'; ctx.fillText(p.name, x, y);
 }
 function drawToast(W) {
   if (performance.now() > toast.until) return;
@@ -143,6 +137,12 @@ function drawToast(W) {
   const w = ctx.measureText(toast.text).width + 32;
   ctx.fillStyle = '#000'; ctx.fillRect(W / 2 - w / 2, 16, w, 36);
   ctx.fillStyle = '#fff'; ctx.fillText(toast.text, W / 2, 39);
+}
+
+// 발밑 네모(가로 ±6, 세로 -4~0 픽셀)가 지나갈 수 없는 칸(나무·집·마을 밖)에 걸리는지
+function blockedAt(x, y) {
+  for (const px of [x - 6, x + 6]) for (const py of [y - 4, y]) if (blockedTile(Math.floor(px / TILE), Math.floor(py / TILE))) return true;
+  return false;
 }
 
 // 걷는 방향 → 8방향 중 가장 가까운 쪽 (45도씩). 왼쪽 셋은 오른쪽 그림을 뒤집음, 정면·뒤는 뒤집기 그대로
@@ -164,9 +164,10 @@ function frame(now) {
   me.moving = len > 0.1;
   if (me.moving) {
     face(me, vx, vy);
-    const m = 6;   // 마을 끝에서 몸이 반쯤 나가지 않게 남기는 여백(픽셀)
-    me.x = Math.min(MAP_W - m, Math.max(m, me.x + vx * SPEED / S * dt));
-    me.y = Math.min(MAP_H - 2, Math.max(SPRITE.h * SPRITE.scale / 2, me.y + vy * SPEED / S * dt));
+    // 가로·세로를 따로 움직여 봄 → 나무·집에 부딪혀도 벽을 따라 미끄러지듯 걸음
+    const step = SPEED / S * dt, nx = me.x + vx * step, ny = me.y + vy * step;
+    if (!blockedAt(nx, me.y)) me.x = nx;
+    if (!blockedAt(me.x, ny)) me.y = ny;
   }
 
   const k = devicePixelRatio || 1, W = cv.width / k, H = cv.height / k;
@@ -178,7 +179,10 @@ function frame(now) {
   const fitCam = (p, view, size) => Math.round(size > view ? Math.min(size - view, Math.max(0, p - view / 2)) : (size - view) / 2);
   const cam = { x: fitCam(f.x, W, MAP_W * S), y: fitCam(f.y - SPRITE.h * S * SPRITE.scale / 2, H, MAP_H * S) };
   drawGround(cam);
-  drawPlayer(me, cam, now);
+  // 나무·집·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
+  const scene = [...THINGS.map(t => ({ y: t.y, draw: () => drawThing(t, cam) })), { y: me.y, draw: () => drawPlayer(me, cam, now) }];
+  scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
+  drawName(me, cam);
   drawToast(W);
   requestAnimationFrame(frame);
 }
