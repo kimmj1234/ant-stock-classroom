@@ -531,7 +531,14 @@ function effect() {
 }
 
 // ===== 화면 =====
-function say(text) { $('msg').textContent = text; $('pcMsg').textContent = text; }
+// 방 위 안내는 4초 뒤 사라짐 (HTS 주문 결과 칸은 계속 남음)
+let msgTimer = null;
+function say(text) {
+  $('msg').textContent = text;
+  $('pcMsg').textContent = text;
+  clearTimeout(msgTimer);
+  msgTimer = setTimeout(() => { $('msg').textContent = ''; }, 4000);
+}
 
 function render() {
   if (!META || !ST) return;
@@ -561,9 +568,9 @@ function render() {
       : '🏪 편의점 알바 · 🏦 은행 예금 · 🪙 동전 줍기 · ↑ 집 문으로 들어가기';
   $('prompt').classList.toggle('on', !!(near || coin));
 
-  const latest = ST.news[0];
-  $('ticker').hidden = !latest;
-  if (latest) $('ticker').textContent = `📰 ${latest.title}` + (hasUnread() ? ' · 📺 TV에서 배우기!' : '');
+  const unread = ME ? ST.news.filter(n => n.id > ME.readUpTo).length : 0;
+  $('newsCount').textContent = !ME ? '-' : unread ? `📺 ${unread}건` : '없음';
+  $('newsCount').className = unread ? 'up' : '';
 
   $('scoreboard').replaceChildren(...[...ST.players].sort((a, b) => b.total - a.total).map((p, k) => {
     const li = el('li', p.id === ME?.id ? 'me' : ''), r = (p.total / META.START_CASH - 1) * 100;
