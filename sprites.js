@@ -1,8 +1,10 @@
 'use strict';
 // ===== 캐릭터 픽셀 그림 (16칸 × 18칸) =====
-// 하얗고 동글동글한 작은 캐릭터 + 머리에 쓰는 스킨(모자·귀·왕관 등).
-// 몸은 모두 같고, 스킨은 머리 위(0~5줄)와 머리 테두리에 겹쳐 그림 → 스킨 그림 한 장이면 누구에게나 맞음.
-// 그리는 순서: 몸 → 얼굴 → 모자(스킨) (뒤에 그린 것이 위로)
+// 하얗고 동글동글한 작은 캐릭터 + 스킨 두 가지:
+//   모자 스킨(hat): 머리 위(0~5줄)와 머리 테두리에 겹쳐 그림
+//   전신 스킨(suit): 몸 전체를 옷 색으로 덮고 얼굴 자리만 뚫림(개구리·곰·공룡 옷). makeSuit가 몸 모양에서 자동으로 만듦
+// 몸은 모두 같아서 스킨 그림 한 장이면 누구에게나 맞음.
+// 그리는 순서: 몸 → 전신 스킨 → 얼굴 → 모자 스킨 (뒤에 그린 것이 위로)
 // 그림은 글자 한 칸 = 픽셀 하나. 글자가 색을 뜻함:
 //   .  비움(투명)   o 테두리   w 몸색   W 몸 그늘   e 눈
 //   a  스킨 색     A 스킨 그늘   (스킨마다 색을 정함 → 모양 하나로 여러 색 스킨)
@@ -101,11 +103,84 @@ const PARTS = {
         '....yryyyyry....',
       ] },
     },
+    beanie: {   // 털모자 (a = 모자 색, 꼭대기 방울은 흰색)
+      s: { at: 1, rows: [
+        '.......oo.......',
+        '......owwo......',
+        '....oaaaaaao....',
+        '...oaaaaaaaao...',
+        '..oAAAAAAAAAAo..',
+      ] },
+    },
+    wizard: {   // 마법사 모자 (a = 모자 색, 금색 별)
+      s: { at: 0, rows: [
+        '.......oo.......',
+        '......oaao......',
+        '.....oaayao.....',
+        '....oaaaaaao....',
+        '..ooAAAAAAAAoo..',
+      ] },
+    },
+    headphones: {   // 헤드폰 (a = 색). 머리띠 + 양쪽 귀
+      s: { at: 3, rows: [
+        '....oooooooo....',
+        '...oa......ao...',
+        '..oa........ao..',
+        '..oa........ao..',
+        '.oaao......oaao.',
+        '.oAAo......oAAo.',
+        '.oaao......oaao.',
+        '..oo........oo..',
+      ] },
+    },
   },
+  suit: {},   // 전신 스킨: 아래에서 makeSuit로 채움
 };
 
-// 스킨 목록 (숫자 키로 미리 보기, 나중에 상점에서 팔 자리). null = 아무것도 안 씀
-const HATS = [
+// ===== 전신 스킨 만들기 =====
+// 몸 그림을 그대로 옷 색(a·A)으로 바꾸고, 방향마다 얼굴 자리(눈 둘레)를 몸색으로 뚫음. 뒤(n)는 안 뚫림.
+// head = 머리 위 장식(귀·눈·뿔)만 직접 그리면 됨 (at 0부터, 16글자)
+function makeSuit(head) {
+  const body = PARTS.body.blob.s, out = {};
+  const HOLE = { s: [7.5, 3], se: [8.5, 3], e: [10.5, 2], n: null };   // 얼굴 구멍 가운데 칸, 반쪽 너비
+  for (const [dir, hole] of Object.entries(HOLE)) {
+    const grid = Array.from({ length: SPRITE.h }, () => Array(SPRITE.w).fill('.'));
+    body.rows.forEach((row, i) => [...row].forEach((ch, x) => { grid[body.at + i][x] = { w: 'a', W: 'A' }[ch] || ch; }));
+    head.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') grid[y][x] = ch; }));
+    if (hole) {
+      const [cx, hw] = hole;
+      for (let y = 8; y <= 12; y++) for (let x = 0; x < SPRITE.w; x++) {
+        const edge = y === 8 || y === 12 ? 1 : 0;   // 위아래 줄은 1칸 좁게 → 둥근 구멍
+        if (Math.abs(x - cx) <= hw - edge && 'aA'.includes(grid[y][x])) grid[y][x] = 'w';
+      }
+    }
+    out[dir] = { at: 0, rows: grid.map(r => r.join('')) };
+  }
+  return out;
+}
+PARTS.suit.frog = makeSuit([   // 개구리 옷: 머리 위 툭 튀어나온 두 눈
+  '................',
+  '................',
+  '...ooo....ooo...',
+  '..owkwo..owkwo..',
+  '..oaaao..oaaao..',
+]);
+PARTS.suit.bear = makeSuit([   // 곰 옷: 둥근 귀 (안쪽 분홍)
+  '................',
+  '................',
+  '..ooo......ooo..',
+  '.oapao....oapao.',
+  '.oaaao....oaaao.',
+]);
+PARTS.suit.dino = makeSuit([   // 공룡 옷: 머리 위 뾰족한 등 가시
+  '................',
+  '......o...o.....',
+  '.....oAo.oAo....',
+  '.....oAAoAAo....',
+]);
+
+// 스킨 목록 (미리 보기 키로 바꿔 봄, 나중에 상점에서 팔 자리). null = 아무것도 안 입음
+const HATS = [   // 숫자 키 0~9
   null,
   { shape: 'sprout' },
   { shape: 'cat', color: '#f5a3b5' },
@@ -113,7 +188,16 @@ const HATS = [
   { shape: 'cap', color: '#e8454b' },
   { shape: 'chef' },
   { shape: 'crown' },
+  { shape: 'beanie', color: '#f2a03d' },
+  { shape: 'wizard', color: '#7b5bd6' },
+  { shape: 'headphones', color: '#e8454b' },
+];
+const SUITS = [   // Q 키로 차례로
+  null,
+  { shape: 'frog', color: '#6cc04a' },
+  { shape: 'bear', color: '#a0714f' },
+  { shape: 'dino', color: '#4bb3a0' },
 ];
 
 // 기본 차림 (처음 들어온 사람). 나중에 계정마다 저장하고 상점에서 바꿀 자리
-const DEFAULT_LOOK = { body: 'blob', color: '#f7f7f7', face: 'dot', hat: null };
+const DEFAULT_LOOK = { body: 'blob', color: '#f7f7f7', face: 'dot', suit: null, hat: null };

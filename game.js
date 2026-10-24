@@ -1,11 +1,11 @@
 'use strict';
-// 기본 게임 화면: 대각선 시점(마름모 바닥) 마을을 픽셀 캐릭터가 걸어 다니고, 화면(카메라)이 따라감.
+// 기본 게임 화면: 사각형 칸 바닥 마을을 픽셀 캐릭터가 8방향으로 걸어 다니고, 화면(카메라)이 따라감.
 // 캐릭터 그림은 sprites.js(부위별 픽셀 그림), 여기서는 겹쳐 그리기·이동·바닥만 함
 {
 const cv = document.getElementById('game'), ctx = cv.getContext('2d');
-const TILE_W = 32, TILE_H = 16;         // 바닥 한 칸(마름모)의 픽셀 크기
-const COLS = 40, ROWS = 40;             // 마을 크기: 가로 40칸 × 세로 40칸(마름모를 엇갈려 쌓아 전체는 직사각형)
-const MAP_W = COLS * TILE_W, MAP_H = ROWS * TILE_H;   // 마을 크기(픽셀): 1280 × 640
+const TILE = 32;                        // 바닥 한 칸(사각형)의 픽셀 크기
+const COLS = 40, ROWS = 20;             // 마을 크기: 가로 40칸 × 세로 20칸
+const MAP_W = COLS * TILE, MAP_H = ROWS * TILE;   // 마을 크기(픽셀): 1280 × 640
 const SPEED = 240;                      // 화면에서 1초에 걷는 거리(px)
 // 위치는 마을 픽셀 좌표(왼쪽 위 = 0, 0). 발밑 자리
 const me = { name: '', x: MAP_W / 2, y: MAP_H / 2, look: DEFAULT_LOOK, dir: 'se', left: false, moving: false };   // dir: 보는 방향(sprites.js의 s·se·e·ne·n), left: 좌우 뒤집기
@@ -26,7 +26,9 @@ const KEYS = { ArrowLeft: 'L', a: 'L', A: 'L', ArrowRight: 'R', d: 'R', D: 'R', 
 addEventListener('keydown', e => {
   if (KEYS[e.key]) { held.add(KEYS[e.key]); e.preventDefault(); }
   else if (e.key === 'e' || e.key === 'E') interact();
-  else if (HATS[e.key] !== undefined) me.look = { ...me.look, hat: HATS[e.key] };   // 임시: 숫자 키(0~)로 머리 스킨 미리 보기 — 상점이 생기면 지울 자리
+  // 임시 스킨 미리 보기 — 상점이 생기면 지울 자리: 숫자 키 0~9 = 모자, Q = 전신 스킨 차례로
+  else if (HATS[e.key] !== undefined) me.look = { ...me.look, hat: HATS[e.key] };
+  else if (e.key === 'q' || e.key === 'Q') me.look = { ...me.look, suit: SUITS[(SUITS.indexOf(me.look.suit) + 1) % SUITS.length] };
 });
 addEventListener('keyup', e => held.delete(KEYS[e.key]));
 addEventListener('blur', () => held.clear());   // 창을 벗어나면 계속 걷지 않게
@@ -75,13 +77,17 @@ function sprite(look, dir, step) {   // step: 0 = 서 있음, 1·2 = 걸음 (왼
   const key = JSON.stringify(look) + dir + step;
   if (spriteCache.has(key)) return spriteCache.get(key);
   const c = pixelCanvas(SPRITE.w, SPRITE.h), g = c.getContext('2d');
-  const skin = look.hat?.color || '#ffffff';
   const pal = {
-    o: '#7c7f96', e: '#1f1f24', w: look.color, W: shade(look.color, 0.84), a: skin, A: shade(skin),
+    o: '#7c7f96', e: '#1f1f24', w: look.color, W: shade(look.color, 0.84),
     y: '#f2c94c', r: '#e8454b', g: '#5dbb4a', p: '#f5a3b5', k: '#2b2b2b',
   };
-  const layers = [PARTS.body[look.body], PARTS.face[look.face], look.hat && PARTS.hat[look.hat.shape]].filter(Boolean);
-  for (const part of layers) {
+  // 칸마다 [그림, 스킨 색]. 스킨 색(a·A)은 그 칸의 스킨 색으로 바뀜
+  const layers = [
+    [PARTS.body[look.body]], [look.suit && PARTS.suit[look.suit.shape], look.suit?.color],
+    [PARTS.face[look.face]], [look.hat && PARTS.hat[look.hat.shape], look.hat?.color],
+  ].filter(([part]) => part);
+  for (const [part, color = '#ffffff'] of layers) {
+    pal.a = color; pal.A = shade(color);
     const art = part[dir] || part[FALLBACK[dir].find(v => part[v])];   // 이 방향 그림이 없으면 비슷한 방향 그림
     art.rows.forEach((row, i) => [...row].forEach((ch, x) => {
       if (!pal[ch]) return;
@@ -95,17 +101,14 @@ function sprite(look, dir, step) {   // step: 0 = 서 있음, 1·2 = 걸음 (왼
   return c;
 }
 
-// 바닥 한 칸: 풀밭 마름모 (자리만 잡은 임시 그림 — 바닥 디자인이 정해지면 바꿀 곳)
+// 바닥 한 칸: 풀밭 사각형 (자리만 잡은 임시 그림 — 바닥 디자인이 정해지면 바꿀 곳)
 const grass = (() => {
-  const c = pixelCanvas(TILE_W, TILE_H), g = c.getContext('2d');
-  for (let r = 0; r < TILE_H; r++) {
-    const half = r < TILE_H / 2 ? (r + 1) * 2 : (TILE_H - r) * 2;   // 마름모 줄마다 너비
-    const x0 = TILE_W / 2 - half;
-    g.fillStyle = '#7cbf5a'; g.fillRect(x0, r, half * 2, 1);
-    g.fillStyle = r < TILE_H / 2 ? '#93d16f' : '#5f9e45';            // 위쪽 테두리는 밝게, 아래쪽은 어둡게
-    g.fillRect(x0, r, 2, 1); g.fillRect(x0 + half * 2 - 2, r, 2, 1);
-  }
-  g.fillStyle = '#5f9e45'; g.fillRect(12, 6, 1, 1); g.fillRect(20, 9, 1, 1); g.fillRect(15, 11, 1, 1);   // 풀 점
+  const c = pixelCanvas(TILE, TILE), g = c.getContext('2d');
+  g.fillStyle = '#7cbf5a'; g.fillRect(0, 0, TILE, TILE);
+  g.fillStyle = '#88c966'; g.fillRect(0, 0, TILE, 1); g.fillRect(0, 0, 1, TILE);                 // 위·왼쪽 테두리는 밝게
+  g.fillStyle = '#6aad4a'; g.fillRect(0, TILE - 1, TILE, 1); g.fillRect(TILE - 1, 0, 1, TILE);   // 아래·오른쪽은 어둡게
+  g.fillStyle = '#5f9e45';                                                                    // 풀 점
+  for (const [x, y] of [[6, 7], [7, 6], [20, 11], [13, 22], [14, 21], [25, 25], [9, 16]]) g.fillRect(x, y, 1, 1);
   return c;
 })();
 
@@ -113,15 +116,10 @@ const grass = (() => {
 const toScreen = (x, y) => ({ x: x * S, y: y * S });
 
 // ===== 그리기 =====
-// 바닥: 마름모를 반 칸씩 엇갈려 쌓고, 직사각형 밖으로 나간 반쪽은 잘라 냄 → 마을 테두리가 반듯한 직사각형
+// 바닥: 사각형 칸을 바둑판처럼 깔기
 function drawGround(cam) {
-  ctx.save();
-  ctx.beginPath(); ctx.rect(-cam.x, -cam.y, MAP_W * S, MAP_H * S); ctx.clip();
-  for (let r = 0; r <= ROWS * 2; r++) for (let c = 0; c <= COLS; c++) {
-    const x = (c * TILE_W - (r % 2 ? 0 : TILE_W / 2)) * S - cam.x, y = (r * TILE_H / 2 - TILE_H / 2) * S - cam.y;
-    ctx.drawImage(grass, Math.round(x), Math.round(y), TILE_W * S, TILE_H * S);
-  }
-  ctx.restore();
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
+    ctx.drawImage(grass, c * TILE * S - cam.x, r * TILE * S - cam.y, TILE * S, TILE * S);
 }
 function drawPlayer(p, cam, now) {
   const k = S * SPRITE.scale;   // 캐릭터 픽셀 1칸 = k px
@@ -159,10 +157,8 @@ function face(p, vx, vy) {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  // 입력: 한 방향 키는 화면 방향(위 = 화면 위쪽). 두 키를 같이 누르면(↑→ 등) 바닥 마름모의 비스듬한 선을 따라 걸음(가로 2 : 세로 1)
-  let vx = held.has('R') - held.has('L'), vy = held.has('D') - held.has('U');
-  if (vx && vy) vy /= 2;
-  vx += stick.x; vy += stick.y;
+  // 입력: 방향키 방향 그대로(위 = 화면 위쪽). 두 키를 같이 누르면(↑→ 등) 45도 대각선
+  let vx = stick.x + held.has('R') - held.has('L'), vy = stick.y + held.has('D') - held.has('U');
   const len = Math.hypot(vx, vy);
   if (len > 1) { vx /= len; vy /= len; }   // 대각선도 같은 빠르기
   me.moving = len > 0.1;
