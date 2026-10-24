@@ -26,6 +26,7 @@ const KEYS = { ArrowLeft: 'L', a: 'L', A: 'L', ArrowRight: 'R', d: 'R', D: 'R', 
 addEventListener('keydown', e => {
   if (KEYS[e.key]) { held.add(KEYS[e.key]); e.preventDefault(); }
   else if (e.key === 'e' || e.key === 'E') interact();
+  else if (HATS[e.key] !== undefined) me.look = { ...me.look, hat: HATS[e.key] };   // 임시: 숫자 키(0~)로 머리 스킨 미리 보기 — 상점이 생기면 지울 자리
 });
 addEventListener('keyup', e => held.delete(KEYS[e.key]));
 addEventListener('blur', () => held.clear());   // 창을 벗어나면 계속 걷지 않게
@@ -65,7 +66,7 @@ new ResizeObserver(() => {
 }).observe(cv);
 
 // ===== 픽셀 그림 만들기 =====
-const shade = hex => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * 0.72).toString(16).padStart(2, '0')).join('');
+const shade = (hex, k = 0.72) => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');
 const pixelCanvas = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h });
 
 // 캐릭터 한 장: 부위를 차례로 겹침. 차림·방향·걸음이 같으면 다시 만들지 않고 저장해 둔 것을 씀
@@ -74,22 +75,18 @@ function sprite(look, dir, step) {   // step: 0 = 서 있음, 1·2 = 걸음 (왼
   const key = JSON.stringify(look) + dir + step;
   if (spriteCache.has(key)) return spriteCache.get(key);
   const c = pixelCanvas(SPRITE.w, SPRITE.h), g = c.getContext('2d');
+  const skin = look.hat?.color || '#ffffff';
   const pal = {
-    o: '#2b2118', e: '#2b2118', c: '#f29a8a', m: '#b5523b', s: look.skin, S: shade(look.skin),
-    h: look.hair.color, H: shade(look.hair.color), t: look.top.color, T: shade(look.top.color),
-    p: look.bottom.color, P: shade(look.bottom.color), b: look.shoes.color,
+    o: '#7c7f96', e: '#1f1f24', w: look.color, W: shade(look.color, 0.84), a: skin, A: shade(skin),
+    y: '#f2c94c', r: '#e8454b', g: '#5dbb4a', p: '#f5a3b5', k: '#2b2b2b',
   };
-  const layers = [
-    PARTS.body[look.body], PARTS.bottom[look.bottom.shape], PARTS.shoes[look.shoes.shape],
-    PARTS.top[look.top.shape], PARTS.face[look.face], PARTS.hair[look.hair.shape],
-  ];
+  const layers = [PARTS.body[look.body], PARTS.face[look.face], look.hat && PARTS.hat[look.hat.shape]].filter(Boolean);
   for (const part of layers) {
     const art = part[dir] || part[FALLBACK[dir].find(v => part[v])];   // 이 방향 그림이 없으면 비슷한 방향 그림
     art.rows.forEach((row, i) => [...row].forEach((ch, x) => {
       if (!pal[ch]) return;
       let y = art.at + i;
-      if (dir === 'e') { if (step === 1) y -= 1; }   // 옆모습 걸음: 다리가 겹쳐 있어 몸 전체를 1칸 들썩임
-      else if (y >= SPRITE.legsFrom && step && (x < SPRITE.w / 2) === (step === 1)) y -= 1;   // 걸음: 한쪽 다리 1칸 올림
+      if (y >= SPRITE.legsFrom && step && (x < SPRITE.w / 2) === (step === 1)) y -= 1;   // 걸음: 한쪽 다리 1칸 올림
       g.fillStyle = pal[ch];
       g.fillRect(x, y, 1, 1);
     }));
@@ -127,19 +124,20 @@ function drawGround(cam) {
   ctx.restore();
 }
 function drawPlayer(p, cam, now) {
+  const k = S * SPRITE.scale;   // 캐릭터 픽셀 1칸 = k px
   const step = p.moving ? 1 + (Math.floor(now / 160) % 2) : 0;
   const img = sprite(p.look, p.dir, step);
   const f = toScreen(p.x, p.y), x = Math.round(f.x - cam.x), y = Math.round(f.y - cam.y);   // 발밑 자리
   ctx.fillStyle = 'rgba(0, 0, 0, .22)';   // 그림자
-  ctx.beginPath(); ctx.ellipse(x, y, SPRITE.w / 3 * S, SPRITE.w / 9 * S, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x, y, SPRITE.w / 3 * k, SPRITE.w / 9 * k, 0, 0, Math.PI * 2); ctx.fill();
   ctx.save();
-  ctx.translate(x, y - SPRITE.foot * S);   // 발바닥 줄이 발밑 자리에 오게
+  ctx.translate(x, y - SPRITE.foot * k);   // 발바닥 줄이 발밑 자리에 오게
   if (p.left) ctx.scale(-1, 1);           // 왼쪽을 볼 때는 좌우 뒤집기
-  ctx.drawImage(img, -SPRITE.w / 2 * S, 0, SPRITE.w * S, SPRITE.h * S);
+  ctx.drawImage(img, -SPRITE.w / 2 * k, 0, SPRITE.w * k, SPRITE.h * k);
   ctx.restore();
   ctx.font = 'bold 14px "Malgun Gothic", sans-serif'; ctx.textAlign = 'center';   // 머리 위 닉네임
-  ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.strokeText(p.name, x, y - SPRITE.foot * S - 8);
-  ctx.fillStyle = '#000'; ctx.fillText(p.name, x, y - SPRITE.foot * S - 8);
+  ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.strokeText(p.name, x, y - SPRITE.foot * k - 8);
+  ctx.fillStyle = '#000'; ctx.fillText(p.name, x, y - SPRITE.foot * k - 8);
 }
 function drawToast(W) {
   if (performance.now() > toast.until) return;
@@ -172,7 +170,7 @@ function frame(now) {
     face(me, vx, vy);
     const m = 6;   // 마을 끝에서 몸이 반쯤 나가지 않게 남기는 여백(픽셀)
     me.x = Math.min(MAP_W - m, Math.max(m, me.x + vx * SPEED / S * dt));
-    me.y = Math.min(MAP_H - 2, Math.max(SPRITE.h / 2, me.y + vy * SPEED / S * dt));
+    me.y = Math.min(MAP_H - 2, Math.max(SPRITE.h * SPRITE.scale / 2, me.y + vy * SPEED / S * dt));
   }
 
   const k = devicePixelRatio || 1, W = cv.width / k, H = cv.height / k;
@@ -182,7 +180,7 @@ function frame(now) {
   const f = toScreen(me.x, me.y);
   // 카메라: 나를 화면 가운데에. 마을 끝에 가까우면 바깥이 안 보이게 멈춤(마을이 화면보다 작으면 마을을 가운데에)
   const fitCam = (p, view, size) => Math.round(size > view ? Math.min(size - view, Math.max(0, p - view / 2)) : (size - view) / 2);
-  const cam = { x: fitCam(f.x, W, MAP_W * S), y: fitCam(f.y - SPRITE.h * S / 2, H, MAP_H * S) };
+  const cam = { x: fitCam(f.x, W, MAP_W * S), y: fitCam(f.y - SPRITE.h * S * SPRITE.scale / 2, H, MAP_H * S) };
   drawGround(cam);
   drawPlayer(me, cam, now);
   drawToast(W);
