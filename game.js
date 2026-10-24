@@ -181,7 +181,8 @@ function frame(now) {
   const cam = { x: Math.round(f.x - W / 2), y: Math.round(f.y - SPRITE.h * S * SPRITE.scale / 2 - H / 2) };
   drawGround(cam, W, H);
   // 건물·나무·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
-  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.y, draw: () => drawThing(t, cam) })), { y: me.y, draw: () => drawPlayer(me, cam, now) }];
+  // 바닥 무늬(맨홀·주차 P)는 맨 먼저 → 무엇에든 가려짐
+  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), { y: me.y, draw: () => drawPlayer(me, cam, now) }];
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
   drawName(me, cam);
   drawToast(W);
