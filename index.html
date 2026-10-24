@@ -74,12 +74,46 @@
 </div>
 
 <div id="pc" class="pc" hidden>
-  <div class="pc-monitor" role="dialog" aria-modal="true" aria-label="컴퓨터: 개미증권 HTS">
+  <div class="pc-monitor" role="dialog" aria-modal="true" aria-label="컴퓨터">
     <div class="pc-screen">
+      <!-- 바탕화면: 앱 아이콘을 눌러 들어감 -->
+      <div id="pcDesktop" class="desk">
+        <div class="desk-icons">
+          <button class="desk-icon" data-app="hts"><img class="px" width="48" height="48" alt=""><span>개미증권 HTS</span></button>
+          <button class="desk-icon" data-app="mine"><img class="px" width="48" height="48" alt=""><span>내 주식</span></button>
+        </div>
+        <p class="desk-hint">아이콘을 눌러 앱을 여세요 · Esc 컴퓨터 끄기</p>
+        <div class="taskbar">
+          <span class="start">🐜 개미 OS</span>
+          <span id="taskApp" class="task-app"></span>
+          <span id="taskTray" class="tray"></span>
+          <button id="pcPower" class="power">⏻ 끄기</button>
+        </div>
+      </div>
+
+      <!-- 앱: 내 주식 (보유 종목만) -->
+      <div id="appMine" class="app" hidden>
+        <div class="pc-titlebar">
+          <span>📂 내 주식</span>
+          <span id="mineClock"></span>
+          <button class="pc-x app-close">✕ <kbd>Esc</kbd></button>
+        </div>
+        <div class="mine-body">
+          <dl id="mineSum" class="mine-sum"></dl>
+          <p class="mine-label">업종별 비중 (한 업종에 몰려 있으면 위험해요)</p>
+          <div id="mineAlloc" class="mine-alloc"></div>
+          <div id="mineLegend" class="mine-legend"></div>
+          <div id="mineList" class="mine-list"></div>
+        </div>
+        <div class="pc-statusbar">카드를 누르면 개미증권 HTS에서 그 종목을 열어요 · Esc 바탕화면</div>
+      </div>
+
+      <!-- 앱: 개미증권 HTS -->
+      <div id="appHts" class="app" hidden>
       <div class="pc-titlebar">
         <span>📈 개미증권 HTS</span>
         <span id="pcClock"></span>
-        <button id="pcClose" class="pc-x">닫기 <kbd>Esc</kbd></button>
+        <button id="pcClose" class="pc-x app-close">✕ <kbd>Esc</kbd></button>
       </div>
       <div class="pc-body">
         <section class="pc-box pc-watch-box" aria-label="관심 종목과 계좌">
@@ -122,6 +156,7 @@
         </section>
       </div>
       <div id="pcStatus" class="pc-statusbar"></div>
+      </div>
     </div>
   </div>
 </div>

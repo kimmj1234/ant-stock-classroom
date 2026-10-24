@@ -387,11 +387,75 @@ function renderBook() {
 
 // ===== 💻 책상 컴퓨터: 개미증권 HTS (시장은 멈추지 않음) =====
 const pcChartCtx = $('pcChart').getContext('2d');
+// 컴퓨터를 켜면 바탕화면 → 아이콘으로 앱(HTS / 내 주식)을 엶
+let pcApp = null;
 function openPC() {
   $('pcQty').value = 1;
-  show('pc', 'pcBuy');
-  say('HTS를 켰어요. 업종을 고르고, 종목을 눌러 수량을 정해 매수·매도하세요.');
+  show('pc');
+  openApp(null);
+  say('컴퓨터를 켰어요. 바탕화면에서 앱을 고르세요.');
+}
+function openApp(app) {
+  pcApp = app;
+  $('pcDesktop').hidden = !!app;
+  $('appHts').hidden = app !== 'hts';
+  $('appMine').hidden = app !== 'mine';
   render();
+  (app === 'hts' ? $('pcBuy') : app === 'mine' ? $('appMine').querySelector('.app-close') : $('pcDesktop').querySelector('.desk-icon'))?.focus();
+}
+const SECTOR_COLOR = { tech: '#3b82f6', bio: '#e03e3e', food: '#f7c948', energy: '#8a76b8', auto: '#22a35a', leisure: '#f08a24' };
+const marketText = () => `${fmtTime(ST.clock)} · ${ST.open ? '장 운영 중' : '장 마감'} · ${ST.season} · ${META.weather[ST.weather].name}`;
+
+// 📂 내 주식: 내가 가진 종목만 모아 보기
+function renderMine() {
+  $('mineClock').textContent = marketText();
+  const own = holdings().map(o => {
+    const st = stockOf(o.i), p = priceOf(o.i), c = changeOf(o.i);
+    return { ...o, st, p, c, value: p * o.qty, avg: o.cost / o.qty, pl: p * o.qty - o.cost };
+  }).sort((a, b) => b.value - a.value);
+  const cost = own.reduce((a, o) => a + o.cost, 0), value = own.reduce((a, o) => a + o.value, 0);
+  const pl = value - cost, today = own.reduce((a, o) => a + o.c.diff * o.qty, 0);
+  dlRows($('mineSum'), [
+    ['보유 종목', `${own.length}개`], ['총 매입금액', won(cost)], ['총 평가금액', won(value)],
+    ['평가손익', signed(pl, won(pl)), upDown(pl)], ['수익률', cost ? pct(pl / cost * 100) : '-', upDown(pl)],
+    ['오늘 변동', signed(today, won(today)), upDown(today)],
+  ]);
+  const bySector = {};
+  own.forEach(o => { bySector[o.st.sector] = (bySector[o.st.sector] || 0) + o.value; });
+  const parts = Object.entries(bySector).sort((a, b) => b[1] - a[1]);
+  $('mineAlloc').replaceChildren(...parts.map(([k, v]) => {
+    const seg = el('span'); seg.style.flexBasis = `${v / value * 100}%`; seg.style.background = SECTOR_COLOR[k];
+    seg.title = `${META.sectors[k].name} ${(v / value * 100).toFixed(1)}%`;
+    return seg;
+  }));
+  $('mineLegend').replaceChildren(...parts.map(([k, v]) => {
+    const sp = el('span', '', `${META.sectors[k].name} ${(v / value * 100).toFixed(0)}%`), i = el('i');
+    i.style.background = SECTOR_COLOR[k]; sp.prepend(i);
+    return sp;
+  }));
+  if (!own.length) {
+    const p = el('p', 'pc-empty', '아직 가진 주식이 없어요. ');
+    const go = el('button', 'mine-go', '개미증권 HTS 열기');
+    go.addEventListener('click', () => openApp('hts'));
+    p.append(go);
+    return $('mineList').replaceChildren(p);
+  }
+  $('mineList').replaceChildren(...own.map(o => {
+    const card = el('button', 'mine-card');
+    const head = el('div', 'mc-head'), img = el('img', 'px');
+    img.src = iconURL(META.sectors[o.st.sector].icon); img.width = img.height = 20; img.alt = '';
+    head.append(img, el('b', '', o.st.name), el('span', 'mc-sec', META.sectors[o.st.sector].name));
+    const price = el('div', 'mc-price ' + upDown(o.c.diff));
+    price.append(el('span', 'big', won(o.p)), el('span', '', `${o.c.diff > 0 ? '▲' : o.c.diff < 0 ? '▼' : '-'} ${pct(o.c.rate)}`));
+    const cv = el('canvas', 'px mc-chart'); cv.width = 300; cv.height = 90;
+    drawPixelChart(cv.getContext('2d'), ST.hist[o.i], o.avg, 60);
+    const dl = el('dl', 'pc-dl');
+    dlRows(dl, [['보유', `${o.qty}주`], ['평단', won(o.avg)], ['평가금액', won(o.value)],
+      ['평가손익', signed(o.pl, won(o.pl)), upDown(o.pl)], ['수익률', pct(o.pl / o.cost * 100), upDown(o.pl)], ['비중', `${(o.value / value * 100).toFixed(1)}%`]]);
+    card.append(head, price, cv, dl);
+    card.addEventListener('click', () => { sel = o.i; openApp('hts'); });
+    return card;
+  }));
 }
 function buildSectors() {
   const tabs = [['all', '전체'], ...Object.entries(META.sectors).map(([k, s]) => [k, s.name])];
@@ -411,9 +475,13 @@ const fakeVol = (...k) => 30 + (k.reduce((h, v) => (h * 31 + v) % 9973, 7) * 37)
 
 function renderPC() {
   if (!isOpen('pc') || !META || !ST) return;
+  $('taskTray').textContent = marketText();
+  $('taskApp').textContent = pcApp === 'hts' ? '📈 개미증권 HTS' : pcApp === 'mine' ? '📂 내 주식' : '';
+  if (pcApp === 'mine') return renderMine();
+  if (pcApp !== 'hts') return;
   const st = stockOf(sel), price = priceOf(sel), { diff, rate } = changeOf(sel);
   const mine = ME?.hold[st.sym], avg = mine ? mine.cost / mine.qty : 0;
-  $('pcClock').textContent = `${fmtTime(ST.clock)} · ${ST.open ? '장 운영 중' : '장 마감'} · ${ST.season} · ${META.weather[ST.weather].name}`;
+  $('pcClock').textContent = marketText();
   const idx = ST.index, iNow = idx[idx.length - 1], iPrev = idx[idx.length - 2] ?? iNow;
   $('pcIndex').textContent = `개미지수 ${iNow.toFixed(2)} ${iNow >= iPrev ? '▲' : '▼'}${pct((iNow / iPrev - 1) * 100)}`;
   $('pcIndex').className = 'pc-index ' + upDown(iNow - iPrev);
@@ -674,7 +742,12 @@ function loop(now) {
 
 // ===== 입력 연결 =====
 $('modalClose').addEventListener('click', () => hide('modal'));
-$('pcClose').addEventListener('click', () => hide('pc'));
+document.querySelectorAll('.app-close').forEach(b => b.addEventListener('click', () => openApp(null)));
+document.querySelectorAll('.desk-icon').forEach(b => {
+  b.querySelector('img').src = iconURL(b.dataset.app === 'hts' ? 'up' : 'bag');
+  b.addEventListener('click', () => openApp(b.dataset.app));
+});
+$('pcPower').addEventListener('click', () => hide('pc'));
 $('tvClose').addEventListener('click', () => hide('tv'));
 $('tvPrev').addEventListener('click', () => tvMove(-1));
 $('tvNext').addEventListener('click', () => tvMove(1));
@@ -704,9 +777,10 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (isOpen('pc')) {
-    if (closeKey) { e.preventDefault(); return hide('pc'); }
+    // Esc·E: 앱 → 바탕화면 → 컴퓨터 끄기
+    if (closeKey) { e.preventDefault(); return pcApp ? openApp(null) : hide('pc'); }
     if (t.closest('input')) return; // 수량 입력 중
-    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+    if (pcApp === 'hts' && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
       e.preventDefault();
       const list = visibleStocks(), k = list.indexOf(sel);
       return select(list[(k + (e.code === 'ArrowDown' ? 1 : list.length - 1)) % list.length] ?? list[0]);
