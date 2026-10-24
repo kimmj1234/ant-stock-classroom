@@ -38,6 +38,7 @@ function show(me) {
   link.href = loggedIn ? '#' : '#login';
   link.onclick = loggedIn ? async e => { e.preventDefault(); await api('logout').catch(() => {}); show(null); } : null;
   link.hidden = false;
+  window.authState = { me };   // 페이지 스크립트가 나중에 붙어도 읽을 수 있게 남겨 둠(이벤트를 놓치는 경우 대비)
   document.dispatchEvent(new CustomEvent('auth', { detail: me }));
 }
 window.setAuth = show;   // 페이지에서 로그인에 성공하면 불러서 메뉴까지 바꿈

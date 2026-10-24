@@ -9,8 +9,8 @@
 <link rel="stylesheet" href="/wordmark.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- 큰 제목 글꼴: Black Han Sans, 제목 다섯 글자만 받아 옴 -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&text=%EB%82%98%EC%9D%98%EB%91%90%EB%B2%88%EC%A7%B8%EC%9D%B8%EC%83%9D&display=swap">
+<!-- 큰 제목 글꼴: Black Han Sans, 제목·로고에 쓰는 글자만 받아 옴(나의두번째인생 + PC에서도모바일) -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&text=%EB%82%98%EC%9D%98%EB%91%90%EB%B2%88%EC%A7%B8%EC%9D%B8%EC%83%9DPC%EC%97%90%EC%84%9C%EB%8F%84%EB%AA%A8%EB%B0%94%EC%9D%BC&display=swap">
 <style>
   /* ===== 흑백 일러스트 느낌: 밝은 회색 바탕 + 검은 덩어리 + 입체 제목 + 선 그림 ===== */
   html, body { background: #e4e4e2; color: #000; }
@@ -69,16 +69,42 @@
     .person { animation: float 6s ease-in-out infinite; }   /* 떠다니는 캐릭터 하나만 천천히 움직임 */
     @keyframes float { 50% { transform: rotate(-8deg) translateY(-14px); } }
   }
+  /* 휴대폰: 아래 덩어리가 영역 2로 조금만 넘어가게(글자 위를 덮지 않게). 영역 2 내용도 조금 아래로 */
+  @media (max-width: 640px) { .b3 { bottom: -5%; } .b4 { bottom: -7%; } .play { padding-top: 72px; } }
   @media (max-width: 640px) { .work, .coins, .hobby { display: none; } .study { top: 6%; } .person { width: 48px; bottom: 3%; right: 7%; } }   /* 휴대폰: 글자를 가리지 않게 */
 
-  /* ===== 게임 입장 화면 =====
-     지금 마을 바깥 풍경을 게임 그림 그대로 실시간으로 그림.
-     크기: 한 화면 영역(.panel) 가운데 둥근 상자, 최대 폭 880px·그림 비율(320:176) 그대로 → 1366px 화면에서 880×484.
+  /* ===== 영역 2: PC·모바일 어디서나 + 게임 입장 화면 =====
+     PC: 왼쪽 글(입체 제목·소개·기기별 조작) / 오른쪽 게임 입장 상자. 좁은 화면(900px 이하): 글 위, 상자 아래 */
+  .play { overflow-x: clip; }
+  .play-grid {
+    position: relative; z-index: 2; width: min(1240px, calc(100% - 48px)); display: grid; align-items: center; gap: clamp(28px, 4vw, 64px);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  }
+  .play-text { text-align: left; }
+  .extrude.sm { font-size: clamp(36px, 4vw, 76px); }
+  .extrude.sm span { white-space: nowrap; }   /* 한 줄이 중간에서 꺾이지 않게 */
+  .play-text .tag { margin: 22px 0 0; max-width: 30em; }
+  .devices { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 14px; }
+  .devices li { display: grid; grid-template-columns: 64px 1fr; gap: 14px; align-items: center; }
+  .devices svg { width: 64px; height: 52px; }
+  .devices b { display: block; font-size: 16px; letter-spacing: .08em; }
+  .devices span { font-size: 14px; line-height: 1.6; color: #333; }
+  .b5 { width: clamp(220px, 24vw, 380px); top: 8%; left: 38%; transform: rotate(-30deg); z-index: 1; }
+  @media (max-width: 900px) {
+    .play-grid { grid-template-columns: minmax(0, 1fr); }
+    .play-text { text-align: center; }
+    .play-text .tag { margin: 18px auto 0; }
+    .devices { justify-content: center; text-align: left; }
+    .b5 { top: auto; bottom: 4%; left: -20%; }
+  }
+
+  /* 게임 입장 화면: 지금 마을 바깥 풍경을 게임 그림 그대로 실시간으로 그림.
+     크기: 칸 폭에 맞추고 그림 비율(320:176) 그대로. 폭은 화면 높이에도 맞춰 줄어 한 화면 안에 들어옴.
      좁은 화면은 비율대로면 로그인 칸이 안 들어가서 최소 높이 480px(이때만 그림 양옆이 잘림).
      그림은 칸을 꽉 채우고 넘치는 부분만 잘림(object-fit: cover) → 어떤 해상도에서도 빈 곳·찌그러짐 없음 */
   .stage {
-    position: relative; width: min(880px, calc(100% - 32px), calc((100svh - 64px) * 320 / 176)); aspect-ratio: 320 / 176; min-height: 480px;
-    margin: 0 auto; border-radius: 18px;   /* 폭은 화면 높이에도 맞춰 줄어 한 화면 안에 들어옴 */ border: 3px solid #000; overflow: hidden; background: #6fb35f;
+    position: relative; width: 100%; max-width: calc((100svh - 64px) * 320 / 176); aspect-ratio: 320 / 176; min-height: 480px;
+    margin: 0 auto; border-radius: 18px; border: 3px solid #000; overflow: hidden; background: #6fb35f; box-shadow: 8px 8px 0 #000;
   }
   .stage canvas { display: block; width: 100%; height: 100%; object-fit: cover; transition: filter .8s; }
   .stage.mono canvas { filter: grayscale(1) contrast(1.05); }   /* 로그인 전엔 흑백 → 로그인하면 컬러 (두 번째 인생 시작) */
@@ -172,7 +198,23 @@
   <a class="next" href="#play" aria-label="게임 입장 화면으로 내려가기"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v15M5 12l7 7 7-7"/></svg></a>
 </section>
 
-<section class="panel" id="play" aria-label="게임 입장">
+<section class="panel play" id="play" aria-labelledby="playTitle">
+  <svg class="deco blob b5" viewBox="0 0 200 200" aria-hidden="true"><path d="M96 8c34 0 62 14 80 42 16 26 20 60 4 88-16 30-50 46-84 52-30 6-62-4-80-28C0 138 2 104 14 76 28 44 58 8 96 8z"/><circle cx="60" cy="70" r="1.8"/><circle cx="130" cy="140" r="1.3"/><path class="spark" d="M140 50l2.5 7 7 2.5-7 2.5-2.5 7-2.5-7-7-2.5 7-2.5z"/></svg>
+  <div class="play-grid">
+  <div class="play-text">
+    <h2 class="extrude sm" id="playTitle"><span>PC에서도</span><span>모바일에서도</span></h2>
+    <p class="tag">설치할 것 없이 링크만 열면 돼요. 컴퓨터 브라우저든 휴대폰이든, 모두 같은 마을에서 같은 시간을 살아요.</p>
+    <ul class="devices">
+      <li>
+        <svg viewBox="0 0 64 52" aria-hidden="true"><g class="line"><rect x="4" y="4" width="56" height="34" rx="4"/><path d="M24 48h16M32 38v10"/><path d="M14 30l8-8 6 5 10-11 12 14"/></g></svg>
+        <div><b>PC</b><span>방향키나 WASD로 걷고, 물건 앞에서 E</span></div>
+      </li>
+      <li>
+        <svg viewBox="0 0 64 52" aria-hidden="true"><g class="line"><rect x="6" y="10" width="52" height="32" rx="7"/><circle cx="20" cy="30" r="6"/><circle cx="20" cy="30" r="2.2"/><circle cx="45" cy="30" r="5"/><path d="M43 27.5h4M43 30h3M43 32.5h4"/></g></svg>
+        <div><b>모바일</b><span>화면 조이스틱으로 걷고 E 버튼으로 사용. 화면을 누르면 가로 전체화면</span></div>
+      </li>
+    </ul>
+  </div>
 <div class="stage mono" id="stage">
   <canvas id="town" width="1280" height="704" aria-hidden="true"></canvas>
   <div class="bb" id="bb" aria-hidden="true"><ol id="bbList"></ol></div>
@@ -202,6 +244,7 @@
     </div>
   </div>
 </div>
+  </div>
 </section>
 
 <script src="/site.js"></script>
@@ -253,13 +296,14 @@ document.addEventListener('click', e => {
 });
 
 // ===== 로그인 상태에 따라 가운데 칸 바꾸기 (메뉴바의 site.js가 'auth' 이벤트로 알려 줌) =====
-document.addEventListener('auth', e => {
-  const me = e.detail;
+function applyAuth(me) {
   $('veil').hidden = !!me;
   $('gate').hidden = !me;
   $('stage').classList.toggle('mono', !me);
   if (me) $('hello').textContent = `${me.name}님, 다시 오셨네요`;
-});
+}
+document.addEventListener('auth', e => applyAuth(e.detail));
+if (window.authState) applyAuth(window.authState.me);   // 이 스크립트보다 먼저 결과가 나왔으면 그것으로
 $('loginForm').addEventListener('submit', async e => {
   e.preventDefault();
   $('msg').textContent = '';
