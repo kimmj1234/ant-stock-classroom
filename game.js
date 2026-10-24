@@ -8,7 +8,7 @@ const COLS = 40, ROWS = 40;             // 마을 크기: 가로 40칸 × 세로
 const MAP_W = COLS * TILE_W, MAP_H = ROWS * TILE_H;   // 마을 크기(픽셀): 1280 × 640
 const SPEED = 240;                      // 화면에서 1초에 걷는 거리(px)
 // 위치는 마을 픽셀 좌표(왼쪽 위 = 0, 0). 발밑 자리
-const me = { name: '', x: MAP_W / 2, y: MAP_H / 2, look: DEFAULT_LOOK, back: false, left: false, moving: false };
+const me = { name: '', x: MAP_W / 2, y: MAP_H / 2, look: DEFAULT_LOOK, dir: 'se', left: false, moving: false };   // dir: 보는 방향(sprites.js의 s·se·e·ne·n), left: 좌우 뒤집기
 let S = 3;                              // 픽셀 배율 (픽셀 1칸 = S px). 낮은 화면은 2
 
 // ===== 로그인 확인: 안 했거나 로그아웃하면 메인으로 =====
@@ -70,8 +70,8 @@ const pixelCanvas = (w, h) => Object.assign(document.createElement('canvas'), { 
 
 // 캐릭터 한 장: 부위를 차례로 겹침. 차림·방향·걸음이 같으면 다시 만들지 않고 저장해 둔 것을 씀
 const spriteCache = new Map();
-function sprite(look, back, step) {   // step: 0 = 서 있음, 1·2 = 걸음 (왼다리·오른다리 올림)
-  const key = JSON.stringify(look) + back + step;
+function sprite(look, dir, step) {   // step: 0 = 서 있음, 1·2 = 걸음 (왼다리·오른다리 올림)
+  const key = JSON.stringify(look) + dir + step;
   if (spriteCache.has(key)) return spriteCache.get(key);
   const c = pixelCanvas(SPRITE.w, SPRITE.h), g = c.getContext('2d');
   const pal = {
@@ -84,11 +84,12 @@ function sprite(look, back, step) {   // step: 0 = 서 있음, 1·2 = 걸음 (�
     PARTS.top[look.top.shape], PARTS.face[look.face], PARTS.hair[look.hair.shape],
   ];
   for (const part of layers) {
-    const art = (back && part.back) || part.front;   // 뒷모습이 따로 없으면 앞모습 그대로
+    const art = part[dir] || part[FALLBACK[dir].find(v => part[v])];   // 이 방향 그림이 없으면 비슷한 방향 그림
     art.rows.forEach((row, i) => [...row].forEach((ch, x) => {
       if (!pal[ch]) return;
       let y = art.at + i;
-      if (y >= SPRITE.legsFrom && step && (x < SPRITE.w / 2) === (step === 1)) y -= 1;   // 걸음: 한쪽 다리 1칸 올림
+      if (dir === 'e') { if (step === 1) y -= 1; }   // 옆모습 걸음: 다리가 겹쳐 있어 몸 전체를 1칸 들썩임
+      else if (y >= SPRITE.legsFrom && step && (x < SPRITE.w / 2) === (step === 1)) y -= 1;   // 걸음: 한쪽 다리 1칸 올림
       g.fillStyle = pal[ch];
       g.fillRect(x, y, 1, 1);
     }));
@@ -127,7 +128,7 @@ function drawGround(cam) {
 }
 function drawPlayer(p, cam, now) {
   const step = p.moving ? 1 + (Math.floor(now / 160) % 2) : 0;
-  const img = sprite(p.look, p.back, step);
+  const img = sprite(p.look, p.dir, step);
   const f = toScreen(p.x, p.y), x = Math.round(f.x - cam.x), y = Math.round(f.y - cam.y);   // 발밑 자리
   ctx.fillStyle = 'rgba(0, 0, 0, .22)';   // 그림자
   ctx.beginPath(); ctx.ellipse(x, y, 6 * S, 2.5 * S, 0, 0, Math.PI * 2); ctx.fill();
@@ -148,6 +149,14 @@ function drawToast(W) {
   ctx.fillStyle = '#fff'; ctx.fillText(toast.text, W / 2, 39);
 }
 
+// 걷는 방향 → 8방향 중 가장 가까운 쪽 (45도씩). 왼쪽 셋은 오른쪽 그림을 뒤집음, 정면·뒤는 뒤집기 그대로
+const DIRS = [['e', false], ['se', false], ['s', null], ['se', true], ['e', true], ['ne', true], ['n', null], ['ne', false]];
+function face(p, vx, vy) {
+  const [dir, left] = DIRS[((Math.round(Math.atan2(vy, vx) / (Math.PI / 4)) % 8) + 8) % 8];
+  p.dir = dir;
+  if (left !== null) p.left = left;
+}
+
 // ===== 매 프레임: 움직이고 그리기 =====
 let last = performance.now();
 function frame(now) {
@@ -160,8 +169,7 @@ function frame(now) {
   if (len > 1) { vx /= len; vy /= len; }   // 대각선도 같은 빠르기
   me.moving = len > 0.1;
   if (me.moving) {
-    if (Math.abs(vx) > 0.1) me.left = vx < 0;
-    if (Math.abs(vy) > 0.1) me.back = vy < 0;
+    face(me, vx, vy);
     const m = 6;   // 마을 끝에서 몸이 반쯤 나가지 않게 남기는 여백(픽셀)
     me.x = Math.min(MAP_W - m, Math.max(m, me.x + vx * SPEED / S * dt));
     me.y = Math.min(MAP_H - 2, Math.max(SPRITE.h / 2, me.y + vy * SPEED / S * dt));
