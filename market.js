@@ -152,7 +152,7 @@ const EVENTS = [
   },
   {
     // 가끔 터지는 대박 호재: 한 번에 20~40% 뛰고, 며칠 동안 더 오르려는 힘(하루 2~4%, 매일 30%씩 약해짐)이 남음
-    key: 'breakthrough', icon: 'star', weight: 1.5, name: '대박 호재',
+    key: 'breakthrough', icon: 'star', weight: 0.35, name: '대박 호재',
     lesson: '세상을 바꿀 만한 신제품·신약·신기술은 회사의 미래 이익 기대를 통째로 바꿔, 주가가 하루에 수십 % 뛰고 며칠 더 오르기도 합니다. 다만 이미 크게 오른 뒤에 뛰어들면 비싸게 살 수 있습니다.',
     make() {
       const s = pick(STOCK_DEFS), r = Math.random();
@@ -324,7 +324,7 @@ function createMarket() {
   const month0 = 1 + Math.floor(Math.random() * 12);
   return {
     day: 0, month0, weather: nextWeather(null, seasonOf(month0)), marketDrift: 0, newsId: 0, news: [],
-    open: false, tick: 0, pending: [], clock: 8 * 60 + 30, depositRate: DEPOSIT_RATE.base,
+    open: false, tick: 0, sinceNews: 0, clock: 8 * 60 + 30, depositRate: DEPOSIT_RATE.base,
     stocks: STOCK_DEFS.map(s => ({ sym: s.sym, price: s.price, raw: s.price, hist: [s.price], drift: 0 })), index: [1000],
   };
 }
@@ -366,9 +366,20 @@ function applyEvent(m, e, key, icon) {
   return item;
 }
 
-// 뉴스는 게임 8시간마다 하루 3번: 자정(0시)·오전 8시·오후 4시. 시세 횟수가 아니라 게임 시계(분)로 정함
-const NEWS_AT = [8 * 60, 16 * 60];
-// 새 하루(자정): 오늘 날씨 → 자정 뉴스(날씨 사건이 있으면 그것, 없으면 일반 사건), 8시·16시 사건을 미리 정함, 새 일봉 시작
+// 뉴스는 실제 5분마다 하나 (1초 시세 300번마다 → 게임 하루에 약 9.6번). 날씨 사건은 따로 자정에
+const NEWS_EVERY = 300;
+// 일반 뉴스 하나의 세기: 예전(하루 3번)보다 3배 넘게 자주 나오므로 줄임.
+// 순간 상승·하락(j)은 0.55배(√(3/9.6) 정도 → 하루 흔들림 비슷), 며칠 남는 여파(d)는 횟수만큼 쌓이므로 0.3배(3/9.6 정도)
+const NEWS_SCALE = 0.55, DRIFT_SCALE = 0.3;
+function fireNews(m) {
+  const def = EVENTS[weighted(EVENT_WEIGHTS)], e = def.make();
+  if (def.key !== 'breakthrough') {   // 대박 호재는 드문 대신 세기 그대로
+    e.hits = e.hits.map(h => ({ ...h, j: h.j * NEWS_SCALE, d: h.d * DRIFT_SCALE }));
+    if (e.market) e.market = { j: e.market.j * NEWS_SCALE, d: e.market.d * DRIFT_SCALE };
+  }
+  return applyEvent(m, e, def.key, def.icon);
+}
+// 새 하루(자정): 오늘 날씨 → 폭염·태풍 같은 날씨가 시작되면 날씨 뉴스, 새 일봉 시작
 function openDay(m) {
   m.day++;
   m.open = true; m.tick = 0;
@@ -380,28 +391,17 @@ function openDay(m) {
   if (WEATHER[m.weather].extreme && m.weather !== prev) {
     const w = WEATHER_EVENTS[m.weather];
     happened.push(applyEvent(m, { title: w.title(), hits: w.hits() }, 'w_' + m.weather, 'w_' + m.weather));
-  } else {
-    const def = EVENTS[weighted(EVENT_WEIGHTS)];
-    happened.push(applyEvent(m, def.make(), def.key, def.icon));
   }
-  scheduleNews(m);
   return happened;
 }
-// 오늘 남은 뉴스(8시·16시) 중 아직 지나지 않은 것만 정함. 서버를 켤 때도 불러서, 예전 규칙으로 저장된 날도 바로 이 규칙을 따르게
-function scheduleNews(m) {
-  m.pending = NEWS_AT.filter(at => at > m.clock).map(at => ({ at, e: weighted(EVENT_WEIGHTS) }));
-}
 
-// 실제 1초마다: 예정 시각이 된 사건 → 시장·업종·종목 고유 움직임을 하루치의 1/TICKS_PER_DAY만큼
+// 실제 1초마다: 5분이 차면 뉴스 → 시장·업종·종목 고유 움직임을 하루치의 1/TICKS_PER_DAY만큼
 function stepTick(m) {
   if (!m.open) return [];
   m.tick++;
   const happened = [];
-  for (const p of m.pending.filter(p => p.at <= m.clock)) {
-    const def = EVENTS[p.e];
-    happened.push(applyEvent(m, def.make(), def.key, def.icon));
-  }
-  m.pending = m.pending.filter(p => p.at > m.clock);
+  m.sinceNews = (m.sinceNews || 0) + 1;   // 접속자가 있을 때만 세므로, 아무도 없으면 뉴스도 멈춤
+  if (m.sinceNews >= NEWS_EVERY) { m.sinceNews = 0; happened.push(fireNews(m)); }
   const s = Math.sqrt(TICKS_PER_DAY);
   const mk = gauss() * MARKET_VOL / s + m.marketDrift / TICKS_PER_DAY;
   const sec = Object.fromEntries(Object.keys(SECTORS).map(k => [k, gauss() * SECTOR_VOL / s]));
@@ -426,7 +426,7 @@ const forcesOf = m => m.stocks.map((st, i) => ({
 
 // 하루 마감(자정): 사건 여파가 하루만큼 줄어듦
 function closeDay(m) {
-  m.open = false; m.pending = [];
+  m.open = false;
   m.stocks.forEach(st => { st.drift *= DRIFT_DECAY; });
   m.marketDrift *= DRIFT_DECAY;
 }
@@ -445,7 +445,7 @@ const seasonName = m => SEASON_NAME[seasonOf(monthOf(m))];
 
 module.exports = {
   VOL, SECTORS, TAG_LABEL, STOCK_DEFS, WEATHER, LESSON_KEYS, TICKS_PER_DAY,
-  createMarket, openDay, stepTick, closeDay, stepDay, monthOf, seasonName, tickSize, forcesOf, scheduleNews,
+  createMarket, openDay, stepTick, closeDay, stepDay, monthOf, seasonName, tickSize, forcesOf,
 };
 
 // ===== 점검: node market.js → 60거래일 × 100판 모의 실행 (1초 시세라 하루 2880번, 약 1분 30초 걸림) =====

@@ -41,14 +41,13 @@ function loadMarket(saved) {
     Array.isArray(saved.index) && Array.isArray(saved.news) && market.WEATHER[saved.weather] && Number.isInteger(saved.day);
   if (!ok) return market.createMarket();
   const fresh = market.createMarket();
-  for (const k of ['open', 'tick', 'pending', 'clock', 'depositRate']) if (saved[k] === undefined) saved[k] = fresh[k];
+  for (const k of ['open', 'tick', 'sinceNews', 'clock', 'depositRate']) if (saved[k] === undefined) saved[k] = fresh[k];
   saved.stocks.forEach(st => { if (!Number.isFinite(st.raw)) st.raw = st.price; });
   return saved;
 }
 const saved = readJSONFile(STATE_FILE) || {};
 const M = loadMarket(saved.market);
 if (!M.open) market.openDay(M);   // 장은 항상 열려 있음 (예전 저장 파일이 마감 상태여도 바로 개장)
-else market.scheduleNews(M);      // 오늘 남은 뉴스 시각을 8시간 규칙으로 다시 정함
 let coins = [], coinId = 0;
 
 // ===== 계정: 별명이 처음이면 자동 생성, 있으면 비밀번호 확인 =====
