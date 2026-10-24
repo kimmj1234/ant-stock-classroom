@@ -1,5 +1,5 @@
 'use strict';
-// 기본 게임 화면: 도시를 픽셀 캐릭터가 8방향으로 걸어 다니고, 화면(카메라)이 따라감.
+// 기본 게임 화면: 도시(16×16칸 블록)를 픽셀 캐릭터가 8방향으로 걸어 다니고, 화면(카메라)이 따라감.
 // 캐릭터 그림은 sprites.js, 도시 배치·그림은 town.js. 여기서는 겹쳐 그리기·이동·부딪힘·앞뒤 순서만 함
 {
 const cv = document.getElementById('game'), ctx = cv.getContext('2d');
@@ -102,12 +102,15 @@ function sprite(look, dir, step) {   // step: 0 = 서 있음, 1·2 = 걸음 (왼
 const toScreen = (x, y) => ({ x: x * S, y: y * S });
 
 // ===== 그리기 =====
-// 바닥: 땅은 끝이 없으니 화면에 보이는 칸만 그림 (칸 그림은 town.js의 tileImage)
+// 바닥: 화면에 보이는 칸만 그림 (칸 그림은 town.js의 tileImage, 맵 밖은 어두운 바탕)
 function drawGround(cam, W, H) {
   const t = TILE * S;
+  ctx.fillStyle = '#26232e'; ctx.fillRect(0, 0, W, H);
   for (let ty = Math.floor(cam.y / t); ty * t < cam.y + H; ty++)
-    for (let tx = Math.floor(cam.x / t); tx * t < cam.x + W; tx++)
-      ctx.drawImage(tileImage(tx, ty), tx * t - cam.x, ty * t - cam.y, t, t);
+    for (let tx = Math.floor(cam.x / t); tx * t < cam.x + W; tx++) {
+      const img = tileImage(tx, ty);
+      if (img) ctx.drawImage(img, tx * t - cam.x, ty * t - cam.y, t, t);
+    }
 }
 // 건물·나무: 발밑(y) 가운데(x)를 기준으로 세움
 function drawThing(t, cam) {
@@ -177,9 +180,11 @@ function frame(now) {
   ctx.setTransform(k, 0, 0, k, 0, 0);
   ctx.imageSmoothingEnabled = false;      // 픽셀이 번지지 않고 또렷하게
   const f = toScreen(me.x, me.y);
-  // 카메라: 늘 나를 화면 가운데에 (땅이 끝없으니 멈추는 곳 없음)
-  const cam = { x: Math.round(f.x - W / 2), y: Math.round(f.y - SPRITE.h * S * SPRITE.scale / 2 - H / 2) };
+  // 카메라: 나를 화면 가운데에. 맵 끝에 가까우면 바깥이 안 보이게 멈춤(맵이 화면보다 작으면 맵을 가운데에)
+  const fitCam = (p, view, size) => Math.round(size > view ? Math.min(size - view, Math.max(0, p - view / 2)) : (size - view) / 2);
+  const cam = { x: fitCam(f.x, W, MAP_W * S), y: fitCam(f.y - SPRITE.h * S * SPRITE.scale / 2, H, MAP_H * S) };
   drawGround(cam, W, H);
+  drawShadows(ctx, S, cam);   // 물건 그림자 (바닥 위, 물건 아래)
   // 건물·나무·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
   // 바닥 무늬(맨홀·주차 P)는 맨 먼저 → 무엇에든 가려짐
   const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), { y: me.y, draw: () => drawPlayer(me, cam, now) }];
