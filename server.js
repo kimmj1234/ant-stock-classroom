@@ -12,7 +12,7 @@ const market = require('./market');
 const PORT = 5000, HOST = '127.0.0.1';
 const START_CASH = 1000000;
 const GAME_MINUTE_MS = 2000;                   // 게임 1분 = 실제 2초 (실제 1분 = 게임 30분, 하루 = 실제 48분)
-const MARKET_STEP = 10;                        // 시세는 게임 10분(실제 20초)마다 움직임
+const MARKET_MS = 5000;                        // 시세는 실제 5초마다 움직임 (게임 시계와 따로)
 // 집 밖에서 돈 버는 방법 (위치는 pixel.js의 바깥 지도와 같음)
 const STORE = { x: 8, y: 6, w: 88, h: 50 }, BANK = { x: 224, y: 6, w: 88, h: 50 };
 const WAGE = 15000, WORK_MS = 8000, SHIFTS_PER_DAY = 3;
@@ -168,11 +168,17 @@ setInterval(() => {
   if (!clients.size) return;
   M.clock = (Math.floor(M.clock) + 1) % 1440;
   if (M.clock === 0) { market.closeDay(M); closeOfDay(); market.openDay(M); }   // 자정: 오늘 일봉을 닫고 곧바로 새 일봉 (거래는 끊기지 않음)
-  else if (M.clock % MARKET_STEP === 0) market.stepTick(M);
   maybeSpawnCoin();
   broadcast();
   if (++ticks % 5 === 0) saveState();
 }, GAME_MINUTE_MS);
+
+// 시세: 실제 5초마다 한 번 (접속자가 있을 때만, 게임 시계처럼)
+setInterval(() => {
+  if (!clients.size || !M.open) return;
+  market.stepTick(M);
+  broadcast();
+}, MARKET_MS);
 
 // 개미 위치는 잦으니 모아서 보냄
 setInterval(() => {

@@ -298,8 +298,9 @@ const EVENT_WEIGHTS = Object.fromEntries(EVENTS.map((e, i) => [i, e.weight]));
 const LESSON_KEYS = [...EVENTS.map(e => ({ key: e.key, name: e.name })), ...Object.keys(WEATHER_EVENTS).map(k => ({ key: 'w_' + k, name: WEATHER[k].name }))];
 
 // ===== 시장 =====
-// 장은 닫히지 않습니다. 10분마다 한 번(하루 TICKS_PER_DAY번) 조금씩 움직이고, 자정~자정 하루가 일봉 하나가 됩니다.
-const TICKS_PER_DAY = 144;
+// 장은 닫히지 않습니다. 실제 5초마다 한 번(게임 하루 = 실제 48분 = 576번) 조금씩 움직이고, 자정~자정 하루가 일봉 하나가 됩니다.
+// 한 번 움직이는 크기를 √576로 나누므로, 횟수를 바꿔도 하루 변동성은 같습니다.
+const TICKS_PER_DAY = 576;
 const DEPOSIT_RATE = { base: 0.001, min: 0.0003, max: 0.003, step: 0.0005 };   // 은행 예금 하루 이자율
 
 function createMarket() {
@@ -347,8 +348,8 @@ function applyEvent(m, e, key, icon) {
   return item;
 }
 
-// 뉴스는 게임 8시간마다 하루 3번: 자정(0시)·오전 8시·오후 4시. stepTick 한 번 = 10분이라 8시간 = 48번째
-const NEWS_TICKS = [48, 96];
+// 뉴스는 게임 8시간마다 하루 3번: 자정(0시)·오전 8시·오후 4시. 시세 횟수가 아니라 게임 시계(분)로 정함
+const NEWS_AT = [8 * 60, 16 * 60];
 // 새 하루(자정): 오늘 날씨 → 자정 뉴스(날씨 사건이 있으면 그것, 없으면 일반 사건), 8시·16시 사건을 미리 정함, 새 일봉 시작
 function openDay(m) {
   m.day++;
@@ -370,18 +371,19 @@ function openDay(m) {
 }
 // 오늘 남은 뉴스(8시·16시) 중 아직 지나지 않은 것만 정함. 서버를 켤 때도 불러서, 예전 규칙으로 저장된 날도 바로 이 규칙을 따르게
 function scheduleNews(m) {
-  m.pending = NEWS_TICKS.filter(tick => tick > m.tick).map(tick => ({ tick, e: weighted(EVENT_WEIGHTS) }));
+  m.pending = NEWS_AT.filter(at => at > m.clock).map(at => ({ at, e: weighted(EVENT_WEIGHTS) }));
 }
 
-// 10분마다: 예정된 사건 → 시장·업종·종목 고유 움직임을 하루치의 1/TICKS_PER_DAY만큼
+// 실제 5초마다: 예정 시각이 된 사건 → 시장·업종·종목 고유 움직임을 하루치의 1/TICKS_PER_DAY만큼
 function stepTick(m) {
   if (!m.open) return [];
   m.tick++;
   const happened = [];
-  for (const p of m.pending.filter(p => p.tick === m.tick)) {
+  for (const p of m.pending.filter(p => p.at <= m.clock)) {
     const def = EVENTS[p.e];
     happened.push(applyEvent(m, def.make(), def.key, def.icon));
   }
+  m.pending = m.pending.filter(p => p.at > m.clock);
   const s = Math.sqrt(TICKS_PER_DAY);
   const mk = gauss() * MARKET_VOL / s + m.marketDrift / TICKS_PER_DAY;
   const sec = Object.fromEntries(Object.keys(SECTORS).map(k => [k, gauss() * SECTOR_VOL / s]));
@@ -410,8 +412,9 @@ function closeDay(m) {
 
 // 하루 전체 (점검용)
 function stepDay(m) {
+  m.clock = 0;
   const happened = openDay(m);
-  for (let t = 0; t < TICKS_PER_DAY; t++) happened.push(...stepTick(m));
+  for (let t = 0; t < TICKS_PER_DAY; t++) { m.clock = Math.floor(t * 1440 / TICKS_PER_DAY); happened.push(...stepTick(m)); }
   closeDay(m);
   return happened;
 }
