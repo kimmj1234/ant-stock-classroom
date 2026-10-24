@@ -12,7 +12,8 @@ const market = require('./market');
 const PORT = 5000, HOST = '127.0.0.1';
 const START_CASH = 1000000;
 const OPEN = 9 * 60, CLOSE = 18 * 60;          // 게임 시계(분): 장 여는 시각·닫는 시각
-const DAY_STEP = 10, NIGHT_STEP = 30;          // 실제 1초마다 흐르는 게임 시간(분): 장중 10분, 장 밖 30분
+const GAME_MINUTE_MS = 2000;                   // 게임 1분 = 실제 2초 (실제 1분 = 게임 30분, 하루 = 실제 48분)
+const MARKET_STEP = 10;                        // 장중 시세는 게임 10분(실제 20초)마다 움직임
 // 집 밖에서 돈 버는 방법 (위치는 pixel.js의 바깥 지도와 같음)
 const STORE = { x: 8, y: 6, w: 88, h: 50 }, BANK = { x: 224, y: 6, w: 88, h: 50 };
 const WAGE = 15000, WORK_MS = 8000, SHIFTS_PER_DAY = 3;
@@ -149,7 +150,7 @@ function closeOfDay() {
   }
 }
 function maybeSpawnCoin() {
-  if (coins.length >= MAX_COINS || Math.random() > 0.15) return;
+  if (coins.length >= MAX_COINS || Math.random() > 0.3) return;   // 2초마다 30% → 이전과 비슷한 빈도
   const free = COIN_SPOTS.filter(([x, y]) => !coins.some(c => c.x === x && c.y === y));
   const [x, y] = free[Math.floor(Math.random() * free.length)];
   coins.push({ id: ++coinId, x, y, value: 1000 + 500 * Math.floor(Math.random() * 9) });
@@ -157,17 +158,14 @@ function maybeSpawnCoin() {
 let ticks = 0;
 setInterval(() => {
   if (!clients.size) return;
-  let next = M.clock + (M.open ? DAY_STEP : NIGHT_STEP);
-  if (!M.open && M.clock < OPEN && next >= OPEN) next = OPEN;
-  if (M.open && next >= CLOSE) next = CLOSE;
-  M.clock = next % 1440;
+  M.clock = (Math.floor(M.clock) + 1) % 1440;
   if (!M.open && isMarketHours()) market.openDay(M);
   else if (M.open && !isMarketHours()) { market.closeDay(M); closeOfDay(); }
-  else if (M.open) market.stepTick(M);
+  else if (M.open && M.clock % MARKET_STEP === 0) market.stepTick(M);
   maybeSpawnCoin();
   broadcast();
-  if (++ticks % 10 === 0) saveState();
-}, 1000);
+  if (++ticks % 5 === 0) saveState();
+}, GAME_MINUTE_MS);
 
 // 개미 위치는 잦으니 모아서 보냄
 setInterval(() => {
