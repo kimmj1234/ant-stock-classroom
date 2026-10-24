@@ -18,9 +18,8 @@
   .menubar nav a { font-size: 13px; letter-spacing: .12em; }
   /* 영역은 한 화면 단위: 첫 화면 = 메뉴바(88px) + 히어로, 그다음부터는 한 영역 = 화면 높이. 스크롤하다 가까우면 영역 시작에 살짝 맞춰 멈춤 */
   :root { --bar: 88px; }
-  /* 영역 사이 이동은 부드럽게(화살표·링크). 마우스 휠은 스크립트가 한 번에 한 영역씩 넘김. 터치 스크롤은 영역 가까이서 살짝 맞춰 멈춤(proximity). 움직임 줄이기 설정이면 바로 이동 */
+  /* 영역 사이 이동(휠 한 번·↓ 화살표·로그인 링크)은 스크립트가 0.9초 동안 천천히 출발·멈춤으로 그림(glideTo). 터치 스크롤은 영역 가까이서 살짝 맞춰 멈춤(proximity) */
   html { scroll-snap-type: y proximity; }
-  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
   .panel { min-height: 100svh; display: grid; place-items: center; padding: 32px 0; box-sizing: border-box; scroll-snap-align: start; }
 
   /* ----- 히어로 ----- */
@@ -56,8 +55,9 @@
   .blob circle, .blob .spark { fill: #fff; }
   .b1 { width: clamp(220px, 27vw, 420px); top: 5%; right: 5%; transform: rotate(8deg); }
   .b2 { width: clamp(110px, 13vw, 200px); top: 30%; left: -3%; transform: rotate(-20deg); }
-  .b3 { width: clamp(260px, 32vw, 500px); bottom: -14%; left: -8%; transform: rotate(150deg); }
-  .b4 { width: clamp(260px, 34vw, 540px); bottom: -22%; right: -9%; transform: rotate(40deg); }
+  /* 아래쪽 두 덩어리는 영역 1 안에 다 들어오게(아래 끝에서 잘리지 않음). 화면 양옆에서만 잘림 */
+  .b3 { width: clamp(240px, 28vw, 440px); bottom: 3%; left: -9%; transform: rotate(150deg); }
+  .b4 { width: clamp(240px, 30vw, 470px); bottom: 2%; right: -10%; transform: rotate(40deg); }
   .line { fill: #fff; stroke: #000; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
   .study { width: clamp(150px, 17vw, 260px); top: 13%; right: 9%; }   /* 검은 덩어리 안: 검은 바탕 + 흰 선 */
   .study .line { fill: #000; stroke: #fff; }
@@ -215,10 +215,26 @@ const $ = id => document.getElementById(id);
 // 첫 화면 = 메뉴바 + 히어로가 딱 한 화면이 되도록, 메뉴바의 실제 높이(휴대폰은 두 줄이라 더 높음)를 --bar에 넣음
 new ResizeObserver(([e]) => document.documentElement.style.setProperty('--bar', `${e.target.offsetHeight}px`)).observe(document.querySelector('.menubar'));
 
-// ===== 마우스 휠: 한 번 굴리면 굴린 쪽의 다음(이전) 영역 시작으로 부드럽게 넘어감 =====
-// (브라우저 자체 맞춤은 '가까운 영역'으로 가서, 조금만 굴리면 첫 화면으로 되돌아가 버림)
-const smooth = matchMedia('(prefers-reduced-motion: no-preference)').matches ? 'smooth' : 'auto';
+// ===== 영역 사이 이동: 브라우저 기본(짧고 빠름) 대신 직접 그려서 천천히 출발 → 빨라졌다 → 천천히 멈춤 (0.9초) =====
+const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;   // 움직임 줄이기 설정이면 바로 이동
+const ease = t => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);   // easeInOutCubic
 let paging = false;
+function glideTo(to) {
+  if (calm) return scrollTo(0, to);
+  paging = true;
+  const from = scrollY, t0 = performance.now(), MS = 900, html = document.documentElement;
+  html.style.scrollSnapType = 'none';   // 움직이는 동안 브라우저의 영역 맞춤이 끼어들지 않게
+  const step = now => {
+    const t = Math.min(1, (now - t0) / MS);
+    scrollTo(0, from + (to - from) * ease(t));
+    if (t < 1) return requestAnimationFrame(step);
+    html.style.scrollSnapType = '';
+    paging = false;
+  };
+  requestAnimationFrame(step);
+}
+// 마우스 휠: 한 번 굴리면 굴린 쪽의 다음(이전) 영역 시작으로
+// (브라우저 자체 맞춤은 '가까운 영역'으로 가서, 조금만 굴리면 첫 화면으로 되돌아가 버림)
 addEventListener('wheel', e => {
   if (e.ctrlKey || Math.abs(e.deltaY) < 4) return;                  // 확대(Ctrl+휠)·아주 작은 움직임은 그대로
   if (paging) return e.preventDefault();                             // 넘어가는 중에 들어온 휠은 무시
@@ -226,10 +242,15 @@ addEventListener('wheel', e => {
   const to = e.deltaY > 0 ? tops.find(t => t > y + 2) : [...tops].reverse().find(t => t < y - 2);
   if (to === undefined) return;                                      // 더 갈 영역이 없으면 보통 스크롤
   e.preventDefault();
-  paging = true;
-  scrollTo({ top: to, behavior: smooth });
-  setTimeout(() => { paging = false; }, 900);
+  glideTo(to);
 }, { passive: false });
+// ↓ 화살표와 메뉴바 "로그인"(#login)도 같은 움직임으로
+document.addEventListener('click', e => {
+  const a = e.target.closest('a[href="#play"], a[href="#login"]');
+  if (!a) return;
+  e.preventDefault();
+  glideTo($('play').offsetTop);
+});
 
 // ===== 로그인 상태에 따라 가운데 칸 바꾸기 (메뉴바의 site.js가 'auth' 이벤트로 알려 줌) =====
 document.addEventListener('auth', e => {
