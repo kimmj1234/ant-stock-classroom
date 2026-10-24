@@ -6,6 +6,10 @@
 <title>나의 두번째 인생</title>
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/site.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&text=%EB%82%98%EC%9D%98%20%EB%91%90%EB%B2%88%EC%A7%B8%20%EC%9D%B8%EC%83%9D&display=swap">
+<link rel="stylesheet" href="/wordmark.css">
 <style>
   /* ===== 상단: 게임 입장 화면 =====
      지금 마을 바깥 풍경을 게임 그림 그대로 실시간으로 그림.
@@ -27,7 +31,7 @@
     width: min(360px, 100%); box-sizing: border-box; background: #fff; color: #000; border-radius: 18px; padding: 28px 28px 24px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, .25); text-align: center;
   }
-  .card img { image-rendering: pixelated; }
+  .card .wordmark.big { margin: 0 0 14px; font-size: 30px; color: #000; }   /* 카드 맨 위 글자 로고 */
   .card h1 { margin: 10px 0 4px; font-size: 22px; }
   .card p { margin: 0 0 18px; color: #555; font-size: 14px; line-height: 1.5; }
 
@@ -55,7 +59,7 @@
 <body>
 <!-- 메인 홈페이지 (/): 흰 메뉴바 + 상단 게임 입장 화면. 게임은 /play -->
 <header class="menubar">
-  <a class="brand" href="/"><img src="/logo.svg" width="45" height="24" alt="">나의 두번째 인생</a>
+  <a class="brand wordmark" href="/">나의 두번째 인생</a>
   <nav aria-label="메뉴"><a id="account" href="#login" hidden>로그인</a></nav>
 </header>
 
@@ -66,7 +70,7 @@
   <!-- 로그아웃 상태: 흰 블러 + 로그인 -->
   <div class="center veil" id="veil" hidden>
     <div class="card" id="login">
-      <img src="/logo.svg" width="60" height="32" alt="">
+      <p class="wordmark big" aria-hidden="true">나의 두번째 인생</p>
       <h1>로그인</h1>
       <p>처음 쓰는 닉네임이면 계정이 바로 만들어져요.</p>
       <form id="loginForm" autocomplete="on">
@@ -81,7 +85,7 @@
   <!-- 로그인 상태: 마을 그대로 + 게임 시작 -->
   <div class="center" id="gate" hidden>
     <div class="card">
-      <img src="/logo.svg" width="60" height="32" alt="">
+      <p class="wordmark big" aria-hidden="true">나의 두번째 인생</p>
       <h1 id="hello">다시 오셨네요</h1>
       <p>마을 사람들이 기다리고 있어요.</p>
       <a class="btn" href="/play">게임 시작</a>

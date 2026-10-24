@@ -5,8 +5,7 @@ body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-seri
 /* 메뉴바: 로고·제목은 가운데, 메뉴(로그인/로그아웃)는 오른쪽. 양옆 칸 너비를 같게 해서 제목이 정확히 가운데 */
 .menubar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 22px 24px; background: #fff; color: #000; }
 .menubar a { color: inherit; text-decoration: none; white-space: nowrap; }
-.brand { grid-column: 2; font-size: 20px; font-weight: bold; display: flex; align-items: center; gap: 10px; }
-.brand img { image-rendering: pixelated; }
+.brand { grid-column: 2; }   /* 글자 로고 모양은 wordmark.css */
 .menubar nav { grid-column: 3; justify-self: end; }
 .menubar nav a { font-weight: bold; display: inline-flex; align-items: center; gap: 7px; }
 .menubar nav svg { flex: none; }
@@ -17,7 +16,6 @@ body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-seri
 @media (max-width: 420px) {
   .menubar { grid-template-columns: 1fr; justify-items: center; gap: 8px; padding: 18px 14px; }
   .brand, .menubar nav { grid-column: 1; justify-self: center; }
-  .brand { font-size: 17px; gap: 8px; }
-  .brand img { width: 36px; height: 19px; }
+  .brand { font-size: 22px; }
   .menubar nav a { font-size: 14px; }
 }

@@ -1,0 +1,9 @@
+/* 글자 로고 "나의 두번째 인생": 두툼하고 둥근 게임 제목 느낌의 Bagel Fat One + 오른쪽 아래로 밀린 금색 그림자.
+   글꼴은 이 다섯 글자만 받아 옴(Google Fonts의 text= 옵션)이라 가볍고, 못 받아 오면 굵은 기본 글꼴로 보임.
+   메인(/)과 게임(/play)이 함께 씀 */
+.wordmark {
+  font-family: "Bagel Fat One", "Jua", "Malgun Gothic", sans-serif; font-weight: 400; font-size: 26px;
+  line-height: 1.1; letter-spacing: .01em; white-space: nowrap; color: #000;
+  text-shadow: .08em .08em 0 #f7c948;
+}
+.wordmark.on-dark { color: #fff; }   /* 어두운 바탕(게임 머리줄)에서는 흰 글자 */
