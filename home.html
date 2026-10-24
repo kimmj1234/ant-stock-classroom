@@ -62,14 +62,14 @@
   .coins { width: clamp(90px, 10vw, 150px); bottom: 15%; left: 12%; }
   .work { width: clamp(84px, 9vw, 140px); top: 16%; left: 9%; }
   .hobby { width: clamp(84px, 9vw, 140px); top: 44%; right: 7%; transform: rotate(-10deg); }
-  .person { width: clamp(56px, 6vw, 92px); height: auto; bottom: 14%; right: 17%; filter: grayscale(1) contrast(1.15); transform: rotate(-14deg); }
+  .person { width: clamp(64px, 7.5vw, 120px); height: auto; bottom: 14%; right: 17%; image-rendering: pixelated; filter: grayscale(1) contrast(1.15); transform: rotate(-14deg); }
   @media (prefers-reduced-motion: no-preference) {
     .person { animation: float 6s ease-in-out infinite; }   /* 떠다니는 캐릭터 하나만 천천히 움직임 */
     @keyframes float { 50% { transform: rotate(-8deg) translateY(-14px); } }
   }
   /* 휴대폰: 아래 덩어리가 영역 2로 조금만 넘어가게(글자 위를 덮지 않게). 영역 2 내용도 조금 아래로 */
   @media (max-width: 640px) { .b3 { bottom: -5%; } .b4 { bottom: -7%; } .play { padding-top: 72px; } }
-  @media (max-width: 640px) { .work, .coins, .hobby { display: none; } .study { top: 6%; } .person { width: 48px; bottom: 3%; right: 7%; } }   /* 휴대폰: 글자를 가리지 않게 */
+  @media (max-width: 640px) { .work, .coins, .hobby { display: none; } .study { top: 6%; } .person { width: 56px; bottom: 3%; right: 7%; } }   /* 휴대폰: 글자를 가리지 않게 */
 
   /* ===== 영역 2: PC·모바일 어디서나 + 로그인 =====
      PC: 왼쪽 글(입체 제목·소개·기기별 조작) / 오른쪽 로그인 카드. 좁은 화면(900px 이하): 글 위, 카드 아래 */
@@ -179,7 +179,7 @@
     </g>
     <g fill="#000"><circle cx="36" cy="40" r="3"/><circle cx="84" cy="38" r="3"/></g>
   </svg>
-  <img class="deco person" src="/assets/person-red.png" width="90" height="192" alt="">
+  <canvas class="deco person" id="mascot" width="16" height="14" aria-hidden="true"></canvas>   <!-- 게임 속 흰 캐릭터 (아래 스크립트가 sprites.js 그림으로 그림) -->
 
   <div class="hero-text">
     <h1 class="extrude" id="heroTitle"><span>나의 두번째</span><span>인생</span></h1>
@@ -252,9 +252,18 @@
 </section>
 
 <script src="/site.js"></script>
+<script src="/sprites.js"></script>
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
+
+// 떠다니는 캐릭터: 게임과 같은 그림(sprites.js의 몸 + 정면 얼굴). 모자 자리(위 4줄)는 비워 두지 않고 잘라 냄
+{
+  const g = $('mascot').getContext('2d'), PAL = { o: '#7c7f96', w: '#f7f7f7', W: '#cfcfcf', e: '#1f1f24' };
+  for (const part of [PARTS.body.blob.s, PARTS.face.dot.s]) part.rows.forEach((row, i) => [...row].forEach((ch, x) => {
+    if (PAL[ch]) { g.fillStyle = PAL[ch]; g.fillRect(x, part.at + i - 4, 1, 1); }
+  }));
+}
 
 // 첫 화면 = 메뉴바 + 히어로가 딱 한 화면이 되도록, 메뉴바의 실제 높이(휴대폰은 두 줄이라 더 높음)를 --bar에 넣음
 new ResizeObserver(([e]) => document.documentElement.style.setProperty('--bar', `${e.target.offsetHeight}px`)).observe(document.querySelector('.menubar'));
