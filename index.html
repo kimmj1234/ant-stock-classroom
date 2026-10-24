@@ -30,12 +30,13 @@
         <div><dt>은행 예금</dt><dd id="bank"></dd></div>
         <div><dt>주식 평가액</dt><dd id="stockValue"></dd></div>
         <div><dt>총자산</dt><dd id="total"></dd></div>
-        <div><dt>수익률 (100만 원 대비)</dt><dd id="ret"></dd></div>
+        <div title="시작한 100만 원 대비"><dt>수익률</dt><dd id="ret"></dd></div>
         <div><dt>새 뉴스</dt><dd id="newsCount"></dd></div>
         <div><dt>배운 개념</dt><dd id="learned"></dd></div>
       </dl>
     </div>
 
+    <div id="roomCol" class="room-col">
     <div id="roomWrap" class="room-wrap">
       <canvas id="room" class="px room" width="320" height="176" role="img"
         aria-label="개미 투자자들의 사무실. 방향키로 개미를 움직이고 물건 앞에서 E를 누릅니다."></canvas>
@@ -44,9 +45,13 @@
         <ol id="bbList" class="bb-list"></ol>
       </div>
       <div id="labels" class="labels" aria-hidden="true"></div>
-      <ol id="scoreboard" class="scoreboard" aria-label="접속 중인 참가자 순위"></ol>
-      <p id="prompt" class="prompt"></p>
+      <div class="online">
+        <button id="onlineBtn" class="online-btn" aria-expanded="false" aria-controls="scoreboard"></button>
+        <ol id="scoreboard" class="scoreboard" aria-label="접속 중인 참가자 순위"></ol>
+      </div>
       <p id="msg" class="msg" aria-live="polite"></p>
+    </div>
+    <p id="prompt" class="prompt"></p>
     </div>
   </section>
 </main>

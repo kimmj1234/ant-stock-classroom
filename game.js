@@ -711,7 +711,12 @@ function render() {
   $('newsCount').textContent = !ME ? '-' : unread ? `📺 ${unread}건` : '없음';
   $('newsCount').className = unread ? 'up' : '';
 
-  $('scoreboard').replaceChildren(...[...ST.players].sort((a, b) => b.total - a.total).map((p, k) => {
+  // 접속자 순위: 평소엔 작은 칩, 누르거나 마우스를 올리면 펼침 (방 그림을 덜 가리게)
+  const ranked = [...ST.players].sort((a, b) => b.total - a.total), myRank = ranked.findIndex(p => p.id === ME?.id) + 1;
+  $('onlineBtn').textContent = `👥 ${ranked.length}명 접속` + (myRank ? ` · 나 ${myRank}위` : '') + (boardOpen ? ' ▴' : ' ▾');
+  $('onlineBtn').setAttribute('aria-expanded', boardOpen);
+  $('scoreboard').classList.toggle('open', boardOpen);
+  $('scoreboard').replaceChildren(...ranked.map((p, k) => {
     const li = el('li', p.id === ME?.id ? 'me' : ''), r = (p.total / META.START_CASH - 1) * 100;
     const sw = el('i'); sw.style.background = BODY[p.color]?.r || BODY.red.r;
     li.append(el('span', 'rk', `${k + 1}`), sw, el('span', 'nm', p.name), el('span', 'rt ' + upDown(r), pct(r)));
@@ -721,6 +726,24 @@ function render() {
   renderPC();
   renderTV();
 }
+
+let boardOpen = false;
+$('onlineBtn').addEventListener('click', () => { boardOpen = !boardOpen; render(); });
+
+// 방 크기: 화면에 들어가는 가장 큰 '정수 배율'(3배, 4배…)로 맞춰 픽셀이 고르고 또렷하게 보이게 함
+function fitRoom() {
+  const col = $('roomCol');
+  const availW = col.parentElement.clientWidth - 8;
+  const availH = innerHeight - col.getBoundingClientRect().top - $('prompt').offsetHeight - 30;
+  const raw = Math.min(availW / 320, availH / 176);
+  const scale = raw >= 2 ? Math.floor(raw) : Math.max(1, raw);   // 아주 작은 화면만 소수 배율
+  const w = `${Math.floor(320 * scale) + 8}px`;
+  if (col.style.width !== w) col.style.width = w;
+}
+addEventListener('resize', fitRoom);
+const fitObserver = new ResizeObserver(fitRoom);
+fitObserver.observe(document.querySelector('.hud'));
+fitObserver.observe($('prompt'));
 
 // 집 밖 전광판: 모든 계정의 자산 순위 TOP 10 (그림의 화면 칸 위치에 맞춰 띄움)
 function renderBillboard() {
@@ -901,4 +924,5 @@ if (note) { $('notice').textContent = '⚠ ' + note; $('notice').hidden = false;
 $('logo').src = antURL('happy');
 connect();
 api('me').then(d => { if (d.ok) { say('다시 오셨네요! 방향키로 움직이고, 물건 앞에서 E를 누르세요.'); render(); } else showLogin(); });
+fitRoom();
 requestAnimationFrame(loop);
