@@ -1,77 +1,25 @@
 'use strict';
+// ===== 개미 투자 교실 (브라우저) =====
+// 시장·사건·계좌는 서버(server.js)가 정하고, 여기서는 보여 주기·내 개미 이동·주문 보내기만 합니다.
 
-// ===== 고정 규칙 =====
-const STORE_KEY = 'stockGame.v1';
-const START_CASH = 1000000;
-const TARGET = 1150000;      // +15% → 성공
-const LOSS_LIMIT = 850000;   // -15% → 실패
-const MAX_DAY = 60;          // 60거래일이 지나면 목표 미달 실패
-const DAY_MS = 1200;         // 1거래일 = 1.2초
-const NEWS_CHANCE = 0.18;
-const DRIFT_DAYS = 5;        // 뉴스의 여파가 이어지는 날 수
-
-// 난이도는 "하루 변동성" 값 하나만 바꾼다 (카드 3: 값 하나만 비교)
-const DIFFICULTY = {
-  low:  { label: '낮음', vol: 0.012 },
-  mid:  { label: '보통', vol: 0.02 },
-  high: { label: '높음', vol: 0.032 },
-};
-
-const STOCKS = [
-  { id: 'tech',   name: '한빛전자',   sector: '반도체·IT (성장주)',  price: 72000,  beta: 1.2,
-    desc: '반도체와 스마트기기를 만드는 성장주. 미래 이익 기대가 커서 금리·실적 뉴스에 민감합니다.' },
-  { id: 'food',   name: '푸른식품',   sector: '식품 (경기방어주)',    price: 38000,  beta: 0.6,
-    desc: '라면·간편식을 만드는 경기방어주. 불황에도 수요가 꾸준해 시장보다 덜 흔들리고 배당을 줍니다.' },
-  { id: 'energy', name: '별빛에너지', sector: '에너지 (경기민감주)',  price: 115000, beta: 1.5,
-    desc: '석유를 정제해 파는 경기민감주. 유가가 오르면 이익이 늘지만, 경기와 사고 소식에 크게 흔들립니다.' },
-];
-
-// jump: 뉴스 당일 즉시 변동, drift: 이후 DRIFT_DAYS 동안 하루 평균 변동
-const NEWS = [
-  { icon: 'bank', title: '중앙은행, 기준금리 인상', jump: { tech: -0.06, food: -0.01, energy: -0.03 }, drift: { tech: -0.006 },
-    lesson: '금리가 오르면 돈을 빌리는 비용이 커지고, 미래 이익의 현재 가치가 낮아집니다. 그래서 미래 성장 기대가 큰 성장주(IT)가 더 크게 흔들립니다.' },
-  { icon: 'up', title: '한빛전자, 분기 실적 예상치 크게 상회', jump: { tech: 0.07 }, drift: { tech: 0.008 },
-    lesson: '주가는 실적 자체보다 "시장의 예상 대비" 결과에 반응합니다. 예상보다 좋은 실적을 어닝 서프라이즈라고 합니다.' },
-  { icon: 'energy', title: '국제 유가 급등', jump: { energy: 0.08, food: -0.03 }, drift: { energy: 0.007 },
-    lesson: '같은 뉴스도 업종마다 반대로 작용합니다. 유가 상승은 에너지 기업엔 호재, 원가가 오르는 식품 기업엔 악재입니다.' },
-  { icon: 'cloud', title: '경기 침체 우려 확산', jump: { tech: -0.05, energy: -0.05, food: 0.01 }, drift: { food: 0.004 },
-    lesson: '불황에도 사람들은 밥을 먹습니다. 수요가 꾸준한 식품·생활필수품 기업 주식을 경기방어주라고 합니다.' },
-  { icon: 'coin', title: '푸른식품, 배당금 확대 발표', jump: { food: 0.04 },
-    lesson: '배당은 회사가 번 이익의 일부를 주주에게 나눠 주는 것입니다. 배당이 늘면 꾸준한 수익을 원하는 투자자가 몰립니다.' },
-  { icon: 'rumor', title: '한빛전자 신제품 출시설 (확인되지 않은 소문)', jump: { tech: 0.05 }, drift: { tech: -0.007 },
-    lesson: '확인되지 않은 소문으로 오른 주가는 되돌아가기 쉽습니다. 소문만 믿고 추격 매수하는 것은 위험합니다.' },
-  { icon: 'fire', title: '별빛에너지 정제시설 화재 사고', jump: { energy: -0.09 }, drift: { energy: -0.004 },
-    lesson: '한 회사에만 생긴 악재(개별 위험)는 여러 종목에 나눠 담는 분산투자로 줄일 수 있습니다.' },
-  { icon: 'crash', title: '시장 전체 급락 (공포성 매도)', crash: true, jump: { tech: -0.1, food: -0.06, energy: -0.1 },
-    drift: { tech: 0.005, food: 0.002, energy: 0.005 },
-    lesson: '시장 전체가 함께 떨어지는 위험(체계적 위험)은 분산투자로도 피하기 어렵습니다. 공포에 휩쓸려 팔면 손실이 확정되고, 급락 뒤에는 반등이 오기도 합니다.' },
-];
-
-const STATUS_LABEL = { ready: '준비', playing: '진행 중', paused: '일시정지', won: '성공', lost: '실패' };
-const START_POS = { x: 168, y: 150 };   // 가운데 방 아래쪽
-const SPEED = 60;                        // 방 픽셀/초
+const STORE_KEY = 'stockGame.v2';
+const START_POS = { x: 168, y: 150 };
+const SPEED = 60;   // 방 픽셀/초
 
 const $ = id => document.getElementById(id);
 const won = n => Math.round(n).toLocaleString('ko-KR') + '원';
 const signed = (n, s) => (n > 0 ? '+' : '') + s;
 const pct = n => signed(n, n.toFixed(2) + '%');
-const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const upDown = n => (n > 0 ? 'up' : n < 0 ? 'down' : '');
 
-// ===== 보존 기록 (카드 4): 기록·최고 수익률·배운 개념·설정만 저장, 현재 판은 저장하지 않음 =====
+// ===== 이 브라우저에 보존하는 값 (카드 4): 내 도전 기록·최고 수익률·배운 개념·설정 =====
 function defaultStore() {
-  return {
-    best: null,
-    records: [],
-    learned: [],
-    settings: { diff: 'mid', mute: false, reduce: matchMedia('(prefers-reduced-motion: reduce)').matches },
-  };
+  return { best: null, records: [], learned: [], settings: { mute: false, reduce: matchMedia('(prefers-reduced-motion: reduce)').matches } };
 }
-
 function okRecord(r) {
-  return r && typeof r === 'object' && hasOwn(DIFFICULTY, r.diff) && (r.result === 'won' || r.result === 'lost') &&
-    Number.isInteger(r.day) && Number.isFinite(r.ret) && typeof r.cause === 'string';
+  return r && typeof r === 'object' && (r.result === 'won' || r.result === 'lost') && Number.isInteger(r.day) &&
+    Number.isFinite(r.ret) && typeof r.cause === 'string' && Number.isFinite(r.vol);
 }
-
 // 형식 검사 → 통과한 값만 기본값 위에 덮어씀. 손상 시 기본값으로 시작
 function loadStore() {
   const d = defaultStore();
@@ -83,317 +31,368 @@ function loadStore() {
   try { v = JSON.parse(raw); } catch { v = null; }
   if (!v || typeof v !== 'object' || Array.isArray(v)) return { store: d, note: '저장값이 손상되어 기본값으로 시작했습니다.' };
   if (Array.isArray(v.records)) d.records = v.records.filter(okRecord).slice(-200);
-  if (Array.isArray(v.learned)) d.learned = [...new Set(v.learned.filter(i => Number.isInteger(i) && i >= 0 && i < NEWS.length))];
+  if (Array.isArray(v.learned)) d.learned = [...new Set(v.learned.filter(k => typeof k === 'string' && k.length < 20))];
   if (Number.isFinite(v.best)) d.best = v.best;
   const s = v.settings && typeof v.settings === 'object' ? v.settings : {};
-  if (hasOwn(DIFFICULTY, s.diff)) d.settings.diff = s.diff;
   if (typeof s.mute === 'boolean') d.settings.mute = s.mute;
   if (typeof s.reduce === 'boolean') d.settings.reduce = s.reduce;
   return { store: d, note: '' };
 }
-
 function save() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch { /* 저장 불가여도 게임은 계속 */ }
 }
-
 let { store, note } = loadStore();
 save();
 
-// ===== 현재 판 (새 게임마다 초기화) =====
-function newGame() {
-  return {
-    status: 'ready', pauseReason: '', day: 0, cash: START_CASH, sel: 0, trades: 0, diff: store.settings.diff,
-    shockUntil: 0, news: [], log: [], player: { ...START_POS, moving: false },
-    stocks: STOCKS.map(s => ({ ...s, shares: 0, cost: 0, hist: [s.price], drift: 0, driftDays: 0 })),
-  };
-}
-let S = newGame();
-let timer = null;
-let near = null;            // 지금 개미 옆에 있는 물건
-const held = new Set();     // 누르고 있는 방향키
+// ===== 서버에서 받는 값 =====
+let META = null;   // 종목·업종·규칙 (접속 때 한 번)
+let ST = null;     // 공유 시장 상태 (매일)
+let ME = null;     // 내 계좌 (로그인했을 때만)
+const others = new Map();   // 다른 참가자 개미 위치
+let sel = 0, sector = 'all', pcTab = 'hold';
+let newsSeen = 0, readUpTo = 0, resultSeq = null;
 
-const stockValue = () => S.stocks.reduce((sum, st) => sum + st.shares * st.price, 0);
-const totalAssets = () => S.cash + stockValue();
-const roundPrice = p => Math.max(1000, Math.round(p / 100) * 100);
-const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
+// ===== 내 개미 (위치는 이 브라우저가 정하고 서버에 알림) =====
+const P = { ...START_POS, moving: false };
+let near = null;
+const held = new Set();
+
+const loggedIn = () => !!ME;
 const atDesk = () => near?.act === 'trade';
+const stockOf = i => META.stocks[i];
+const priceOf = i => ST.hist[i][ST.hist[i].length - 1];
+const changeOf = i => { const h = ST.hist[i], prev = h[h.length - 2] ?? h[h.length - 1]; return { diff: h[h.length - 1] - prev, rate: (h[h.length - 1] / prev - 1) * 100 }; };
+const symIndex = sym => META.stocks.findIndex(s => s.sym === sym);
+const holdings = () => Object.entries(ME?.hold || {}).map(([sym, h]) => ({ i: symIndex(sym), ...h }));
+const stockValue = () => holdings().reduce((a, h) => a + h.qty * priceOf(h.i), 0);
+const totalAssets = () => (ME ? ME.cash + stockValue() : 0);
 
-function startClock() { stopClock(); timer = setInterval(tick, DAY_MS); }
-function stopClock() { clearInterval(timer); timer = null; }
+// ===== 서버 통신: 로그인은 HttpOnly 쿠키로 유지 (비밀값이 화면·주소·저장소에 남지 않음) =====
+async function api(name, body = {}) {
+  try {
+    const r = await fetch('/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (d.auth === false && name !== 'me' && ME) showLogin('로그인이 만료됐어요. 다시 로그인해 주세요.');
+    return d;
+  } catch {
+    return { ok: false, msg: '서버에 연결할 수 없어요. node server.js 가 켜져 있는지 확인하세요.' };
+  }
+}
 
-// ===== 조작: 한 번 호출 = 상태 변화 한 번 =====
-function start() {
-  if (S.status !== 'ready') return;
-  S.status = 'playing';
-  startClock();
-  say('게임 시작! 방향키로 왼쪽 방의 💻 컴퓨터 책상까지 가서 B로 매수해 보세요.');
+let es = null;
+function connect() {
+  es?.close();
+  es = new EventSource('/api/stream');
+  es.addEventListener('meta', e => { META = JSON.parse(e.data); buildSectors(); render(); });
+  es.addEventListener('state', e => onState(JSON.parse(e.data)));
+  es.addEventListener('pos', e => JSON.parse(e.data).forEach(p => others.set(p.id, p)));
+  es.onerror = () => say('서버 연결이 끊겼어요. 다시 연결하는 중…');
+}
+
+function onState(s) {
+  const first = !ST;
+  ST = s;
+  if (s.me) ME = s.me;
+  const latest = s.news[0]?.id || 0;
+  if (first) { newsSeen = readUpTo = latest; }
+  for (const n of s.news) if (n.id > newsSeen && n.crash) effect('crash');
+  newsSeen = Math.max(newsSeen, latest);
+  for (const p of s.players) if (!others.has(p.id)) others.set(p.id, { id: p.id, ...p.pos });
+  if (ME) {
+    const seq = ME.last?.seq || 0;
+    if (resultSeq === null) resultSeq = seq;
+    else if (seq !== resultSeq) { resultSeq = seq; showResult(ME.last); }
+  }
   render();
 }
 
-function tradeBlocked() {
-  if (S.status !== 'playing') return say(S.status === 'paused' ? '일시정지 중에는 거래할 수 없어요.' : '게임이 진행 중일 때만 거래할 수 있어요.'), true;
-  if (!atDesk()) return say('💻 컴퓨터 책상 앞으로 가야 거래할 수 있어요. (왼쪽 방)'), true;
-  return false;
+// ===== 로그인: 닉네임이 처음이면 계정 생성, 있으면 비밀번호 확인 =====
+function showLogin(msg = '') {
+  ME = null; resultSeq = null;
+  $('login').hidden = false;
+  $('loginMsg').textContent = msg;
+  $('loginAnt').src = antURL('happy');
+  $('loginName').focus();
+  render();
 }
+$('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const d = await api('login', { name: $('loginName').value, password: $('loginPw').value });
+  $('loginPw').value = '';
+  if (!d.ok) { $('loginMsg').textContent = d.msg; return; }
+  $('login').hidden = true;
+  connect();          // 쿠키를 가진 채로 다시 연결 → 서버가 내 계좌를 보내 줌
+  say(d.msg + ' 방향키로 움직이고, 물건 앞에서 E를 누르세요.');
+});
+$('logoutBtn').addEventListener('click', async () => {
+  await api('logout');
+  closePC(); closeModal();
+  showLogin('로그아웃했어요.');
+  connect();
+});
 
-// 주문 한 번 = 체결 한 번 (B/S 키는 1주, 컴퓨터 주문창은 입력한 수량)
+// ===== 주문 한 번 = 체결 한 번 (B/S 키는 1주, 컴퓨터 주문창은 입력한 수량) =====
+let orderQueue = Promise.resolve();
 function trade(side, qty) {
-  if (tradeBlocked()) return false;
-  const st = S.stocks[S.sel];
-  if (!Number.isInteger(qty) || qty < 1) return say('수량은 1주 이상의 정수로 입력하세요.'), false;
-  if (side === 'buy') {
-    const max = Math.floor(S.cash / st.price);
-    if (qty > max) return say(`현금이 부족해요. ${st.name}은(는) 최대 ${max}주까지 살 수 있어요.`), false;
-    S.cash -= st.price * qty; st.shares += qty; st.cost += st.price * qty;
-    say(`${st.name} ${qty}주 매수 체결 (${won(st.price)}) → 보유 ${st.shares}주`);
-  } else {
-    if (qty > st.shares) return say(st.shares ? `보유 수량이 부족해요. ${st.name} 보유 ${st.shares}주` : `${st.name} 주식이 없어 팔 수 없어요.`), false;
-    const avg = st.cost / st.shares, gain = (st.price - avg) * qty;
-    st.shares -= qty; st.cost = st.shares ? st.cost - avg * qty : 0; S.cash += st.price * qty;
-    say(`${st.name} ${qty}주 매도 체결 (${won(st.price)}, 손익 ${signed(gain, won(gain))}) → 보유 ${st.shares}주`);
-  }
-  S.trades++;
-  S.log.unshift({ day: S.day, name: st.name, side, qty, price: st.price });
-  render();
-  return true;
-}
-const buy = () => trade('buy', 1);
-const sell = () => trade('sell', 1);
-
-// reason: 'manual'(P·침대) | 'auto'(창 이탈) | 'modal'(책장·TV 등을 보는 중)
-function pause(reason) {
-  if (S.status !== 'playing') return false;
-  S.status = 'paused'; S.pauseReason = reason; stopClock(); held.clear();
-  return true;
-}
-function resume() {
-  if (S.status !== 'paused') return false;
-  S.status = 'playing'; S.pauseReason = ''; startClock();
-  return true;
+  if (!loggedIn()) return say('로그인이 필요해요.');
+  if (!atDesk()) return say('💻 컴퓨터 책상 앞으로 가야 거래할 수 있어요. (왼쪽 방)');
+  const sym = stockOf(sel).sym;
+  // 차례대로 보내 응답 순서가 섞이지 않게 함
+  orderQueue = orderQueue.then(async () => {
+    const d = await api('order', { sym, side, qty });
+    if (d.me) ME = d.me;
+    say(d.msg);
+    render();
+  });
 }
 
-function togglePause(auto = false) {
-  if (S.status === 'playing') {
-    pause(auto ? 'auto' : 'manual');
-    say(auto ? '창을 벗어나 자동으로 일시정지했어요. P 또는 [계속]으로 이어가세요.' : '일시정지. 시간이 멈췄어요. 💤');
-  } else if (S.status === 'paused' && !auto) {
-    resume();
-    say('다시 진행합니다.');
-  } else return;
-  render();
-}
-
-function restart() {
-  stopClock();
-  $('modal').hidden = true;
-  $('pc').hidden = true;
-  S = newGame();
-  held.clear();
-  near = null;
-  $('result').hidden = true;
-  say('새 게임 준비 완료. [시작] 또는 Enter를 누르세요.');
-  render();
-  $('startBtn').focus();
-}
-
-function select(i) {
-  if (!S.stocks[i] || S.sel === i) return;
-  S.sel = i;
-  render();
-}
-
-// ===== 시간 진행 =====
-function tick() {
-  if (S.status !== 'playing') return;
-  S.day++;
-  maybeNews();
-  const vol = DIFFICULTY[S.diff].vol;
-  for (const st of S.stocks) {
-    const drift = st.driftDays > 0 ? st.drift : 0;
-    if (st.driftDays > 0) st.driftDays--;
-    st.price = roundPrice(st.price * (1 + drift + st.beta * vol * gauss()));
-    st.hist.push(st.price);
-  }
-  checkEnd();
-  render();
-}
-
-function maybeNews() {
-  if (S.day < 2 || Math.random() > NEWS_CHANCE) return;
-  const idx = Math.floor(Math.random() * NEWS.length), n = NEWS[idx];
-  const impact = [];
-  for (const st of S.stocks) {
-    const j = n.jump[st.id];
-    if (j) { st.price = roundPrice(st.price * (1 + j)); impact.push(`${st.name} ${pct(j * 100)}`); }
-    if (n.drift && hasOwn(n.drift, st.id)) { st.drift = n.drift[st.id]; st.driftDays = DRIFT_DAYS; }
-  }
-  addNews({ idx, n, day: S.day, impact: impact.join(' · '), read: false });
-  if (n.crash) { S.shockUntil = performance.now() + 2000; effect('crash'); }
-}
-
-function checkEnd() {
-  const total = totalAssets();
-  if (total >= TARGET) end('won', '목표 달성');
-  else if (total <= LOSS_LIMIT) end('lost', '손실 한도 도달');
-  else if (S.day >= MAX_DAY) end('lost', '기간 만료(목표 미달)');
-}
-
-function lessonFor(result, ret) {
-  const vals = S.stocks.map(st => st.shares * st.price);
-  const sum = vals.reduce((a, b) => a + b, 0);
-  const top = sum ? Math.max(...vals) / sum : 0;
-  if (result === 'won') return top > 0.7
-    ? '성공했지만 한 종목에 집중했어요. 다음엔 분산투자로도 같은 결과를 낼 수 있는지 도전해 보세요.'
-    : '여러 종목에 나눠 담고 뉴스에 맞게 대응했어요. 분산투자와 정보 판단이 수익을 만든 좋은 예입니다.';
-  if (S.trades === 0) return '한 번도 거래하지 않았어요. 현금만 들고 있으면 손실은 없지만 수익도 없습니다.';
-  if (top > 0.7 && sum > 0) return '자산 대부분이 한 종목에 몰려 있었어요. 한 회사의 악재가 전체 손실이 되지 않도록 분산투자를 해 보세요.';
-  if (ret > 0) return '수익은 냈지만 목표에는 못 미쳤어요. 뉴스 직후 여파가 이어지는 며칠을 노려 보세요.';
-  return '손실이 커질 때 미리 팔아 손실을 제한하는 것(손절매)도 중요한 투자 기술입니다.';
-}
-
-function end(result, cause) {
-  stopClock();
-  $('modal').hidden = true;
-  $('pc').hidden = true;
-  S.status = result;
-  held.clear();
-  const ret = (totalAssets() / START_CASH - 1) * 100;
-  store.records.push({ diff: S.diff, result, day: S.day, ret: +ret.toFixed(2), cause });
-  if (store.records.length > 200) store.records.shift();
-  if (store.best === null || ret > store.best) store.best = +ret.toFixed(2);
-  save();
-  $('resultAnt').src = antURL(result === 'won' ? 'happy' : 'sad');
-  $('resultTitle').textContent = result === 'won' ? '성공!' : '실패';
-  $('resultCause').textContent = `${cause} · ${S.day}거래일 · 난이도 ${DIFFICULTY[S.diff].label}`;
-  $('resultRet').textContent = `최종 자산 ${won(totalAssets())} (${pct(ret)})`;
-  $('resultLesson').textContent = '📘 ' + lessonFor(result, ret);
-  $('result').hidden = false;
-  $('resultRestart').focus();
-  effect(result === 'won' ? 'win' : 'lose');
-}
-
-// ===== 방 안의 물건 (Space) =====
+// ===== 방 안의 물건 (E) =====
 const modalOpen = () => !$('modal').hidden;
+const pcOpen = () => !$('pc').hidden;
+const resultOpen = () => !$('result').hidden;
 
-// 책장·칠판·TV·캐비닛을 보는 동안 시간 정지, 닫으면 이어서 진행
 function openModal(title, content) {
   $('modalTitle').textContent = title;
   $('modalBody').replaceChildren(content);
   $('modal').hidden = false;
   held.clear();
-  pause('modal');
-  render();
   $('modalClose').focus();
 }
 function closeModal() {
   if (!modalOpen()) return;
   $('modal').hidden = true;
-  if (S.pauseReason === 'modal') resume();
-  render();
   document.activeElement?.blur();
 }
 const tpl = id => $(id).content.cloneNode(true);
 
-function interact() {
-  if (S.status === 'won' || S.status === 'lost') return;
-  if (!near) return say('근처에 사용할 물건이 없어요. 방향키로 노란 화살표가 뜨는 곳까지 가 보세요.');
+async function interact() {
+  if (!near) return say('근처에 사용할 물건이 없어요. 노란 화살표가 뜨는 곳까지 가 보세요.');
   switch (near.act) {
     case 'trade': return openPC();
     case 'news': return openNews();
     case 'glossary': return openModal('📚 주식 용어 사전', tpl('tpl-glossary'));
     case 'rules': return openModal('🧑‍🏫 게임 규칙', tpl('tpl-rules'));
-    case 'records': return openModal('🗂 플레이 기록', buildRecords());
-    case 'sleep':
-      if (S.status === 'playing' || S.status === 'paused') return togglePause();
-      return say('게임 중에만 쉴 수 있어요. 먼저 [시작]을 누르세요.');
+    case 'records': return openModal('🗂 내 도전 기록', buildRecords());
+    case 'color': {
+      if (!loggedIn()) return say('로그인이 필요해요.');
+      const d = await api('color', { color: near.color });
+      if (d.me) ME = d.me;
+      say(d.ok ? `🎨 캐릭터가 ${BODY_NAME[near.color]}이 되었어요!` : d.msg);
+      return render();
+    }
   }
 }
 
-// 읽지 않은 뉴스를 TV에서 읽으면 📘 배우기가 열리고 '배운 개념'이 늘어남
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+function row(cells, cls) { const tr = el('tr', cls); cells.forEach(([t, c]) => tr.append(el('td', c, t))); return tr; }
+function dlRows(dl, pairs) { dl.replaceChildren(...pairs.flatMap(([k, v, c]) => [el('dt', '', k), el('dd', c, v)])); }
+const impactText = n => n.impacts.slice(0, 4).map(i => `${stockOf(symIndex(i.sym)).name} ${pct(i.j * 100)}`).join(' · ')
+  + (n.impacts.length > 4 ? ` 외 ${n.impacts.length - 4}종목` : '');
+
+// TV: 읽지 않은 뉴스와 📘 배우기 → 배운 개념 증가
 function openNews() {
-  const unread = S.news.filter(e => !e.read);
-  const show = unread.length ? unread : S.news.slice(0, 3);
+  if (!ST) return;
+  const unread = ST.news.filter(n => n.id > readUpTo);
+  const show = unread.length ? unread : ST.news.slice(0, 5);
   if (!show.length) return say('📺 아직 도착한 뉴스가 없어요.');
   const frag = document.createDocumentFragment();
-  for (const e of show) {
-    const div = document.createElement('div');
-    div.className = 'news-card';
-    div.innerHTML = '<img class="px" width="32" height="32" alt=""><div><b></b><p class="sub"></p><p class="learn"></p></div>';
-    div.querySelector('img').src = iconURL(e.n.icon);
-    div.querySelector('b').textContent = e.n.title;
-    div.querySelector('.sub').textContent = `${e.day}일차 · ${e.impact}`;
-    div.querySelector('.learn').textContent = '📘 ' + e.n.lesson;
+  for (const n of show) {
+    const div = el('div', 'news-card');
+    const img = el('img', 'px'); img.src = iconURL(n.icon); img.width = img.height = 32; img.alt = '';
+    const body = el('div');
+    body.append(el('b', n.crash ? 'up' : '', n.title), el('p', 'sub', `${n.day}일차 · ${impactText(n)}`), el('p', 'learn', '📘 ' + n.lesson));
+    div.append(img, body);
     frag.append(div);
-    e.read = true;
-    if (!store.learned.includes(e.idx)) store.learned.push(e.idx);
+    if (!store.learned.includes(n.key)) store.learned.push(n.key);
   }
+  readUpTo = Math.max(readUpTo, ST.news[0]?.id || 0);
   save();
   openModal(unread.length ? `📺 새 뉴스 ${unread.length}건 — 배우기` : '📺 최근 뉴스 다시 보기', frag);
+  render();
 }
 
+// 캐비닛: 변동성 값별로 묶은 내 도전 기록 (카드 3: 값 하나를 바꿔 비교)
 function buildRecords() {
   const frag = tpl('tpl-records-skeleton');
   const recs = store.records;
   const sum = frag.querySelector('.summary');
-  for (const [key, d] of Object.entries(DIFFICULTY)) {
-    const rs = recs.filter(r => r.diff === key);
-    const tr = document.createElement('tr');
-    cell(tr, d.label);
-    cell(tr, rs.length);
-    if (!rs.length) { ['-', '-', '-', '-'].forEach(t => cell(tr, t)); sum.append(tr); continue; }
+  for (const vol of [...new Set(recs.map(r => r.vol))]) {
+    const rs = recs.filter(r => r.vol === vol);
     const rets = rs.map(r => r.ret).sort((a, b) => a - b), m = rets.length >> 1;
     const median = rets.length % 2 ? rets[m] : (rets[m - 1] + rets[m]) / 2;
     const causes = {};
     rs.filter(r => r.result === 'lost').forEach(r => { causes[r.cause] = (causes[r.cause] || 0) + 1; });
-    const topCause = Object.entries(causes).sort((a, b) => b[1] - a[1])[0];
-    cell(tr, `${rs.filter(r => r.result === 'won').length}/${rs.length}`);
-    cell(tr, `${pct(rets[0])} ~ ${pct(rets[rets.length - 1])}`);
-    cell(tr, pct(median));
-    cell(tr, topCause ? `${topCause[0]} (${topCause[1]}회)` : '-');
-    sum.append(tr);
+    const top = Object.entries(causes).sort((a, b) => b[1] - a[1])[0];
+    sum.append(row([[`${(vol * 100).toFixed(1)}%`], [rs.length], [`${rs.filter(r => r.result === 'won').length}/${rs.length}`],
+      [`${pct(rets[0])} ~ ${pct(rets[rets.length - 1])}`], [pct(median)], [top ? `${top[0]} (${top[1]}회)` : '-']]));
   }
+  if (!recs.length) sum.append(row([['아직 기록이 없습니다.']]));
   const body = frag.querySelector('.records');
-  recs.slice(-20).reverse().forEach((r, i) => {
-    const tr = document.createElement('tr');
-    cell(tr, recs.length - i);
-    cell(tr, DIFFICULTY[r.diff].label);
-    cell(tr, r.result === 'won' ? '성공' : '실패', r.result === 'won' ? 'up' : '');
-    cell(tr, `${r.day}일`);
-    cell(tr, pct(r.ret));
-    cell(tr, r.cause);
-    body.append(tr);
-  });
-  if (!recs.length) { const tr = document.createElement('tr'); cell(tr, '아직 기록이 없습니다.'); tr.firstChild.colSpan = 6; body.append(tr); }
+  recs.slice(-20).reverse().forEach((r, i) => body.append(row([[recs.length - i], [r.result === 'won' ? '성공' : '실패', r.result === 'won' ? 'up' : ''],
+    [`${r.day}일`], [pct(r.ret)], [r.cause], [`${(r.vol * 100).toFixed(1)}%`]])));
   frag.querySelector('.best').textContent = store.best === null ? '-' : pct(store.best);
-  frag.querySelector('.learned-count').textContent = `${store.learned.length} / ${NEWS.length}`;
+  frag.querySelector('.learned-count').textContent = `${store.learned.length} / ${META.lessons.length}`;
   return frag;
 }
 
-// ===== 이동 (방향키를 누르고 있는 동안) =====
-function update(dt) {
-  const p = S.player;
-  const canMove = (S.status === 'ready' || S.status === 'playing') && !modalOpen() && !pcOpen();
-  let dx = canMove ? held.has('ArrowRight') - held.has('ArrowLeft') : 0;
-  let dy = canMove ? held.has('ArrowDown') - held.has('ArrowUp') : 0;
-  if (dx && dy) { dx *= Math.SQRT1_2; dy *= Math.SQRT1_2; }
-  p.moving = !!(dx || dy);
-  if (dx && !blocked(p.x + dx * SPEED * dt, p.y)) p.x += dx * SPEED * dt;
-  if (dy && !blocked(p.x, p.y + dy * SPEED * dt)) p.y += dy * SPEED * dt;
-  const n = nearestObject(p.x, p.y);
-  if (n !== near) { near = n; render(); }
+// ===== 도전 결과 (서버가 판정, 바로 다음 도전 시작) =====
+function lessonFor(r) {
+  if (r.result === 'won') return r.top > 0.7
+    ? '성공했지만 한 종목에 집중했어요. 다음엔 여러 업종에 나눠서도 같은 결과를 낼 수 있는지 도전해 보세요.'
+    : '여러 종목에 나눠 담고 뉴스에 맞게 대응했어요. 분산투자와 정보 판단이 수익을 만든 좋은 예입니다.';
+  if (r.trades === 0) return '한 번도 거래하지 않았어요. 현금만 들고 있으면 손실은 없지만 수익도 없습니다.';
+  if (r.top > 0.7) return '자산 대부분이 한 종목에 몰려 있었어요. 한 회사의 악재가 전체 손실이 되지 않도록 업종을 나눠 보세요.';
+  if (r.ret > 0) return '수익은 냈지만 목표에는 못 미쳤어요. TV에서 사건을 읽고 여파가 이어지는 며칠을 노려 보세요.';
+  return '손실이 커질 때 미리 팔아 손실을 제한하는 것(손절매)도 중요한 투자 기술입니다.';
+}
+function showResult(r) {
+  store.records.push({ result: r.result, day: r.days, ret: r.ret, cause: r.cause, vol: META.vol });
+  if (store.records.length > 200) store.records.shift();
+  if (store.best === null || r.ret > store.best) store.best = r.ret;
+  save();
+  closePC(); closeModal(); held.clear();
+  $('resultAnt').src = antURL(r.result === 'won' ? 'happy' : 'sad', ME.color);
+  $('resultTitle').textContent = `${r.round}회차 도전 ${r.result === 'won' ? '성공!' : '실패'}`;
+  $('resultCause').textContent = `${r.cause} · ${r.days}거래일`;
+  $('resultRet').textContent = `최종 자산 ${won(r.total)} (${pct(r.ret)})`;
+  $('resultLesson').textContent = '📘 ' + lessonFor(r) + ' 다음 도전은 100만 원으로 이미 시작됐어요.';
+  $('result').hidden = false;
+  $('resultClose').focus();
+  effect(r.result === 'won' ? 'win' : 'lose');
+}
+function closeResult() { $('result').hidden = true; document.activeElement?.blur(); }
+
+// ===== 책상 컴퓨터: 개미증권 HTS (시장은 멈추지 않음) =====
+const pcChartCtx = $('pcChart').getContext('2d');
+function openPC() {
+  held.clear();
+  $('pc').hidden = false;
+  $('pcQty').value = 1;
+  say('HTS를 켰어요. 업종을 고르고, 종목을 눌러 수량을 정해 매수·매도하세요.');
+  render();
+  $('pcBuy').focus();
+}
+function closePC() {
+  if (!pcOpen()) return;
+  $('pc').hidden = true;
+  document.activeElement?.blur();
+}
+function buildSectors() {
+  const tabs = [['all', '전체'], ...Object.entries(META.sectors).map(([k, s]) => [k, s.name])];
+  $('pcSectors').replaceChildren(...tabs.map(([k, name]) => {
+    const b = el('button', '', name);
+    b.dataset.sector = k;
+    b.addEventListener('click', () => { sector = k; render(); });
+    return b;
+  }));
+}
+const visibleStocks = () => META.stocks.map((s, i) => i).filter(i => sector === 'all' || stockOf(i).sector === sector);
+function select(i) { sel = i; render(); }
+
+// 한국 주식시장 호가 단위, 잔량은 같은 날엔 같은 값
+const tickSize = p => (p < 2000 ? 1 : p < 5000 ? 5 : p < 20000 ? 10 : p < 50000 ? 50 : p < 200000 ? 100 : 500);
+const fakeVol = (...k) => 30 + (k.reduce((h, v) => (h * 31 + v) % 9973, 7) * 37) % 900;
+
+function renderPC() {
+  if (!pcOpen() || !META || !ST) return;
+  const st = stockOf(sel), price = priceOf(sel), { diff, rate } = changeOf(sel);
+  const mine = ME?.hold[st.sym], avg = mine ? mine.cost / mine.qty : 0;
+  $('pcClock').textContent = `${ST.day}일차 · ${ST.month}월 · ${META.weather[ST.weather].name}`;
+  const idx = ST.index, iNow = idx[idx.length - 1], iPrev = idx[idx.length - 2] ?? iNow;
+  $('pcIndex').textContent = `개미지수 ${iNow.toFixed(2)} ${iNow >= iPrev ? '▲' : '▼'}${pct((iNow / iPrev - 1) * 100)}`;
+  $('pcIndex').className = 'pc-index ' + upDown(iNow - iPrev);
+
+  [...$('pcSectors').children].forEach(b => b.setAttribute('aria-selected', b.dataset.sector === sector));
+  $('pcWatch').replaceChildren(...visibleStocks().map(i => {
+    const s = stockOf(i), c = changeOf(i), b = el('button', 'pc-w' + (i === sel ? ' sel' : ''));
+    const img = el('img', 'px'); img.src = iconURL(META.sectors[s.sector].icon); img.width = img.height = 16; img.alt = '';
+    b.append(img, el('span', 'n', s.name + (ME?.hold[s.sym] ? ' ●' : '')), el('span', 'p ' + upDown(c.diff), won(priceOf(i))), el('span', 'c ' + upDown(c.diff), pct(c.rate)));
+    b.addEventListener('click', () => select(i));
+    return b;
+  }));
+  const total = totalAssets(), ret = ME ? (total / META.START_CASH - 1) * 100 : 0;
+  dlRows($('pcAccount'), ME ? [
+    ['총자산', won(total)], ['수익률', pct(ret), upDown(ret)], ['예수금(현금)', won(ME.cash)],
+    ['주식 평가액', won(stockValue())], ['목표까지', total >= META.TARGET ? '달성' : won(META.TARGET - total)],
+  ] : [['로그인', '필요']]);
+
+  const q = $('pcQuote'); q.replaceChildren();
+  const head = el('div', 'pc-q-head');
+  head.append(el('b', '', st.name), el('span', 'pc-sector', META.sectors[st.sector].name));
+  const pr = el('div', 'pc-q-price ' + upDown(diff));
+  pr.append(el('span', 'big', won(price)), el('span', '', `${diff > 0 ? '▲' : diff < 0 ? '▼' : '-'} ${won(Math.abs(diff))} (${pct(rate)})`));
+  const h = ST.hist[sel];
+  q.append(head, pr, el('div', 'pc-q-meta', `60일 고가 ${won(Math.max(...h))} · 저가 ${won(Math.min(...h))}` + (mine ? ` · 보유 ${mine.qty}주 · 평단 ${won(avg)}` : '')));
+  drawPixelChart(pcChartCtx, h, mine ? avg : null, 60);
+
+  document.querySelectorAll('.pc-tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === pcTab));
+  const tab = $('pcTab'); tab.replaceChildren();
+  if (pcTab === 'hold') {
+    const own = holdings();
+    if (!own.length) tab.append(el('p', 'pc-empty', '보유 종목이 없습니다. 오른쪽 주문창에서 매수해 보세요.'));
+    else {
+      const t = el('table'); t.append(row([['종목'], ['보유'], ['평단'], ['현재가'], ['평가금액'], ['손익'], ['수익률']], 'th'));
+      own.forEach(o => { const a = o.cost / o.qty, p = priceOf(o.i), g = (p - a) * o.qty, r = (p / a - 1) * 100;
+        t.append(row([[stockOf(o.i).name], [`${o.qty}주`], [won(a)], [won(p)], [won(p * o.qty)], [signed(g, won(g)), upDown(g)], [pct(r), upDown(r)]])); });
+      tab.append(t);
+    }
+  } else if (pcTab === 'log') {
+    if (!ME?.log.length) tab.append(el('p', 'pc-empty', '이번 도전의 체결 내역이 없습니다.'));
+    else {
+      const t = el('table'); t.append(row([['일차'], ['종목'], ['구분'], ['수량'], ['체결가'], ['금액']], 'th'));
+      ME.log.forEach(l => t.append(row([[`${l.day}일`], [stockOf(symIndex(l.sym)).name], [l.side === 'buy' ? '매수' : '매도', l.side === 'buy' ? 'up' : 'down'], [`${l.qty}주`], [won(l.price)], [won(l.price * l.qty)]])));
+      tab.append(t);
+    }
+  } else if (pcTab === 'info') {
+    tab.append(el('p', '', st.desc));
+    tab.append(el('p', 'pc-sub', `업종 ${META.sectors[st.sector].name} · 시장 민감도(베타) ${st.beta} — 시장 전체가 1% 움직일 때 평균 ${st.beta}% 움직입니다.`));
+    tab.append(el('p', 'pc-sub', '특징: ' + st.tags.map(t => META.tagLabel[t]).join(' / ')));
+    const related = ST.news.filter(n => n.impacts.some(i => i.sym === st.sym));
+    tab.append(el('p', 'pc-sub', related.length ? '이 종목을 움직인 최근 사건' : '최근 이 종목을 움직인 사건이 없습니다.'));
+    related.slice(0, 5).forEach(n => { const j = n.impacts.find(i => i.sym === st.sym).j; tab.append(el('p', 'pc-news ' + upDown(j), `${n.day}일차 · ${n.title} (${pct(j * 100)})`)); });
+  } else {
+    const t = el('table'); t.append(row([['순위'], ['참가자'], ['도전'], ['총자산'], ['수익률']], 'th'));
+    [...ST.players].sort((a, b) => b.total - a.total).forEach((p, k) => {
+      const r = (p.total / META.START_CASH - 1) * 100;
+      t.append(row([[`${k + 1}`], [p.name + (p.id === ME?.id ? ' (나)' : '')], [`${p.round}회차`], [won(p.total)], [pct(r), upDown(r)]]));
+    });
+    tab.append(t);
+  }
+
+  const tk = tickSize(price), book = $('pcBook'); book.replaceChildren();
+  for (let k = 5; k >= -5; k--) {
+    if (k === 0) continue;
+    const vol = fakeVol(ST.day, sel, k), tr = el('tr', k > 0 ? 'ask' : 'bid');
+    const bar = el('td', 'vol', vol.toLocaleString('ko-KR')); bar.style.setProperty('--w', `${vol / 9.3}%`);
+    tr.append(k > 0 ? bar : el('td'), el('td', 'pr' + (Math.abs(k) === 1 ? ' near' : ''), (price + k * tk).toLocaleString('ko-KR')), k < 0 ? bar : el('td'));
+    book.append(tr);
+  }
+
+  const qty = Number($('pcQty').value);
+  $('pcOrderName').textContent = `${st.name} · ${won(price)}`;
+  dlRows($('pcOrderInfo'), [
+    ['주문 금액', Number.isInteger(qty) && qty > 0 ? won(price * qty) : '-'],
+    ['매수 가능', ME ? `${Math.floor(ME.cash / price)}주` : '-'], ['보유 수량', `${mine?.qty || 0}주`],
+  ]);
+  $('pcBuy').disabled = $('pcSell').disabled = !ME;
+  $('pcStatus').textContent = '● 장 운영 중 — 시장은 멈추지 않고, 모든 참가자가 같은 시세를 봅니다 · ↑↓ 종목 · B/S 1주 · Esc 닫기';
+}
+function setQty(kind) {
+  const n = kind === 'max' ? Math.floor((ME?.cash || 0) / priceOf(sel)) : kind === 'all' ? (ME?.hold[stockOf(sel).sym]?.qty || 0) : Number(kind);
+  $('pcQty').value = Math.max(1, n);
+  renderPC();
 }
 
-// ===== 효과 (카드 5): 성공·실패·시장 급락에서만 =====
+// ===== 효과 (카드 5): 도전 성공·실패, 시장 급락에서만 =====
 const SOUNDS = {
   win:   [[523, 0, .15], [659, .15, .15], [784, .3, .3]],
   lose:  [[392, 0, .25], [330, .25, .25], [262, .5, .4]],
   crash: [[180, 0, .2], [140, .2, .3]],
 };
-const FX_TEXT = { win: '목표 달성!', lose: '게임 종료', crash: '시장 급락!' };
+const FX_TEXT = { win: '목표 달성!', lose: '도전 종료', crash: '시장 급락!' };
 const FX_MOOD = { win: 'happy', lose: 'sad', crash: 'shock' };
-let actx = null, fxTimer = null;
+let actx = null, fxTimer = null, shockUntil = 0;
 const liveOsc = new Set();
-
 function beep(notes) {
   if (store.settings.mute) return;
   try {
@@ -408,12 +407,11 @@ function beep(notes) {
   } catch { /* 소리를 못 내도 게임은 계속 */ }
 }
 function stopSounds() { for (const o of liveOsc) { try { o.stop(); } catch { } } liveOsc.clear(); }
-
 function effect(kind) {
-  const fx = $('fx');
+  if (kind === 'crash') shockUntil = performance.now() + 2000;
+  const fx = $('fx'), anim = !store.settings.reduce;
   $('fxText').textContent = FX_TEXT[kind];
-  $('fxAnt').src = antURL(FX_MOOD[kind]);
-  const anim = !store.settings.reduce;
+  $('fxAnt').src = antURL(FX_MOOD[kind], ME?.color);
   fx.className = `fx show fx-${kind}` + (anim ? ' anim' : '');
   if (kind === 'crash' && anim) $('roomWrap').classList.add('shake');
   clearTimeout(fxTimer);
@@ -424,218 +422,104 @@ function effect(kind) {
 // ===== 화면 =====
 function say(text) { $('msg').textContent = text; $('pcMsg').textContent = text; }
 
-function cell(tr, text, cls) { const td = document.createElement('td'); td.textContent = text; if (cls) td.className = cls; tr.append(td); }
-
-function addNews(e) {
-  S.news.unshift(e);
-  if (S.news.length > 30) S.news.pop();
-}
-
-function buildStocks() {
-  STOCKS.forEach((s, i) => {
-    const b = document.createElement('button');
-    b.type = 'button'; b.className = 'stock';
-    b.innerHTML = '<img class="px ic" width="32" height="32" alt=""><span class="nm"></span><span class="pr"></span><span class="ch"></span><small class="hold"></small>';
-    b.querySelector('.ic').src = iconURL(s.id);
-    b.querySelector('.nm').textContent = `${i + 1} ${s.name}`;
-    b.title = s.sector;
-    b.addEventListener('click', () => select(i));
-    $('stocks').append(b);
-  });
-}
-
 function render() {
-  const total = totalAssets(), ret = (total / START_CASH - 1) * 100;
-  $('day').textContent = `${S.day} / ${MAX_DAY}일`;
-  $('cash').textContent = won(S.cash);
-  $('stockValue').textContent = won(stockValue());
-  $('total').textContent = won(total);
-  $('ret').textContent = pct(ret);
-  $('ret').className = ret > 0 ? 'up' : ret < 0 ? 'down' : '';
-  $('learned').textContent = `${store.learned.length} / ${NEWS.length}`;
-  $('progress').value = Math.min(100, Math.max(0, (total - LOSS_LIMIT) / (TARGET - LOSS_LIMIT) * 100));
-  $('badge').textContent = STATUS_LABEL[S.status];
-  $('badge').dataset.s = S.status;
+  if (!META || !ST) return;
+  const total = totalAssets(), ret = ME ? (total / META.START_CASH - 1) * 100 : 0;
+  const idx = ST.index, iNow = idx[idx.length - 1], iPrev = idx[idx.length - 2] ?? iNow;
+  $('round').textContent = ME ? `${ME.round}회차 · ${ST.day - ME.startDay}/${META.CHALLENGE_DAYS}일` : '로그인 필요';
+  $('weather').textContent = `${ST.month}월 · ${META.weather[ST.weather].name}`;
+  $('index').textContent = `${iNow.toFixed(1)} (${pct((iNow / iPrev - 1) * 100)})`;
+  $('index').className = upDown(iNow - iPrev);
+  $('cash').textContent = ME ? won(ME.cash) : '-';
+  $('stockValue').textContent = ME ? won(stockValue()) : '-';
+  $('total').textContent = ME ? won(total) : '-';
+  $('ret').textContent = ME ? pct(ret) : '-';
+  $('ret').className = upDown(ret);
+  $('learned').textContent = `${store.learned.length} / ${META.lessons.length}`;
+  $('progress').value = ME ? Math.min(100, Math.max(0, (total - META.LOSS_LIMIT) / (META.TARGET - META.LOSS_LIMIT) * 100)) : 50;
+  $('who').textContent = ME ? `👤 ${ME.name}` : '';
+  $('logoutBtn').hidden = !ME;
 
-  [...$('stocks').children].forEach((b, i) => {
-    const st = S.stocks[i], prev = st.hist[st.hist.length - 2] ?? st.price;
-    const ch = (st.price / prev - 1) * 100;
-    b.setAttribute('aria-pressed', i === S.sel);
-    b.querySelector('.pr').textContent = won(st.price);
-    const chEl = b.querySelector('.ch');
-    chEl.textContent = pct(ch);
-    chEl.className = 'ch ' + (ch > 0 ? 'up' : ch < 0 ? 'down' : '');
-    b.querySelector('.hold').textContent = st.shares
-      ? `보유 ${st.shares}주 · 평단 ${won(st.cost / st.shares)} · 손익 ${signed(st.shares * st.price - st.cost, won(st.shares * st.price - st.cost))}`
-      : '보유 0주';
-  });
-  const playing = S.status === 'playing', paused = S.status === 'paused';
-  $('startBtn').disabled = S.status !== 'ready';
-  $('buyBtn').disabled = $('sellBtn').disabled = !playing || !atDesk();
-  $('pauseBtn').disabled = !(playing || paused) || modalOpen();
-  $('pauseBtn').firstChild.textContent = paused ? '계속 ' : '일시정지 ';
-  $('diff').disabled = playing || paused;
   $('prompt').textContent = near
-    ? `[Space] ${near.label}`
-    : '←↑↓→ 이동 · 물건 앞에서 Space · 💻 책상 앞에서 B 매수/S 매도 · 1·2·3 종목 · P 일시정지 · R 다시 시작';
+    ? (near.act === 'trade' ? `[E] 💻 컴퓨터 켜기 (HTS) · B 매수 · S 매도 — 선택 종목: ${stockOf(sel).name} ${won(priceOf(sel))}` : `[E] ${near.label}`)
+    : '←↑↓→ 이동 · 물건 앞에서 E · 💻 책상에서 HTS로 거래 · 📺 TV에서 뉴스 배우기 · 🎨 고양이 옆 발판에서 색 바꾸기';
   $('prompt').classList.toggle('on', !!near);
-  const latest = S.news[0];
+
+  const latest = ST.news[0];
   $('ticker').hidden = !latest;
-  if (latest) $('ticker').textContent = `📰 ${latest.day}일차 ${latest.n.title} — ${latest.impact}` + (S.news.some(e => !e.read) ? ' · 📺 TV에서 배우기!' : '');
-  renderPC();
-}
+  if (latest) $('ticker').textContent = `📰 ${latest.day}일차 ${latest.title}` + (ST.news.some(n => n.id > readUpTo) ? ' · 📺 TV에서 배우기!' : '');
 
-// ===== 책상 컴퓨터: 개미증권 HTS (보는 동안에도 시장은 계속 움직임) =====
-const pcOpen = () => !$('pc').hidden;
-const pcChartCtx = $('pcChart').getContext('2d');
-let pcTab = 'hold';
-
-function openPC() {
-  held.clear();
-  $('pc').hidden = false;
-  $('pcQty').value = 1;
-  say(S.status === 'playing' ? '로그인 완료. 종목을 고르고 수량을 정해 매수·매도하세요.' : '로그인 완료. 게임이 진행 중일 때 주문할 수 있어요.');
-  renderPC();
-  $('pcBuy').focus();
-}
-function closePC() {
-  if (!pcOpen()) return;
-  $('pc').hidden = true;
-  document.activeElement?.blur();
-  say('컴퓨터에서 로그아웃했어요.');
-  render();
-}
-
-const changeOf = st => { const prev = st.hist[st.hist.length - 2] ?? st.price; return { diff: st.price - prev, rate: (st.price / prev - 1) * 100 }; };
-const upDown = n => (n > 0 ? 'up' : n < 0 ? 'down' : '');
-// 한국 주식시장 호가 단위
-const tickSize = p => (p < 2000 ? 1 : p < 5000 ? 5 : p < 20000 ? 10 : p < 50000 ? 50 : p < 200000 ? 100 : 500);
-const fakeVol = (...k) => 30 + (k.reduce((h, v) => (h * 31 + v) % 9973, 7) * 37) % 900; // 같은 날엔 같은 잔량
-
-function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
-function row(cells, cls) { const tr = el('tr', cls); cells.forEach(([t, c]) => tr.append(el('td', c, t))); return tr; }
-function dlRows(dl, pairs) { dl.replaceChildren(...pairs.flatMap(([k, v, c]) => [el('dt', '', k), el('dd', c, v)])); }
-
-function renderPC() {
-  if (!pcOpen()) return;
-  const st = S.stocks[S.sel], { diff, rate } = changeOf(st), avg = st.shares ? st.cost / st.shares : 0;
-  const total = totalAssets(), ret = (total / START_CASH - 1) * 100;
-  $('pcClock').textContent = `${S.day}일차 / ${MAX_DAY}일 · ${STATUS_LABEL[S.status]}`;
-
-  // 관심 종목
-  $('pcWatch').replaceChildren(...S.stocks.map((s, i) => {
-    const c = changeOf(s), b = el('button', 'pc-w' + (i === S.sel ? ' sel' : ''));
-    const img = el('img', 'px'); img.src = iconURL(s.id); img.width = img.height = 20; img.alt = '';
-    b.append(img, el('span', 'n', `${i + 1} ${s.name}`), el('span', 'p ' + upDown(c.diff), won(s.price)), el('span', 'c ' + upDown(c.diff), pct(c.rate)));
-    b.addEventListener('click', () => select(i));
-    return b;
+  $('scoreboard').replaceChildren(...[...ST.players].sort((a, b) => b.total - a.total).map((p, k) => {
+    const li = el('li', p.id === ME?.id ? 'me' : ''), r = (p.total / META.START_CASH - 1) * 100;
+    const sw = el('i'); sw.style.background = BODY[p.color]?.r || BODY.red.r;
+    li.append(el('span', 'rk', `${k + 1}`), sw, el('span', 'nm', p.name), el('span', 'rt ' + upDown(r), pct(r)));
+    return li;
   }));
-  dlRows($('pcAccount'), [
-    ['총자산', won(total)], ['수익률', pct(ret), upDown(ret)], ['예수금(현금)', won(S.cash)],
-    ['주식 평가액', won(stockValue())], ['목표까지', total >= TARGET ? '달성' : won(TARGET - total)],
-  ]);
-
-  // 현재가
-  const q = $('pcQuote'); q.replaceChildren();
-  const head = el('div', 'pc-q-head');
-  head.append(el('b', '', st.name), el('span', 'pc-sector', st.sector));
-  const price = el('div', 'pc-q-price ' + upDown(diff));
-  price.append(el('span', 'big', won(st.price)), el('span', '', `${diff > 0 ? '▲' : diff < 0 ? '▼' : '-'} ${won(Math.abs(diff))} (${pct(rate)})`));
-  const meta = el('div', 'pc-q-meta', `기간 고가 ${won(Math.max(...st.hist))} · 저가 ${won(Math.min(...st.hist))}` + (st.shares ? ` · 보유 ${st.shares}주 · 평단 ${won(avg)}` : ''));
-  q.append(head, price, meta);
-  drawPixelChart(pcChartCtx, st.hist, st.shares ? avg : null, MAX_DAY);
-
-  // 아래 탭: 잔고 / 체결 내역 / 기업 정보
-  document.querySelectorAll('.pc-tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === pcTab));
-  const tab = $('pcTab'); tab.replaceChildren();
-  if (pcTab === 'hold') {
-    const owned = S.stocks.filter(s => s.shares);
-    if (!owned.length) tab.append(el('p', 'pc-empty', '보유 종목이 없습니다. 오른쪽 주문창에서 매수해 보세요.'));
-    else {
-      const t = el('table'); t.append(row([['종목'], ['보유'], ['평단'], ['현재가'], ['평가금액'], ['손익'], ['수익률']], 'th'));
-      owned.forEach(s => { const a = s.cost / s.shares, g = (s.price - a) * s.shares, r = (s.price / a - 1) * 100;
-        t.append(row([[s.name], [`${s.shares}주`], [won(a)], [won(s.price)], [won(s.price * s.shares)], [signed(g, won(g)), upDown(g)], [pct(r), upDown(r)]])); });
-      tab.append(t);
-    }
-  } else if (pcTab === 'log') {
-    if (!S.log.length) tab.append(el('p', 'pc-empty', '이번 판의 체결 내역이 없습니다.'));
-    else {
-      const t = el('table'); t.append(row([['일차'], ['종목'], ['구분'], ['수량'], ['체결가'], ['금액']], 'th'));
-      S.log.slice(0, 30).forEach(l => t.append(row([[`${l.day}일`], [l.name], [l.side === 'buy' ? '매수' : '매도', l.side === 'buy' ? 'up' : 'down'], [`${l.qty}주`], [won(l.price)], [won(l.price * l.qty)]])));
-      tab.append(t);
-    }
-  } else {
-    tab.append(el('p', '', st.desc));
-    tab.append(el('p', 'pc-sub', `시장 민감도(베타) ${st.beta} — 시장 전체가 1% 움직일 때 평균 ${st.beta}% 움직입니다.`));
-    const related = S.news.filter(e => e.n.jump[st.id]);
-    tab.append(el('p', 'pc-sub', related.length ? '이 종목 관련 뉴스' : '아직 이 종목 관련 뉴스가 없습니다.'));
-    related.slice(0, 5).forEach(e => tab.append(el('p', 'pc-news ' + upDown(e.n.jump[st.id]), `${e.day}일차 · ${e.n.title} (${pct(e.n.jump[st.id] * 100)})`)));
-  }
-
-  // 호가: 위 5칸 매도 대기, 아래 5칸 매수 대기
-  const t = tickSize(st.price), book = $('pcBook'); book.replaceChildren();
-  for (let k = 5; k >= -5; k--) {
-    if (k === 0) continue;
-    const p = st.price + k * t, vol = fakeVol(S.day, S.sel, k);
-    const tr = el('tr', k > 0 ? 'ask' : 'bid');
-    const bar = el('td', 'vol'); bar.style.setProperty('--w', `${vol / 9.3}%`); bar.textContent = vol.toLocaleString('ko-KR');
-    tr.append(k > 0 ? bar : el('td'), el('td', 'pr' + (k === 1 || k === -1 ? ' near' : ''), p.toLocaleString('ko-KR')), k < 0 ? bar : el('td'));
-    book.append(tr);
-  }
-
-  // 주문
-  const qty = Number($('pcQty').value), max = Math.floor(S.cash / st.price);
-  $('pcOrderName').textContent = `${S.sel + 1} ${st.name} · ${won(st.price)}`;
-  dlRows($('pcOrderInfo'), [
-    ['주문 금액', Number.isInteger(qty) && qty > 0 ? won(st.price * qty) : '-'],
-    ['매수 가능', `${max}주`], ['보유 수량', `${st.shares}주`],
-  ]);
-  const canTrade = S.status === 'playing';
-  $('pcBuy').disabled = $('pcSell').disabled = !canTrade;
-  $('pcStatus').textContent = (canTrade ? '● 장 운영 중 — 컴퓨터를 보는 동안에도 주가는 계속 움직입니다' : `● ${STATUS_LABEL[S.status]} — 주문할 수 없습니다`)
-    + ' · ↑↓ 종목 · B/S 1주 · P 일시정지 · Esc 로그아웃';
-}
-
-function setQty(kind) {
-  const st = S.stocks[S.sel];
-  const n = kind === 'max' ? Math.floor(S.cash / st.price) : kind === 'all' ? st.shares : Number(kind);
-  $('pcQty').value = Math.max(1, n);
   renderPC();
 }
 
-const roomCtx = $('room').getContext('2d');
+// 이름표: 방 그림 위에 HTML로 띄움 (그림 크기가 바뀌어도 비율로 따라감)
+function renderLabels(ants) {
+  const box = $('labels'), want = new Set(ants.map(a => a.id));
+  for (const n of [...box.children]) if (!want.has(n.dataset.id)) n.remove();
+  for (const a of ants) {
+    let n = box.querySelector(`[data-id="${a.id}"]`);
+    if (!n) { n = el('span', 'tag'); n.dataset.id = a.id; box.append(n); }
+    if (n.textContent !== a.name) n.textContent = a.name;
+    n.classList.toggle('me', a.me);
+    n.style.left = `${a.x / 3.2}%`;
+    n.style.top = `${(a.y - 18) / 1.76}%`;
+  }
+}
 
-function mood(now) {
-  if (now < S.shockUntil) return 'shock';
-  if (S.status === 'paused') return 'sleep';
-  if (S.status === 'won') return 'happy';
-  if (S.status === 'lost') return 'sad';
-  const r = totalAssets() / START_CASH - 1;
-  return r > 0.01 ? 'happy' : r < -0.01 ? 'sad' : 'normal';
+// ===== 이동 (방향키를 누르고 있는 동안) =====
+const roomCtx = $('room').getContext('2d');
+let lastSent = 0, sentX = 0, sentY = 0;
+function update(dt, now) {
+  const canMove = loggedIn() && !modalOpen() && !pcOpen() && !resultOpen() && $('login').hidden;
+  let dx = canMove ? held.has('ArrowRight') - held.has('ArrowLeft') : 0;
+  let dy = canMove ? held.has('ArrowDown') - held.has('ArrowUp') : 0;
+  if (dx && dy) { dx *= Math.SQRT1_2; dy *= Math.SQRT1_2; }
+  P.moving = !!(dx || dy);
+  if (dx && !blocked(P.x + dx * SPEED * dt, P.y)) P.x += dx * SPEED * dt;
+  if (dy && !blocked(P.x, P.y + dy * SPEED * dt)) P.y += dy * SPEED * dt;
+  const n = nearestObject(P.x, P.y);
+  if (n !== near) { near = n; render(); }
+  if (ME && now - lastSent > 150 && (Math.round(P.x) !== sentX || Math.round(P.y) !== sentY)) {
+    lastSent = now; sentX = Math.round(P.x); sentY = Math.round(P.y);
+    api('move', { x: sentX, y: sentY });
+  }
 }
 
 let last = performance.now();
 function loop(now) {
-  update(Math.min(0.05, (now - last) / 1000)); // 탭 복귀 직후 순간이동 방지
+  update(Math.min(0.05, (now - last) / 1000), now); // 탭 복귀 직후 순간이동 방지
   last = now;
-  const still = store.settings.reduce;
-  drawRoom(roomCtx, {
-    status: S.status, day: S.day, maxDay: MAX_DAY, flash: now < S.shockUntil,
-    hist: S.stocks[S.sel].hist, unread: S.news.some(e => !e.read), near,
-    blink: !still && Math.floor(now / 400) % 2 === 0,
-    player: { x: S.player.x, y: S.player.y, mood: mood(now), bob: !still && S.player.moving && Math.floor(now / 150) % 2 === 0 },
-  });
+  if (META && ST) {
+    const still = store.settings.reduce;
+    const ants = ST.players.filter(p => p.id !== ME?.id).map(p => {
+      const pos = others.get(p.id) || p.pos, r = p.total / META.START_CASH - 1;
+      return { id: p.id, name: p.name, x: pos.x, y: pos.y, color: p.color, mood: r > 0.01 ? 'happy' : r < -0.01 ? 'sad' : 'normal' };
+    });
+    if (ME) {
+      const r = totalAssets() / META.START_CASH - 1;
+      ants.push({ id: ME.id, name: ME.name, me: true, x: P.x, y: P.y, color: ME.color,
+        mood: now < shockUntil ? 'shock' : r > 0.01 ? 'happy' : r < -0.01 ? 'sad' : 'normal',
+        bob: !still && P.moving && Math.floor(now / 150) % 2 === 0 });
+    }
+    drawRoom(roomCtx, {
+      day: ST.day, weather: ST.weather, anim: still ? 0 : Math.floor(now / 120), flash: now < shockUntil,
+      hist: ST.hist[sel], unread: ST.news.some(n => n.id > readUpTo), near, myColor: ME?.color,
+      blink: !still && Math.floor(now / 400) % 2 === 0, ants,
+    });
+    renderLabels(ants);
+  }
   requestAnimationFrame(loop);
 }
 
 // ===== 입력 연결 =====
-$('startBtn').addEventListener('click', start);
-$('buyBtn').addEventListener('click', buy);
-$('sellBtn').addEventListener('click', sell);
-$('pauseBtn').addEventListener('click', () => togglePause());
-$('restartBtn').addEventListener('click', restart);
-$('resultRestart').addEventListener('click', restart);
-$('modalClose').addEventListener('click', () => closeModal());
+$('modalClose').addEventListener('click', closeModal);
+$('resultClose').addEventListener('click', closeResult);
 $('pcClose').addEventListener('click', closePC);
 $('pcBuy').addEventListener('click', () => trade('buy', Number($('pcQty').value)));
 $('pcSell').addEventListener('click', () => trade('sell', Number($('pcQty').value)));
@@ -644,18 +528,21 @@ document.querySelectorAll('.pc-quick button').forEach(b => b.addEventListener('c
 document.querySelectorAll('.pc-tabs button').forEach(b => b.addEventListener('click', () => { pcTab = b.dataset.tab; renderPC(); }));
 
 const ARROWS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
-const KEYS = {
-  KeyB: buy, KeyS: sell, KeyP: () => togglePause(), KeyR: restart,
-  Digit1: () => select(0), Digit2: () => select(1), Digit3: () => select(2),
-  Numpad1: () => select(0), Numpad2: () => select(1), Numpad3: () => select(2),
-};
 document.addEventListener('keydown', e => {
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || !$('login').hidden) return;
   const t = e.target instanceof Element ? e.target : document.body;
+  if (resultOpen()) {
+    if (['Escape', 'KeyE'].includes(e.code)) { e.preventDefault(); closeResult(); }
+    return;
+  }
   if (pcOpen()) {
-    if (e.code === 'Escape') { e.preventDefault(); return closePC(); }
+    if (e.code === 'Escape' || (e.code === 'KeyE' && !t.closest('input'))) { e.preventDefault(); return closePC(); }
     if (t.closest('input')) return; // 수량 입력 중
-    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') { e.preventDefault(); return select((S.sel + (e.code === 'ArrowDown' ? 1 : 2)) % 3); }
+    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+      e.preventDefault();
+      const list = visibleStocks(), k = list.indexOf(sel);
+      return select(list[(k + (e.code === 'ArrowDown' ? 1 : list.length - 1)) % list.length] ?? list[0]);
+    }
     if (ARROWS.has(e.code)) return e.preventDefault();
   }
   if (t.closest('select, input, textarea')) return;
@@ -663,26 +550,17 @@ document.addEventListener('keydown', e => {
   // 키를 누르고 있을 때의 자동 반복은 무시 → 키 한 번 = 동작 한 번
   if (e.repeat) return;
   if (modalOpen()) {
-    if (['Escape', 'Space', 'Enter', 'KeyE'].includes(e.code)) { e.preventDefault(); closeModal(); }
+    if (['Escape', 'KeyE'].includes(e.code)) { e.preventDefault(); closeModal(); }
     return;
   }
-  if ((e.code === 'Space' || e.code === 'Enter') && t.closest('button')) return; // 버튼 자체 동작에 맡김
-  if (e.code === 'Space' || e.code === 'KeyE') { e.preventDefault(); return interact(); }
-  if (e.code === 'Enter' && S.status === 'ready') { e.preventDefault(); return start(); }
-  const fn = KEYS[e.code];
-  if (fn) { e.preventDefault(); fn(); }
+  if (e.code === 'KeyE') { e.preventDefault(); return interact(); }
+  if (e.code === 'KeyB') { e.preventDefault(); return trade('buy', 1); }
+  if (e.code === 'KeyS') { e.preventDefault(); return trade('sell', 1); }
 });
 document.addEventListener('keyup', e => held.delete(e.code));
+// 창을 벗어나면 눌린 키만 초기화 (시장은 모두의 것이라 멈추지 않음)
+window.addEventListener('blur', () => held.clear());
 
-// 포커스 이탈 시 자동 일시정지 + 눌린 키 초기화 (복귀 직후 혼자 걷거나 여러 날이 지나는 것 방지)
-window.addEventListener('blur', () => { held.clear(); togglePause(true); });
-document.addEventListener('visibilitychange', () => { if (document.hidden) { held.clear(); togglePause(true); } });
-
-$('diff').addEventListener('change', e => {
-  store.settings.diff = e.target.value; save();
-  if (S.status === 'ready') S.diff = e.target.value;
-  say(`난이도(변동성)를 ${DIFFICULTY[e.target.value].label}(으)로 바꿨어요. ${S.status === 'ready' ? '' : '다음 판부터 적용됩니다.'}`);
-});
 $('mute').addEventListener('change', e => {
   store.settings.mute = e.target.checked; save();
   if (e.target.checked) stopSounds();
@@ -693,12 +571,10 @@ $('reduce').addEventListener('change', e => {
 });
 
 // ===== 시작 =====
-$('diff').value = store.settings.diff;
 $('mute').checked = store.settings.mute;
 $('reduce').checked = store.settings.reduce;
 if (note) { $('notice').textContent = '⚠ ' + note; $('notice').hidden = false; }
 $('logo').src = antURL('happy');
-buildStocks();
-say('[시작] 또는 Enter를 누르면 게임이 시작됩니다. 시작 전에도 방을 돌아다닐 수 있어요.');
-render();
+connect();
+api('me').then(d => { if (d.ok) { if (d.me) ME = d.me; say('다시 오셨네요! 방향키로 움직이고, 물건 앞에서 E를 누르세요.'); render(); } else showLogin(); });
 requestAnimationFrame(loop);

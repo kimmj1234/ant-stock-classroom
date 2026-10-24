@@ -11,13 +11,8 @@
 <header>
   <h1><img id="logo" class="px" width="32" height="32" alt=""> 개미 투자 교실</h1>
   <div class="settings">
-    <label>난이도(변동성)
-      <select id="diff">
-        <option value="low">낮음</option>
-        <option value="mid">보통</option>
-        <option value="high">높음</option>
-      </select>
-    </label>
+    <span id="who" class="who"></span>
+    <button id="logoutBtn" class="mini" hidden>로그아웃</button>
     <label><input type="checkbox" id="mute"> 소리 끄기</label>
     <label><input type="checkbox" id="reduce"> 움직임 줄이기</label>
   </div>
@@ -27,9 +22,10 @@
 <main class="layout">
   <section class="stage">
     <div class="panel hud" aria-label="현재 상태">
-      <span id="badge" class="badge"></span>
       <dl class="stats">
-        <div><dt>거래일</dt><dd id="day"></dd></div>
+        <div><dt>도전</dt><dd id="round"></dd></div>
+        <div><dt>날씨</dt><dd id="weather"></dd></div>
+        <div><dt>개미지수</dt><dd id="index"></dd></div>
         <div><dt>현금</dt><dd id="cash"></dd></div>
         <div><dt>주식 평가액</dt><dd id="stockValue"></dd></div>
         <div><dt>총자산</dt><dd id="total"></dd></div>
@@ -39,30 +35,35 @@
       <div class="goal">
         <span>실패 85만(-15%)</span>
         <progress id="progress" max="100" value="50"></progress>
-        <span>성공 115만(+15%)</span>
+        <span>성공 115만(+15%) · 60거래일 안에</span>
       </div>
     </div>
 
     <div id="roomWrap" class="room-wrap">
       <canvas id="room" class="px room" width="320" height="176" role="img"
-        aria-label="개미 투자자의 사무실. 방향키로 개미를 움직이고 물건 앞에서 Space를 누릅니다."></canvas>
+        aria-label="개미 투자자들의 사무실. 방향키로 개미를 움직이고 물건 앞에서 E를 누릅니다."></canvas>
+      <div id="labels" class="labels" aria-hidden="true"></div>
       <p id="ticker" class="ticker" hidden></p>
+      <ol id="scoreboard" class="scoreboard" aria-label="접속 중인 참가자 순위"></ol>
       <p id="prompt" class="prompt"></p>
       <p id="msg" class="msg" aria-live="polite"></p>
     </div>
-
-    <div class="panel">
-      <div class="controls">
-        <button id="startBtn" class="primary">시작 <kbd>Enter</kbd></button>
-        <button id="buyBtn" class="buy">1주 매수 <kbd>B</kbd></button>
-        <button id="sellBtn" class="sell">1주 매도 <kbd>S</kbd></button>
-        <button id="pauseBtn">일시정지 <kbd>P</kbd></button>
-        <button id="restartBtn">다시 시작 <kbd>R</kbd></button>
-        <div id="stocks" class="stocks" aria-label="종목 (1·2·3)"></div>
-      </div>
-    </div>
   </section>
 </main>
+
+<!-- 처음 접속: 닉네임이 없으면 계정 생성, 있으면 비밀번호 확인 후 로그인 -->
+<div id="login" class="modal" hidden>
+  <form id="loginForm" class="modal-card login-card" aria-labelledby="loginTitle">
+    <img id="loginAnt" class="px" width="64" height="64" alt="">
+    <h2 id="loginTitle">개미 투자 교실 입장</h2>
+    <p class="small">처음 쓰는 닉네임이면 계정이 자동으로 만들어지고, 이미 있는 닉네임이면 비밀번호가 같을 때 로그인됩니다.</p>
+    <label>닉네임 (1~10자)<input id="loginName" name="username" autocomplete="username" maxlength="10" required></label>
+    <label>비밀번호 (4~30자)<input id="loginPw" name="password" type="password" autocomplete="current-password" minlength="4" maxlength="30" required></label>
+    <p class="small warn">실명·연락처 대신 별명을 쓰고, 다른 사이트의 비밀번호는 쓰지 마세요.</p>
+    <p id="loginMsg" class="login-msg" aria-live="polite"></p>
+    <button class="primary" type="submit">입장하기</button>
+  </form>
+</div>
 
 <div id="modal" class="modal" hidden>
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
@@ -78,11 +79,12 @@
       <div class="pc-titlebar">
         <span>📈 개미증권 HTS</span>
         <span id="pcClock"></span>
-        <button id="pcClose" class="pc-x">로그아웃 <kbd>Esc</kbd></button>
+        <button id="pcClose" class="pc-x">닫기 <kbd>Esc</kbd></button>
       </div>
       <div class="pc-body">
         <section class="pc-box pc-watch-box" aria-label="관심 종목과 계좌">
-          <h3>관심 종목 <small>↑↓</small></h3>
+          <p id="pcIndex" class="pc-index"></p>
+          <div id="pcSectors" class="pc-sectors" role="tablist" aria-label="업종"></div>
           <div id="pcWatch" class="pc-watch"></div>
           <h3>내 계좌</h3>
           <dl id="pcAccount" class="pc-dl"></dl>
@@ -90,11 +92,12 @@
         <section class="pc-box pc-main" aria-label="현재가와 차트">
           <div id="pcQuote" class="pc-quote"></div>
           <canvas id="pcChart" class="px pc-chart" width="300" height="90" role="img" aria-label="선택한 종목의 일봉 차트"></canvas>
-          <p class="pc-legend">일봉: 빨강 상승 · 파랑 하락 · 주황 점선 = 내 평단</p>
+          <p class="pc-legend">최근 60거래일 일봉: 빨강 상승 · 파랑 하락 · 주황 점선 = 내 평단</p>
           <div class="pc-tabs" role="tablist">
             <button data-tab="hold" role="tab">잔고</button>
             <button data-tab="log" role="tab">체결 내역</button>
             <button data-tab="info" role="tab">기업 정보</button>
+            <button data-tab="rank" role="tab">참가자 순위</button>
           </div>
           <div id="pcTab" class="pc-tab"></div>
         </section>
@@ -125,12 +128,12 @@
 
 <template id="tpl-rules">
   <ul class="rules">
-    <li>시작 자금 <b>100만 원</b>. 1거래일은 1.2초씩 흐르고 최대 <b>60거래일</b>입니다.</li>
-    <li><b>성공</b>: 총자산 115만 원(+15%) 이상</li>
-    <li><b>실패</b>: 총자산 85만 원(-15%) 이하, 또는 60일이 지나도 목표 미달</li>
-    <li>컴퓨터 책상 앞에서 버튼 한 번(또는 키 한 번)에 <b>1주</b>씩 사고팝니다.</li>
-    <li>뉴스가 오면 TV에 <b>!</b>가 뜹니다. TV 앞에서 Space를 눌러 📘 배우기를 읽으면 배운 개념이 늘어납니다.</li>
-    <li>책장·칠판·캐비닛·TV를 보는 동안에는 시간이 멈춥니다. 창을 벗어나도 자동으로 일시정지됩니다.</li>
+    <li>링크에 접속한 모든 사람이 <b>같은 시장</b>에서 함께 투자합니다. 난이도는 없고 모두 같은 조건입니다.</li>
+    <li>시장은 멈추지 않고 1.2초마다 하루씩 흐릅니다. 매일 날씨가 바뀌고, 신제품·신약·실적·금리·유가 같은 사건이 자동으로 일어납니다.</li>
+    <li>각자 <b>100만 원</b>으로 도전을 시작합니다. 총자산 <b>115만 원(+15%)</b>이면 <b>성공</b>, <b>85만 원(-15%) 이하</b>이거나 <b>60거래일</b> 안에 목표에 못 미치면 <b>실패</b>입니다.</li>
+    <li>결과가 나오면 기록을 남기고 바로 다음 도전이 100만 원으로 시작됩니다.</li>
+    <li><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> 이동, 물건 앞에서 <kbd>E</kbd>. 💻 컴퓨터에서 종목을 고르고 주문하며, 책상 앞에서는 <kbd>B</kbd> 매수 · <kbd>S</kbd> 매도(1주)도 됩니다.</li>
+    <li>📺 TV: 뉴스와 📘 배우기 · 📚 책장: 용어 · 🗂 캐비닛: 내 기록 · 🎨 고양이 옆 발판: 캐릭터 색 바꾸기</li>
   </ul>
 </template>
 
@@ -141,24 +144,27 @@
     <dt>평균단가(평단)</dt><dd>여러 번 산 주식의 1주당 평균 구매 가격. 현재가가 평단보다 높으면 이익입니다.</dd>
     <dt>평가손익</dt><dd>지금 팔면 얻을 이익·손실. 팔기 전까지는 확정되지 않습니다.</dd>
     <dt>수익률</dt><dd>(현재 자산 ÷ 시작 자산 − 1) × 100%.</dd>
-    <dt>변동성</dt><dd>주가가 오르내리는 폭. 클수록 큰 이익도, 큰 손실도 가능합니다.</dd>
-    <dt>분산투자</dt><dd>여러 종목에 나눠 투자해 한 회사의 악재에 따른 손실을 줄이는 방법.</dd>
-    <dt>경기방어주</dt><dd>불황에도 수요가 꾸준한 식품·생활필수품 기업의 주식.</dd>
+    <dt>업종(섹터)</dt><dd>비슷한 일을 하는 회사들의 묶음. 같은 업종은 같은 뉴스에 함께 움직이는 경우가 많습니다.</dd>
+    <dt>지수</dt><dd>여러 종목의 가격을 하나로 묶은 시장 온도계. 개미지수는 30종목 평균이 처음보다 얼마나 변했는지 보여 줍니다.</dd>
+    <dt>베타(시장 민감도)</dt><dd>시장 전체가 1% 움직일 때 그 종목이 평균 몇 % 움직이는지. 1보다 크면 시장보다 크게 흔들립니다.</dd>
+    <dt>호가</dt><dd>사고 싶은 가격(매수 호가)과 팔고 싶은 가격(매도 호가). 가격마다 기다리는 수량을 잔량이라고 합니다.</dd>
+    <dt>분산투자</dt><dd>여러 종목·업종에 나눠 투자해 한 회사의 악재에 따른 손실을 줄이는 방법.</dd>
+    <dt>경기방어주</dt><dd>불황에도 수요가 꾸준한 식품·통신·생활용품 기업의 주식.</dd>
     <dt>손절매</dt><dd>더 큰 손실을 막기 위해 손해를 보고 파는 것.</dd>
   </dl>
 </template>
 
 <template id="tpl-records-skeleton">
-  <p class="small">최고 수익률 <b class="best"></b> · 배운 개념 <b class="learned-count"></b> · 최근 20판까지 표시</p>
+  <p class="small">최고 수익률 <b class="best"></b> · 배운 개념 <b class="learned-count"></b> · 이 브라우저에 저장된 내 도전 기록입니다.</p>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>난이도</th><th>판 수</th><th>성공</th><th>수익률 범위</th><th>중앙값</th><th>가장 잦은 실패 원인</th></tr></thead>
+      <thead><tr><th>변동성 값</th><th>도전 수</th><th>성공</th><th>수익률 범위</th><th>중앙값</th><th>가장 잦은 실패 원인</th></tr></thead>
       <tbody class="summary"></tbody>
     </table>
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>#</th><th>난이도</th><th>결과</th><th>거래일</th><th>수익률</th><th>원인</th></tr></thead>
+      <thead><tr><th>#</th><th>결과</th><th>거래일</th><th>수익률</th><th>원인</th><th>변동성 값</th></tr></thead>
       <tbody class="records"></tbody>
     </table>
   </div>
@@ -171,7 +177,7 @@
     <p id="resultCause"></p>
     <p id="resultRet" class="big"></p>
     <p id="resultLesson" class="lesson"></p>
-    <button id="resultRestart" class="primary">다시 시작 <kbd>R</kbd></button>
+    <button id="resultClose" class="primary">다음 도전 계속하기 <kbd>E</kbd></button>
   </div>
 </div>
 <div id="fx" class="fx" aria-hidden="true"><div class="fx-box"><img id="fxAnt" class="px" width="128" height="128" alt=""><span id="fxText"></span></div></div>

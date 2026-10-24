@@ -35,7 +35,7 @@ header h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap:
 .badge[data-s="paused"] { background: #8a76b8; color: #fff; }
 .badge[data-s="won"] { background: var(--gold); }
 .badge[data-s="lost"] { background: #6b7280; color: #fff; }
-.stats { flex: 3 1 480px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin: 0; min-width: 0; }
+.stats { flex: 3 1 640px; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; margin: 0; min-width: 0; }
 .stats dt { font-size: 12px; color: var(--mute); }
 .stats dd { margin: 0; font-weight: bold; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .goal { flex: 1 1 220px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--mute); }
@@ -48,7 +48,7 @@ header h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap:
 /* 방 */
 /* 방은 가로를 꽉 채우되, 아래 조작 버튼이 화면 안에 남도록 화면 높이에 맞춰 줄어듦 */
 .room-wrap {
-  position: relative; align-self: center; width: min(100%, calc((100vh - 240px) * 320 / 176));
+  position: relative; align-self: center; width: min(100%, calc((100vh - 150px) * 320 / 176));
   border: 4px solid var(--ink); box-shadow: 4px 4px 0 #000; background: var(--ink);
 }
 .room { display: block; width: 100%; height: auto; }
@@ -70,29 +70,12 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px d
 .primary { background: var(--win) !important; color: #fff !important; }
 .buy { background: var(--up) !important; color: #fff !important; }
 .sell { background: var(--down) !important; color: #fff !important; }
-.msg { position: absolute; left: 8px; bottom: 44px; max-width: calc(100% - 16px); margin: 0; padding: 3px 10px; font-size: 14px; background: rgba(253, 246, 227, .92); color: var(--ink); border: 3px solid var(--ink); }
+.msg { position: absolute; left: 8px; top: 46px; max-width: calc(100% - 16px); margin: 0; padding: 3px 10px; font-size: 14px; background: rgba(253, 246, 227, .92); color: var(--ink); border: 3px solid var(--ink); }
 .msg:empty { display: none; }
-
-/* 종목 칩 (조작 줄 오른쪽) */
-.stocks { flex: 3 1 540px; display: flex; gap: 8px; min-width: 0; }
-.stock {
-  flex: 1 1 0; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 0 6px; align-items: center;
-  grid-template-areas: "ic nm ch" "ic pr ch" "hold hold hold"; line-height: 1.25; text-align: left; padding: 3px 8px;
-  border: 3px solid var(--ink); background: #fff; cursor: pointer; font: inherit; font-size: 13px; color: inherit; min-width: 0;
-  box-shadow: 3px 3px 0 var(--ink);
-}
-.stock[aria-pressed="true"] { background: #fff3c4; box-shadow: 3px 3px 0 var(--ink), inset 0 0 0 3px var(--gold); }
-.stock .ic { grid-area: ic; display: block; width: 28px; height: 28px; }
-.stock .nm { grid-area: nm; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stock .pr { grid-area: pr; font-weight: bold; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.stock .ch { grid-area: ch; white-space: nowrap; }
-.stock .hold { grid-area: hold; font-size: 11px; color: var(--mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.controls > button { flex: 0 1 auto; padding: 6px 12px; white-space: nowrap; }
-.controls { align-items: stretch; }
 
 /* 방 위 뉴스 자막 */
 .ticker {
-  position: absolute; left: 8px; right: 8px; top: 8px; margin: 0; padding: 4px 10px; font-size: 14px; font-weight: bold;
+  position: absolute; left: 8px; right: 196px; top: 8px; margin: 0; padding: 4px 10px; font-size: 14px; font-weight: bold;
   background: rgba(224, 62, 62, .9); color: #fff; border: 3px solid var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -216,3 +199,44 @@ th { color: var(--mute); font-weight: normal; }
 .pc-msg { margin: 0; min-height: 3em; padding: 4px 6px; font-size: 12px; background: #0b1426; border: 2px solid #24365e; }
 .pc-statusbar { padding: 3px 8px; font-size: 12px; color: #9aa8c7; background: #111d35; border-top: 2px solid #24365e; }
 .pc button:focus-visible, .pc input:focus-visible { outline: 3px dashed #f7c948; outline-offset: 1px; }
+
+/* 계정 */
+.who { font-weight: bold; color: var(--gold); }
+.mini { font: inherit; font-size: 13px; padding: 1px 8px; border: 2px solid var(--gold); background: transparent; color: #fff; cursor: pointer; }
+.login-card { display: flex; flex-direction: column; gap: 8px; width: min(420px, 100%); text-align: left; }
+.login-card img { align-self: center; }
+.login-card h2 { text-align: center; margin: 0; }
+.login-card label { display: flex; flex-direction: column; gap: 2px; font-weight: bold; font-size: 14px; }
+.login-card input { font: inherit; padding: 6px 8px; border: 3px solid var(--ink); background: #fff; }
+.login-card .warn { color: #8a5a00; }
+.login-msg { margin: 0; min-height: 1.4em; color: var(--up); font-weight: bold; font-size: 14px; }
+.login-card button { flex: none; font: inherit; font-weight: bold; padding: 8px; border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); cursor: pointer; }
+
+/* 캐릭터 위 이름표 */
+.labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.tag {
+  position: absolute; transform: translate(-50%, -100%); padding: 0 5px; white-space: nowrap;
+  font-size: 12px; font-weight: bold; color: #fff; background: rgba(27, 27, 47, .8); border: 2px solid var(--ink);
+}
+.tag.me { background: var(--gold); color: var(--ink); }
+
+/* 접속자 순위 (방 오른쪽 위) */
+.scoreboard {
+  position: absolute; right: 8px; top: 8px; width: 180px; margin: 0; padding: 4px 6px; list-style: none;
+  background: rgba(27, 27, 47, .85); color: #fff; border: 3px solid var(--ink); font-size: 12px;
+}
+.scoreboard:empty { display: none; }
+.scoreboard li { display: grid; grid-template-columns: 14px 10px 1fr auto; gap: 4px; align-items: center; }
+.scoreboard li.me { color: var(--gold); }
+.scoreboard i { width: 10px; height: 10px; border: 1px solid #000; }
+.scoreboard .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scoreboard .up { color: #ff8a8a; } .scoreboard .down { color: #8ab8ff; }
+
+/* HTS 업종 탭·지수 */
+.pc-index { margin: 0 0 4px; font-weight: bold; }
+.pc-sectors { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+.pc-sectors button { padding: 1px 6px; font-size: 11px; background: #0b1426; border: 2px solid #24365e; color: #9aa8c7; }
+.pc-sectors button[aria-selected="true"] { background: #1f3a8a; color: #fff; border-color: #3b82f6; }
+.pc-w { padding: 2px 6px; }
+.pc-w img { width: 16px; height: 16px; }
+.pc-w .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

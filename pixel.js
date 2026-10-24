@@ -3,8 +3,15 @@
 // ===== 2D 픽셀 그래픽: 스프라이트는 문자 격자, 한 글자 = 한 픽셀 ('.' = 투명) =====
 const PAL = {
   k: '#1b1b2f', r: '#c8553d', R: '#2f4f8f', w: '#ffffff', b: '#3b82f6', y: '#f7c948',
-  o: '#f08a24', g: '#22a35a', u: '#e03e3e', p: '#4b3a6b', a: '#9aa3b5', c: '#bfe3ff',
+  o: '#f08a24', g: '#22a35a', u: '#e03e3e', p: '#4b3a6b', a: '#9aa3b5', c: '#bfe3ff', e: '#1b1b2f',
 };
+
+// 캐릭터 몸 색 (고양이 옆 색 발판에서 바꿈). e = 눈·입 (검은 몸일 때는 흰색)
+const BODY = {
+  red: { r: '#d94141' }, blue: { r: '#3b6fd9' }, yellow: { r: '#f2c230' },
+  white: { r: '#f4f4f4' }, black: { r: '#33333d', e: '#ffffff' },
+};
+const BODY_NAME = { red: '빨간색', blue: '파란색', yellow: '노란색', white: '흰색', black: '검은색' };
 
 // 정장 입은 개미 (16×16). 6~9행 얼굴만 기분에 따라 바뀜
 const ANT_TOP = ['...k........k...', '....k......k....', '.....k....k.....', '....kkkkkkkk....', '...krrrrrrrrk...', '..krrrrrrrrrrk..'];
@@ -16,6 +23,7 @@ const ANT_FACES = {
   shock:  ['..krkkrrrrkkrk..', '..krkkrrrrkkrk..', '..krrrrkkrrrrk..', '..krrrrkkrrrrk..'],
   sleep:  ['..krrrrrrrrrrk..', '..krkkkrrkkkrk..', '..krrrrkkrrrrk..', '..krrrrrrrrrrk..'],
 };
+for (const m in ANT_FACES) ANT_FACES[m] = ANT_FACES[m].map(row => row.slice(0, 3) + row.slice(3, 13).replace(/k/g, 'e') + row.slice(13));
 const antRows = mood => [...ANT_TOP, ...ANT_FACES[mood], ...ANT_BOTTOM];
 
 // 8×8 아이콘 (종목·뉴스)
@@ -30,17 +38,29 @@ const ICONS = {
   rumor:  ['.cccccc.', 'cckkkccc', 'cccckccc', 'ccckcccc', 'cccccccc', '.cckccc.', '.cc.....', 'c.......'],
   fire:   ['...o....', '..oo..o.', '..ooo.o.', '.ooyoooo', '.oyyyoo.', 'ooyyyyoo', '.oyyyyo.', '..oooo..'],
   crash:  ['..bbbb..', '..bbbb..', '..bbbb..', '..bbbb..', 'bbbbbbbb', '.bbbbbb.', '..bbbb..', '...bb...'],
+  pill:   ['........', '........', '.kkkkkk.', 'kuuukwwk', 'kuuukwwk', '.kkkkkk.', '........', '........'],
+  car:    ['........', '..kkkk..', '.kbbbbk.', 'kbcbbcbk', 'kbbbbbbk', 'kkkkkkkk', '.kk..kk.', '........'],
+  bag:    ['..kkkk..', '..k..k..', '.kkkkkk.', '.kyyyyk.', '.kyoyyk.', '.kyyyyk.', '.kyyyyk.', '.kkkkkk.'],
+  sun:    ['...y....', '.y.y.y..', '..yyy...', 'yyyyyyy.', '..yyy...', '.y.y.y..', '...y....', '........'],
+  rain:   ['..aaa...', '.aaaaaa.', 'aaaaaaaa', '........', '.b..b...', 'b..b..b.', '..b..b..', '.b..b...'],
+  snow:   ['...c....', '.c.c.c..', '..ccc...', 'ccccccc.', '..ccc...', '.c.c.c..', '...c....', '........'],
+  storm:  ['..pppp..', '.pppppp.', 'pppppppp', '...yy...', '..yy....', '.yyyy...', '...yy...', '..y.....'],
+  star:   ['...yy...', '...yy...', 'yyyyyyyy', '.yyyyyy.', '..yyyy..', '.yy..yy.', 'yy....yy', '........'],
+  doc:    ['.kkkkk..', '.kwwwkk.', '.kwkkwk.', '.kwwwwk.', '.kwkkwk.', '.kwwwwk.', '.kkkkkk.', '........'],
+  warn:   ['..uuuu..', '.uuuuuu.', 'uuuuuuuu', 'uwwwwwwu', 'uwwwwwwu', 'uuuuuuuu', '.uuuuuu.', '..uuuu..'],
 };
+// 날씨 사건 아이콘
+Object.assign(ICONS, { w_heat: ICONS.sun, w_cold: ICONS.snow, w_downpour: ICONS.rain, w_typhoon: ICONS.storm, w_dust: ICONS.cloud });
 
 // 3×5 픽셀 숫자
 const DIGITS = ['111101101101111', '010110010010111', '111001111100111', '111001111001111', '101101111001001',
   '111100111001111', '111100111101111', '111001010010010', '111101111101111', '111101111001111'];
 
-function drawRows(ctx, rows, x, y) {
+function drawRows(ctx, rows, x, y, over) {
   rows.forEach((row, j) => {
     for (let i = 0; i < row.length; i++) {
       if (row[i] === '.') continue;
-      ctx.fillStyle = PAL[row[i]];
+      ctx.fillStyle = over?.[row[i]] ?? PAL[row[i]];
       ctx.fillRect(x + i, y + j, 1, 1);
     }
   });
@@ -65,7 +85,16 @@ function spriteURL(key, rows) {
   }
   return urlCache.get(key);
 }
-const antURL = mood => spriteURL('ant-' + mood, antRows(mood));
+const antURL = (mood, body = 'red') => {
+  const key = 'ant-' + mood + '-' + body;
+  if (!urlCache.has(key)) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 16;
+    drawRows(cv.getContext('2d'), antRows(mood), 0, 0, BODY[body]);
+    urlCache.set(key, cv.toDataURL());
+  }
+  return urlCache.get(key);
+};
 const iconURL = name => spriteURL('icon-' + name, ICONS[name]);
 
 // ===== 위에서 내려다본 사무실 (320×176, 1칸 = 16px) =====
@@ -79,8 +108,9 @@ const C = {
   leaf: '#4f9a3f', leafD: '#2f6b2a', pot: '#c0673a', cream: '#f2e6c8',
 };
 const SKY = {
-  ready: ['#7ec8f0', '#a8dcf5'], playing: ['#7ec8f0', '#a8dcf5'], paused: ['#3b2f6b', '#5a4a8f'],
-  won: ['#f7c948', '#fbe08a'], lost: ['#6b7280', '#8b93a1'], crash: ['#c0392b', '#e06650'],
+  sunny: ['#7ec8f0', '#a8dcf5'], cloudy: ['#9fb3c8', '#c3d0dd'], rain: ['#6f8297', '#8fa1b3'], downpour: ['#4b5a6b', '#66778a'],
+  heat: ['#f59f45', '#f7c97a'], typhoon: ['#2f3a4a', '#4a5566'], snow: ['#c9d6e3', '#e3ebf3'], cold: ['#a9c4dc', '#d6e4f0'],
+  dust: ['#c9b27a', '#ddc896'], crash: ['#c0392b', '#e06650'],
 };
 
 function R(ctx, c, x, y, w, h) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
@@ -100,12 +130,27 @@ function drawCalendar(ctx, f, v) {
   R(ctx, PAL.u, f.x + 1, f.y + 1, f.w - 2, 4);
   drawNum(ctx, v.day, f.x + Math.round((f.w - (String(v.day).length * 4 - 1)) / 2), f.y + 8, PAL.k);
 }
-// 창밖 하늘 색 = 게임 상태, 해의 위치 = 진행한 거래일
+// 창밖 = 오늘 날씨. anim: 비·눈이 내리는 정도 (움직임 줄이기면 0)
 function drawWindow(ctx, f, v) {
   box(ctx, C.woodL, f.x, f.y, f.w, f.h);
-  const sky = SKY[v.flash ? 'crash' : v.status], ix = f.x + 2, iy = f.y + 2, iw = f.w - 4, ih = f.h - 4;
+  const w = v.weather, sky = SKY[v.flash ? 'crash' : w] || SKY.sunny, ix = f.x + 2, iy = f.y + 2, iw = f.w - 4, ih = f.h - 4;
   R(ctx, sky[0], ix, iy, iw, ih / 2); R(ctx, sky[1], ix, iy + ih / 2, iw, ih / 2);
-  R(ctx, v.status === 'paused' ? '#f5f0d0' : '#ffd23f', ix + Math.round(v.day / v.maxDay * (iw - 5)), iy + 3, 5, 5);
+  if (w === 'sunny' || w === 'heat' || w === 'cold') {
+    const sz = w === 'heat' ? 6 : 5;
+    R(ctx, w === 'heat' ? '#ff7a1a' : '#ffd23f', ix + (v.day * 3) % (iw - 6), iy + 3, sz, sz);
+  }
+  if (['cloudy', 'rain', 'downpour', 'typhoon', 'snow'].includes(w)) {
+    const cc = w === 'typhoon' || w === 'downpour' ? '#3a4352' : '#e6ebf1';
+    R(ctx, cc, ix + 2, iy + 2, 10, 4); R(ctx, cc, ix + 5, iy + 1, 6, 2); R(ctx, cc, ix + 16, iy + 4, 10, 3);
+  }
+  const drops = { rain: [PAL.c, 5], downpour: ['#9ec5ff', 3], typhoon: ['#9ec5ff', 2], snow: ['#ffffff', 5], cold: ['#ffffff', 7], dust: ['#a8925c', 4] }[w];
+  if (drops) {
+    const [col, gap] = drops, heavy = w === 'downpour' || w === 'typhoon';
+    for (let x = 0; x < iw; x += gap) {
+      const y = (x * 7 + v.anim * (w === 'typhoon' ? 2 : 1)) % (ih - 1);
+      R(ctx, col, ix + (w === 'typhoon' ? (x + y) % iw : x), iy + y, 1, heavy ? 2 : 1);
+    }
+  }
   R(ctx, C.woodL, f.x + f.w / 2 - 1, f.y, 2, f.h); R(ctx, C.woodL, f.x, f.y + f.h / 2 - 1, f.w, 2);
 }
 function drawPlant(ctx, f) {
@@ -170,10 +215,15 @@ function drawBed(ctx, f, v) {
   box(ctx, C.wood, f.x, f.y, f.w, f.h); box(ctx, '#ffffff', f.x + 3, f.y + 3, f.w - 6, 12);
   box(ctx, '#e9d8b0', f.x + 2, f.y + 16, f.w - 4, f.h - 18);
   for (let i = 0; i < 3; i++) R(ctx, '#d6c08f', f.x + 4, f.y + 22 + i * 10, f.w - 8, 1);
-  if (v.status === 'paused') { // Zz
+  if (v.sleeping) { // Zz
     const zx = f.x + f.w - 12, zy = f.y - 10;
     ['1111', '0010', '0100', '1111'].forEach((row, j) => [...row].forEach((b, i) => b === '1' && R(ctx, '#3b2f6b', zx + i, zy + j, 1, 1)));
   }
+}
+function drawPad(ctx, f, v) {
+  box(ctx, '#6b4226', f.x, f.y, f.w, f.h);
+  R(ctx, BODY[f.color].r, f.x + 2, f.y + 2, f.w - 4, f.h - 4);
+  if (v.myColor === f.color) R(ctx, '#ffd23f', f.x + 4, f.y + 4, f.w - 8, f.h - 8);
 }
 function drawLamp(ctx, f) {
   box(ctx, C.wood, f.x, f.y + 6, f.w, f.h - 6); R(ctx, C.woodD, f.x + 6, f.y + 2, 2, 5); box(ctx, '#f7e3a1', f.x + 3, f.y - 4, 8, 7);
@@ -189,6 +239,10 @@ const FURN = [
   { id: 'plant1', x: 100, y: 30, w: 14, h: 20, solid: true, draw: drawPlant },
   { id: 'desk', x: 26, y: 64, w: 50, h: 20, solid: true, act: 'trade', label: '💻 컴퓨터 켜기 (증권 HTS: 시세·차트·호가·주문) · 여기서 B/S로 1주 바로 거래', draw: drawDesk },
   { id: 'catbed', x: 6, y: 140, w: 28, h: 20, solid: true, draw: drawCatBed },
+  ...['red', 'blue', 'yellow', 'white', 'black'].map((color, i) => ({
+    id: 'pad-' + color, color, x: 42 + i * 14, y: 152, w: 12, h: 12, floor: true, act: 'color',
+    label: '🎨 ' + BODY_NAME[color] + ' 발판 — 캐릭터를 ' + BODY_NAME[color] + '으로 바꾸기', draw: drawPad,
+  })),
   { id: 'chalkboard', x: 130, y: 5, w: 34, h: 24, act: 'rules', label: '🧑‍🏫 칠판 — 게임 규칙', draw: drawChalkboard },
   { id: 'tv', x: 170, y: 14, w: 36, h: 30, solid: true, act: 'news', label: '📺 뉴스 TV — 배우기 읽기', draw: drawTV },
   { id: 'table', x: 152, y: 86, w: 28, h: 14, solid: true, draw: drawTable },
@@ -198,7 +252,7 @@ const FURN = [
   { id: 'plant3', x: 224, y: 30, w: 14, h: 20, solid: true, draw: drawPlant },
   { id: 'cabinet', x: 288, y: 12, w: 28, h: 34, solid: true, act: 'records', label: '🗂 캐비닛 — 플레이 기록', draw: drawCabinet },
   { id: 'lamp', x: 250, y: 118, w: 14, h: 16, solid: true, draw: drawLamp },
-  { id: 'bed', x: 268, y: 112, w: 48, h: 60, solid: true, act: 'sleep', label: '🛏 침대 — 쉬기(일시정지) / 일어나기', draw: drawBed },
+  { id: 'bed', x: 268, y: 112, w: 48, h: 60, solid: true, draw: drawBed },
 ];
 const SOLIDS = [...WALLS, ...FURN.filter(f => f.solid)];
 
@@ -232,9 +286,9 @@ function drawRoomBase(ctx) {
   for (const w of WALLS) { R(ctx, C.woodD, w.x, w.y, w.w, w.h); R(ctx, C.wood, w.x + 1, w.y, w.w - 2, w.h); }
 }
 
-function drawPlayer(ctx, p) {
-  R(ctx, 'rgba(0,0,0,0.2)', Math.round(p.x) - 6, Math.round(p.y) - 2, 12, 3);
-  drawRows(ctx, antRows(p.mood), Math.round(p.x) - 8, Math.round(p.y) - 16 - (p.bob ? 1 : 0));
+function drawAnt(ctx, a) {
+  R(ctx, 'rgba(0,0,0,0.2)', Math.round(a.x) - 6, Math.round(a.y) - 2, 12, 3);
+  drawRows(ctx, antRows(a.mood), Math.round(a.x) - 8, Math.round(a.y) - 16 - (a.bob ? 1 : 0), BODY[a.color] || BODY.red);
 }
 
 function drawHighlight(ctx, f, up) {
@@ -245,12 +299,12 @@ function drawHighlight(ctx, f, up) {
   R(ctx, '#ffd23f', cx - 2, ay, 5, 1); R(ctx, '#ffd23f', cx - 1, ay + 1, 3, 1); R(ctx, '#ffd23f', cx, ay + 2, 1, 1);
 }
 
-// v: { status, day, maxDay, flash, hist, unread, blink, near, player: { x, y, mood, bob } }
+// v: { day, weather, anim, flash, hist, unread, blink, near, myColor, ants: [{ x, y, mood, bob, color }] }
 function drawRoom(ctx, v) {
   drawRoomBase(ctx);
   FURN.filter(f => f.floor).forEach(f => f.draw(ctx, f, v));
   const items = FURN.filter(f => !f.floor).map(f => ({ z: f.y + f.h, d: () => f.draw(ctx, f, v) }));
-  items.push({ z: v.player.y, d: () => drawPlayer(ctx, v.player) });
+  for (const a of v.ants) items.push({ z: a.y, d: () => drawAnt(ctx, a) });
   items.sort((a, b) => a.z - b.z).forEach(it => it.d());
   if (v.near) drawHighlight(ctx, v.near, v.blink);
 }
