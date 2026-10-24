@@ -63,6 +63,33 @@ function checkPw(pw, acc) {
 }
 const cleanName = s => (typeof s === 'string' ? s.normalize('NFC').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 10) : '');
 
+// ===== 새 닉네임 규칙 (계정을 새로 만들 때만. 이미 있는 계정 이름은 그대로 둠) =====
+// 대부분의 게임처럼: 한글(완성된 글자)·영어만, 띄어쓰기 없이 2~10글자, 대소문자 무시 중복 불가, 욕설·비하·성적 단어와 운영진 사칭 불가
+const NAME_MIN = 2, NAME_MAX = 10;
+const BAD_WORDS = [
+  // 한국어 욕설·비하·성적 표현 (변형 일부 포함)
+  '시발', '씨발', '씨빨', '씨바', '쉬발', '씨팔', '시팔', '개새', '개색', '개세끼', '새끼', '색기', '병신', '븅신', '빙신', '좆', '존나', '졸라', '지랄',
+  '미친', '미췬', '닥쳐', '꺼져', '엠창', '애미', '애비', '니미', '느금', '느그', '창녀', '창놈', '걸레', '보지', '자지', '섹스', '성교', '야동', '강간', '자위',
+  '한남', '김치녀', '된장녀', '일베', '메갈', '틀딱', '급식충', '맘충', '똘추', '찐따', '병자', '장애인', '정신병', '쓰레기', '개같', '개놈', '개년', '년아',
+  // 영어 욕설·비하·성적 표현
+  'fuck', 'fuk', 'shit', 'bitch', 'asshole', 'bastard', 'dick', 'pussy', 'cunt', 'slut', 'whore', 'nigger', 'nigga', 'faggot', 'retard', 'porn', 'sex', 'rape', 'nazi', 'hitler',
+];
+// 운영진 사칭: 들어 있기만 해도 안 됨 / 짧은 영어(gm·dev)는 그 자체일 때만 (gmail·devon 같은 이름은 허용)
+const RESERVED_PART = ['운영자', '운영진', '관리자', '개발자', '공식', '시스템', '어드민', '지엠', '매니저', 'admin', 'moderator', 'operator', 'official', 'system', 'manager', 'staff'];
+const RESERVED_EXACT = ['gm', 'dev', 'mod'];
+function nameProblem(raw) {
+  if (typeof raw !== 'string' || !raw.length) return '닉네임을 입력해 주세요.';
+  const name = raw.normalize('NFC');
+  if (/\s/.test(name)) return '띄어쓰기는 쓸 수 없어요.';
+  if (!/^[가-힣A-Za-z]+$/.test(name)) return '한글(완성된 글자)과 영어만 쓸 수 있어요. 숫자·특수문자·자음/모음만 따로는 안 돼요.';
+  if ([...name].length < NAME_MIN || [...name].length > NAME_MAX) return `닉네임은 ${NAME_MIN}~${NAME_MAX}글자로 정해 주세요.`;
+  const low = name.toLowerCase();
+  if (RESERVED_EXACT.includes(low) || RESERVED_PART.some(w => low.includes(w))) return '운영자·관리자처럼 오해를 줄 수 있는 이름은 쓸 수 없어요.';
+  if (BAD_WORDS.some(w => low.includes(w))) return '사용할 수 없는 단어가 들어 있어요.';
+  if (accounts[nameKey(name)]) return '이미 있는 닉네임이에요.';
+  return null;
+}
+
 // ===== 참가자 계좌 (계정 key 하나에 하나, 끝 없이 이어짐) =====
 const players = new Map();   // 공개 id → 참가자
 const tokens = new Map();    // 로그인 토큰의 해시 → 공개 id (토큰 원문은 저장하지 않음)
@@ -207,6 +234,8 @@ function login(b) {
       return { ok: false, msg: '이미 있는 닉네임이에요. 비밀번호가 맞지 않습니다.' };
     }
   } else {
+    const bad = nameProblem(typeof b.name === 'string' ? b.name.trim() : '');   // 새 계정만 닉네임 규칙 검사 (앞뒤 공백은 실수로 보고 뗌)
+    if (bad) return { ok: false, msg: bad };
     if (Object.keys(accounts).length >= MAX_ACCOUNTS) return { ok: false, msg: '계정이 너무 많아 새로 만들 수 없어요.' };
     const salt = crypto.randomBytes(16).toString('hex');
     acc = accounts[key] = { name, salt, hash: hashPw(pw, salt), color: 'red' };
@@ -260,10 +289,9 @@ async function googleLogin(b) {
 function googleName(b) {
   const pg = pendingGoogle.get(b.pending);
   if (!pg || pg.until < Date.now()) return { ok: false, msg: '시간이 지났어요. "Google로 로그인"을 다시 눌러 주세요.' };
-  const name = cleanName(b.name);
-  if (!name) return { ok: false, msg: '닉네임을 1~10자로 입력하세요.' };
-  const key = nameKey(name);
-  if (accounts[key]) return { ok: false, msg: '이미 있는 닉네임이에요. 다른 닉네임을 정해 주세요.' };
+  const bad = nameProblem(b.name);
+  if (bad) return { ok: false, msg: bad };
+  const name = b.name.normalize('NFC'), key = nameKey(name);
   if (Object.keys(accounts).length >= MAX_ACCOUNTS) return { ok: false, msg: '계정이 너무 많아 새로 만들 수 없어요.' };
   pendingGoogle.delete(b.pending);
   const had = findGoogle(pg.sub);   // 같은 구글 계정으로 두 번 눌렀으면 먼저 만든 계정으로
@@ -272,7 +300,8 @@ function googleName(b) {
   writeJSONFile(ACCOUNTS_FILE, accounts);
   return { ok: true, token: startSession(key, acc), created: true, msg: `'${name}' 계정을 새로 만들었어요. 100만 원으로 시작합니다.` };
 }
-const AUTH = { login, google: googleLogin, googleName };   // 로그인 전에 부르는 API
+const nameCheck = b => { const bad = nameProblem(b.name); return bad ? { ok: false, msg: bad } : { ok: true, msg: '사용할 수 있는 닉네임이에요.' }; };   // 입력하는 동안 화면이 물어봄
+const AUTH = { login, google: googleLogin, googleName, nameCheck };   // 로그인 전에 부르는 API
 
 const API = {
   order(b, p) {

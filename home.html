@@ -146,6 +146,8 @@
   .btn:focus-visible { outline: 3px solid #e8454b; outline-offset: 2px; }
   .msg { min-height: 1.4em; margin: 2px 0 0; font-size: 13px; color: #c62828; }
   .msg:empty { min-height: 0; }
+  .msg.good { color: #2e7d32; }   /* 사용할 수 있는 닉네임 */
+  .rule { margin: -4px 0 0 !important; font-size: 12px !important; color: #777 !important; text-align: left !important; }
   /* 구글 버튼(구글이 그려 줌)은 가운데, 닉네임·비밀번호 로그인은 눌러야 펼쳐짐 */
   .gbtn { display: flex; justify-content: center; min-height: 44px; }
   .pw-login { margin-top: 14px; text-align: left; }
@@ -258,9 +260,10 @@
       <!-- 2단계: 처음 온 구글 계정은 마을에서 쓸 닉네임 정하기 -->
       <form id="nameForm" hidden>
         <h1>닉네임 정하기</h1>
-        <p>처음 오셨네요! 마을 사람들에게 보일 이름을 정해 주세요. (1~10자)</p>
-        <label>닉네임<input id="newName" maxlength="10" required autocomplete="nickname"></label>
-        <p class="msg" id="nmsg" role="alert"></p>
+        <p>처음 오셨네요! 마을 사람들에게 보일 이름을 정해 주세요.</p>
+        <label>닉네임<input id="newName" maxlength="10" required autocomplete="nickname" aria-describedby="nameRule nmsg"></label>
+        <p class="rule" id="nameRule">한글·영어 2~10글자 · 띄어쓰기·숫자·특수문자 불가</p>
+        <p class="msg" id="nmsg" role="status"></p>
         <button class="btn" type="submit">이 이름으로 시작하기</button>
       </form>
     </div>
@@ -366,9 +369,26 @@ async function onGoogle({ credential }) {
     $('gmsg').textContent = d.msg;
   } catch { $('gmsg').textContent = OFFLINE; }
 }
+// 닉네임을 입력하는 동안(0.3초 멈추면) 서버에 규칙·중복을 물어보고 바로 알려 줌
+let checkTimer = 0;
+$('newName').addEventListener('input', () => {
+  clearTimeout(checkTimer);
+  const v = $('newName').value;
+  $('nmsg').className = 'msg';
+  if (!v) { $('nmsg').textContent = ''; return; }
+  checkTimer = setTimeout(async () => {
+    try {
+      const d = await post('nameCheck', { name: v });
+      if ($('newName').value !== v) return;   // 그사이 또 바뀌었으면 무시
+      $('nmsg').textContent = d.msg;
+      $('nmsg').className = 'msg' + (d.ok ? ' good' : '');
+    } catch {}
+  }, 300);
+});
 $('nameForm').addEventListener('submit', async e => {
   e.preventDefault();
-  $('nmsg').textContent = '';
+  clearTimeout(checkTimer);
+  $('nmsg').textContent = ''; $('nmsg').className = 'msg';
   try {
     const d = await post('googleName', { pending, name: $('newName').value });
     if (!d.ok) { $('nmsg').textContent = d.msg; return; }
