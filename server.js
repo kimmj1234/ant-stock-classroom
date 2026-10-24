@@ -1,5 +1,5 @@
 'use strict';
-// ===== 나의 작은 사회 서버: 파일 제공 + 계정 + 하나의 공유 시장 =====
+// ===== 나의 두번째 인생 서버: 파일 제공 + 계정 + 하나의 공유 시장 =====
 // 실행: node server.js → http://localhost:5000
 // 끝이 없는 게임입니다. 게임 시계는 접속자가 있으면 계속 흐르고, 장은 닫히지 않습니다(자정마다 하루가 바뀜),
 // 시장·계좌는 data/ 에 저장되어 서버를 다시 켜도 이어집니다.
@@ -381,7 +381,7 @@ http.createServer(async (req, res) => {
   }
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('없는 주소입니다.');
-}).listen(PORT, HOST, () => console.log(`나의 작은 사회: http://localhost:${PORT}`));
+}).listen(PORT, HOST, () => console.log(`나의 두번째 인생: http://localhost:${PORT}`));
 
 // 서버를 끌 때 마지막 상태 저장
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveState(); process.exit(0); });
