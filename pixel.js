@@ -4,12 +4,13 @@
 const PAL = {
   k: '#1b1b2f', r: '#c8553d', R: '#2f4f8f', w: '#ffffff', b: '#3b82f6', y: '#f7c948',
   o: '#f08a24', g: '#22a35a', u: '#e03e3e', p: '#4b3a6b', a: '#9aa3b5', c: '#bfe3ff', e: '#1b1b2f',
+  h: '#5a3a22', s: '#f3cba5', n: '#2b2f38',   // 사람 캐릭터: 머리카락·피부·바지
 };
 
 // 캐릭터 몸 색 (고양이 옆 색 발판에서 바꿈). e = 눈·입 (검은 몸일 때는 흰색)
 const BODY = {
   red: { r: '#d94141' }, blue: { r: '#3b6fd9' }, yellow: { r: '#f2c230' },
-  white: { r: '#f4f4f4' }, black: { r: '#33333d', e: '#ffffff' },
+  white: { r: '#f4f4f4' }, black: { r: '#33333d' },
 };
 const BODY_NAME = { red: '빨간색', blue: '파란색', yellow: '노란색', white: '흰색', black: '검은색' };
 
@@ -95,6 +96,30 @@ const antURL = (mood, body = 'red') => {
   }
   return urlCache.get(key);
 };
+
+// 사람 캐릭터 (16×16): h 머리카락, s 피부, e 눈·입, r 재킷(색 발판 색), w 셔츠, u 넥타이, n 바지, k 윤곽·구두
+const PERSON_TOP = ['....kkkkkkkk....', '...khhhhhhhhk...', '..khhhhhhhhhhk..', '..khhssssssshk..'];
+const PERSON_FACES = {
+  normal: ['..kssessssessk..', '..kssessssessk..', '..kssssssssssk..', '..ksssseessssk..'],
+  happy:  ['..ksseesseessk..', '..kssssssssssk..', '..kssessssessk..', '..ksssseessssk..'],
+  sad:    ['..kssessssessk..', '..kssessssessk..', '..ksssseessssk..', '..kssessssessk..'],
+  shock:  ['..ksseesseessk..', '..ksseesseessk..', '..ksssseessssk..', '..ksssseessssk..'],
+  sleep:  ['..kssssssssssk..', '..ksseesseessk..', '..kssssssssssk..', '..ksssseessssk..'],
+};
+const PERSON_BOTTOM = ['...kssssssssk...', '....kkksskkk....', '..krrrwuuwrrrk..', '.ksrrrwuuwrrrsk.', '.ksrrrruurrrrsk.', '..krrrrrrrrrrk..', '...knnk..knnk...', '...kkkk..kkkk...'];
+// 걷는 중(bob)에는 한쪽 다리를 들어 올림
+const PERSON_STEP = ['...knnk..kkkk...', '...kkkk.........'];
+const personRows = (mood, step = false) => [...PERSON_TOP, ...PERSON_FACES[mood], ...PERSON_BOTTOM.slice(0, 6), ...(step ? PERSON_STEP : PERSON_BOTTOM.slice(6))];
+const personURL = (mood, body = 'red') => {
+  const key = 'person-' + mood + '-' + body;
+  if (!urlCache.has(key)) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 16;
+    drawRows(cv.getContext('2d'), personRows(mood), 0, 0, BODY[body]);
+    urlCache.set(key, cv.toDataURL());
+  }
+  return urlCache.get(key);
+};
 const iconURL = name => spriteURL('icon-' + name, ICONS[name]);
 
 // ===== 위에서 내려다본 사무실 (320×176, 1칸 = 16px) =====
@@ -151,7 +176,7 @@ function drawStudio(ctx, mood, up) {
   box(ctx, '#0a1a33', 56, 6, 34, 22);
   const pts = up ? [20, 18, 19, 15, 13, 9, 7] : [8, 10, 9, 13, 15, 18, 20];
   pts.forEach((y, i) => R(ctx, up ? '#ff5c5c' : '#5c9dff', 59 + i * 4, 6 + y / 1.1, 3, 2));
-  drawRows(ctx, antRows(mood), 22, 18, { R: '#5a2d82' });
+  drawRows(ctx, personRows(mood), 22, 18, { r: '#5a2d82' });
   R(ctx, '#3a3f4b', 33, 31, 2, 4); R(ctx, '#1b1b2f', 32, 29, 4, 2);   // 마이크
   box(ctx, '#8b5a2b', 6, 34, 50, 20); R(ctx, '#b07a46', 7, 35, 48, 2);
   R(ctx, '#f7c948', 20, 42, 22, 5); R(ctx, '#1b1b2f', 22, 43, 18, 3);
@@ -269,7 +294,7 @@ const FURN = [
   { id: 'catbed', x: 6, y: 140, w: 28, h: 20, solid: true, draw: drawCatBed },
   ...['red', 'blue', 'yellow', 'white', 'black'].map((color, i) => ({
     id: 'pad-' + color, color, x: 42 + i * 14, y: 152, w: 12, h: 12, floor: true, act: 'color',
-    label: '🎨 ' + BODY_NAME[color] + ' 발판 — 캐릭터를 ' + BODY_NAME[color] + '으로 바꾸기', draw: drawPad,
+    label: '🎨 ' + BODY_NAME[color] + ' 발판 — 재킷을 ' + BODY_NAME[color] + '으로 갈아입기', draw: drawPad,
   })),
   { id: 'chalkboard', x: 130, y: 5, w: 34, h: 24, act: 'rules', label: '🧑‍🏫 칠판 — 게임 규칙', draw: drawChalkboard },
   { id: 'tv', x: 170, y: 14, w: 36, h: 30, solid: true, act: 'news', label: '📺 뉴스 TV — 배우기 읽기', draw: drawTV },
@@ -401,7 +426,7 @@ const SCENES = {
 
 function drawAnt(ctx, a) {
   R(ctx, 'rgba(0,0,0,0.2)', Math.round(a.x) - 6, Math.round(a.y) - 2, 12, 3);
-  drawRows(ctx, antRows(a.mood), Math.round(a.x) - 8, Math.round(a.y) - 16 - (a.bob ? 1 : 0), BODY[a.color] || BODY.red);
+  drawRows(ctx, personRows(a.mood, a.bob), Math.round(a.x) - 8, Math.round(a.y) - 16, BODY[a.color] || BODY.red);
 }
 
 function drawHighlight(ctx, f, up) {

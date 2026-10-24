@@ -349,36 +349,68 @@ const HD_OUT = {
   },
 };
 
-// ===== 개미 캐릭터 =====
+// ===== 사람 캐릭터 =====
 function lighten(hex, k) {
   const n = parseInt(hex.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255].map(x => Math.round(x + (255 - x) * k));
   return `rgb(${c.join(',')})`;
 }
-function hdAnt(ctx, a) {
-  const x = a.x, y = a.y - (a.bob ? 0.8 : 0), body = (BODY[a.color] || BODY.red).r;
-  shadow(ctx, a.x, a.y - 0.4, 6, 1.7, 0.28);
-  rr(ctx, x - 5.2, y - 7.5, 10.4, 7.2, 3, vg(ctx, y - 7.5, y, '#3d63b0', '#243c70'), INK, 0.45);
-  ctx.beginPath(); ctx.moveTo(x - 2, y - 7.4); ctx.lineTo(x + 2, y - 7.4); ctx.lineTo(x, y - 4.2); ctx.closePath(); ctx.fillStyle = '#ffffff'; ctx.fill();
-  ctx.beginPath(); ctx.moveTo(x - 0.7, y - 6.6); ctx.lineTo(x + 0.7, y - 6.6); ctx.lineTo(x + 0.9, y - 3.2); ctx.lineTo(x, y - 2.4); ctx.lineTo(x - 0.9, y - 3.2); ctx.closePath(); ctx.fillStyle = '#d9534f'; ctx.fill();
-  const hx = x, hy = y - 11.6;
-  line(ctx, [[hx - 2, hy - 4], [hx - 3.5, hy - 7], [hx - 5, hy - 8]], INK, 0.55); line(ctx, [[hx + 2, hy - 4], [hx + 3.5, hy - 7], [hx + 5, hy - 8]], INK, 0.55);
-  oval(ctx, hx - 5, hy - 8, 0.9, 0.9, body, INK, 0.35); oval(ctx, hx + 5, hy - 8, 0.9, 0.9, body, INK, 0.35);
-  oval(ctx, hx, hy, 6, 5, rg(ctx, hx - 2, hy - 2, 7.5, lighten(body, 0.35), body), INK, 0.5);
-  oval(ctx, hx - 2.4, hy - 2.6, 1.6, 0.8, 'rgba(255, 255, 255, .35)');
-  const m = a.mood, eye = (ex) => {
-    if (m === 'happy') return line(ctx, [[ex - 1, hy + 0.2], [ex, hy - 0.9], [ex + 1, hy + 0.2]], '#1b1b2f', 0.5);
-    if (m === 'sleep') return line(ctx, [[ex - 1, hy], [ex + 1, hy]], '#1b1b2f', 0.5);
-    const r = m === 'shock' ? 1.5 : 1.2;
-    oval(ctx, ex, hy - 0.2, r, r * 1.1, '#ffffff', '#1b1b2f', 0.3);
-    oval(ctx, ex + 0.15, hy, m === 'shock' ? 0.45 : 0.7, m === 'shock' ? 0.45 : 0.8, '#1b1b2f');
-    oval(ctx, ex + 0.45, hy - 0.5, 0.25, 0.25, '#ffffff');
+function darken(hex, k) {
+  const n = parseInt(hex.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255].map(x => Math.round(x * (1 - k)));
+  return `rgb(${c.join(',')})`;
+}
+const SKIN = '#f3cba5', HAIR = '#4a2f1c', PANTS = '#2b2f38';
+// a: { x, y(발 위치), mood, bob(걷는 중 한 걸음), color(재킷 색) }
+function hdPerson(ctx, a) {
+  const x = a.x, y = a.y, coat = (BODY[a.color] || BODY.red).r, ty = y - (a.bob ? 0.5 : 0);
+  shadow(ctx, x, y - 0.3, 5, 1.5, 0.28);
+  // 다리·구두 (걸을 때 번갈아 들림)
+  const lift = a.bob ? 0.9 : 0;
+  rr(ctx, x - 2.5, y - 5.6 - lift, 2.1, 5 , 0.8, PANTS); rr(ctx, x + 0.4, y - 5.6, 2.1, 5, 0.8, PANTS);
+  oval(ctx, x - 1.7, y - 0.7 - lift, 1.7, 0.85, '#16161c'); oval(ctx, x + 1.7, y - 0.7, 1.7, 0.85, '#16161c');
+  // 팔 (재킷 뒤)
+  rr(ctx, x - 5.4, ty - 11.2, 2, 6.2, 1, darken(coat, 0.18), INK, 0.3); rr(ctx, x + 3.4, ty - 11.2, 2, 6.2, 1, darken(coat, 0.18), INK, 0.3);
+  oval(ctx, x - 4.4, ty - 4.7, 0.95, 0.95, SKIN, INK, 0.25); oval(ctx, x + 4.4, ty - 4.7, 0.95, 0.95, SKIN, INK, 0.25);
+  // 재킷·셔츠·넥타이
+  rr(ctx, x - 4.1, ty - 12, 8.2, 7.4, 2, vg(ctx, ty - 12, ty - 4.6, lighten(coat, 0.18), darken(coat, 0.12)), INK, 0.4);
+  ctx.beginPath(); ctx.moveTo(x - 1.6, ty - 12); ctx.lineTo(x + 1.6, ty - 12); ctx.lineTo(x, ty - 8.6); ctx.closePath(); ctx.fillStyle = '#ffffff'; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x - 0.55, ty - 11.6); ctx.lineTo(x + 0.55, ty - 11.6); ctx.lineTo(x + 0.75, ty - 7.6); ctx.lineTo(x, ty - 6.8); ctx.lineTo(x - 0.75, ty - 7.6); ctx.closePath();
+  ctx.fillStyle = a.color === 'red' ? '#2f4f8f' : '#d9534f'; ctx.fill();
+  line(ctx, [[x - 1.6, ty - 12], [x - 0.6, ty - 9.6]], darken(coat, 0.35), 0.3); line(ctx, [[x + 1.6, ty - 12], [x + 0.6, ty - 9.6]], darken(coat, 0.35), 0.3);
+  // 목·머리·귀
+  rr(ctx, x - 1, ty - 13.4, 2, 1.8, 0.4, darken(SKIN, 0.08));
+  const hx = x, hy = ty - 16.6;
+  oval(ctx, hx - 4.1, hy + 0.4, 0.8, 1.1, SKIN, INK, 0.3); oval(ctx, hx + 4.1, hy + 0.4, 0.8, 1.1, SKIN, INK, 0.3);
+  oval(ctx, hx, hy, 4, 4.3, rg(ctx, hx - 1.4, hy - 1.4, 5.5, lighten(SKIN, 0.35), SKIN), INK, 0.4);
+  // 머리카락 (위쪽 반원 + 앞머리)
+  ctx.beginPath();
+  ctx.ellipse(hx, hy - 0.6, 4.4, 3.9, 0, Math.PI, Math.PI * 2);
+  ctx.lineTo(hx + 4.4, hy + 0.6);
+  ctx.quadraticCurveTo(hx + 3.2, hy - 1.4, hx + 1, hy - 1.6);
+  ctx.quadraticCurveTo(hx - 1.6, hy - 1.2, hx - 2.6, hy - 2.2);
+  ctx.quadraticCurveTo(hx - 3.6, hy - 0.8, hx - 4.4, hy + 0.6);
+  ctx.closePath();
+  ctx.fillStyle = vg(ctx, hy - 4.5, hy + 0.6, lighten(HAIR, 0.15), HAIR); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 0.4; ctx.stroke();
+  line(ctx, [[hx - 2, hy - 3.6], [hx + 0.6, hy - 4]], 'rgba(255, 255, 255, .25)', 0.4);
+  // 표정
+  const m = a.mood, ey = hy + 0.6, eye = ex => {
+    if (m === 'happy') return line(ctx, [[ex - 0.8, ey + 0.2], [ex, ey - 0.6], [ex + 0.8, ey + 0.2]], '#1b1b2f', 0.45);
+    if (m === 'sleep') return line(ctx, [[ex - 0.8, ey], [ex + 0.8, ey]], '#1b1b2f', 0.45);
+    const r = m === 'shock' ? 1 : 0.75;
+    oval(ctx, ex, ey, r, r * 1.15, '#ffffff', '#1b1b2f', 0.25);
+    oval(ctx, ex + 0.1, ey + 0.1, m === 'shock' ? 0.35 : 0.5, m === 'shock' ? 0.35 : 0.6, '#2b1d14');
+    oval(ctx, ex + 0.3, ey - 0.3, 0.18, 0.18, '#ffffff');
   };
-  eye(hx - 2.2); eye(hx + 2.2);
-  if (m === 'happy') { oval(ctx, hx - 3.7, hy + 1.5, 1, 0.6, 'rgba(255, 120, 140, .55)'); oval(ctx, hx + 3.7, hy + 1.5, 1, 0.6, 'rgba(255, 120, 140, .55)'); }
-  if (m === 'happy') { ctx.beginPath(); ctx.arc(hx, hy + 1.6, 1.4, 0.15 * Math.PI, 0.85 * Math.PI); ctx.strokeStyle = '#1b1b2f'; ctx.lineWidth = 0.45; ctx.stroke(); }
-  else if (m === 'sad') { ctx.beginPath(); ctx.arc(hx, hy + 3.4, 1.2, 1.15 * Math.PI, 1.85 * Math.PI); ctx.strokeStyle = '#1b1b2f'; ctx.lineWidth = 0.45; ctx.stroke(); oval(ctx, hx - 2.6, hy + 1.8, 0.45, 0.7, '#6bb6ff'); }
-  else if (m === 'shock') oval(ctx, hx, hy + 2.3, 0.8, 1, '#1b1b2f');
-  else line(ctx, [[hx - 0.8, hy + 2.2], [hx + 0.8, hy + 2.2]], '#1b1b2f', 0.45);
+  eye(hx - 1.6); eye(hx + 1.6);
+  line(ctx, [[hx - 2.4, ey - 1.5], [hx - 1, ey - 1.7]], HAIR, 0.35); line(ctx, [[hx + 1, ey - 1.7], [hx + 2.4, ey - 1.5]], HAIR, 0.35);
+  const my = hy + 2.6;
+  if (m === 'happy') {
+    oval(ctx, hx - 2.6, my - 0.6, 0.8, 0.45, 'rgba(255, 120, 140, .5)'); oval(ctx, hx + 2.6, my - 0.6, 0.8, 0.45, 'rgba(255, 120, 140, .5)');
+    ctx.beginPath(); ctx.arc(hx, my - 0.6, 1.1, 0.15 * Math.PI, 0.85 * Math.PI); ctx.strokeStyle = '#8a3a2a'; ctx.lineWidth = 0.4; ctx.stroke();
+  } else if (m === 'sad') {
+    ctx.beginPath(); ctx.arc(hx, my + 0.8, 1, 1.15 * Math.PI, 1.85 * Math.PI); ctx.strokeStyle = '#8a3a2a'; ctx.lineWidth = 0.4; ctx.stroke();
+    oval(ctx, hx - 1.9, ey + 1.4, 0.35, 0.6, '#6bb6ff');
+  } else if (m === 'shock') oval(ctx, hx, my, 0.6, 0.8, '#8a3a2a');
+  else line(ctx, [[hx - 0.7, my], [hx + 0.7, my]], '#8a3a2a', 0.4);
 }
 
 function hdCoins(ctx, coins, blink) {
@@ -407,7 +439,7 @@ function drawRoomHD(ctx, v) {
   sc.furn.filter(f => f.floor).forEach(f => set[hdKey(f)]?.(ctx, f, v));
   if (outside) hdCoins(ctx, v.coins, v.blink);
   const items = sc.furn.filter(f => !f.floor).map(f => ({ z: f.y + f.h, d: () => set[hdKey(f)]?.(ctx, f, v) }));
-  for (const a of v.ants) items.push({ z: a.y, d: () => hdAnt(ctx, a) });
+  for (const a of v.ants) items.push({ z: a.y, d: () => hdPerson(ctx, a) });
   items.sort((a, b) => a.z - b.z).forEach(it => it.d());
   if (v.near) hdHighlight(ctx, v.near, v.blink);
   const dk = outside ? darkness(v.clock) : 0;
