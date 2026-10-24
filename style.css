@@ -422,3 +422,6 @@ body.gfx-hd .panel, body.gfx-hd .room-wrap, body.gfx-hd .prompt, body.gfx-hd .mo
 body.gfx-hd .pc-monitor, body.gfx-hd .tv-body, body.gfx-hd .book, body.gfx-hd .online-btn, body.gfx-hd .scoreboard,
 body.gfx-hd .msg, body.gfx-hd .tag, body.gfx-hd .settings select, body.gfx-hd .mini { border-radius: 8px !important; }
 body.gfx-hd .room-wrap { overflow: hidden; }
+/* 고화질 캐릭터 그림: 비율 유지, 부드럽게 */
+#loginAnt, #fxAnt { object-fit: contain; }
+body.gfx-hd #loginAnt, body.gfx-hd #fxAnt { image-rendering: auto; }

@@ -103,7 +103,7 @@ function showLogin(msg = '') {
   closeAll();
   $('login').hidden = false;
   $('loginMsg').textContent = msg;
-  $('loginAnt').src = personURL('happy');
+  $('loginAnt').src = charImg('happy');
   $('loginName').focus();
   render();
 }
@@ -662,13 +662,16 @@ function effect() {
   shockUntil = performance.now() + 2000;
   const fx = $('fx'), anim = !store.settings.reduce;
   $('fxText').textContent = '시장 급락!';
-  $('fxAnt').src = personURL('shock', ME?.color);
+  $('fxAnt').src = charImg('shock', ME?.color);
   fx.className = 'fx show fx-crash' + (anim ? ' anim' : '');
   if (anim) $('roomWrap').classList.add('shake');
   clearTimeout(fxTimer);
   fxTimer = setTimeout(() => { fx.className = 'fx'; $('roomWrap').classList.remove('shake'); }, 1400);
   beep([[180, 0, .2], [140, .2, .3]]);
 }
+
+// 창에 띄우는 캐릭터 그림: 고화질이면 그림 파일, 픽셀이면 도트
+const charImg = (mood, color = 'red') => (store.settings.gfx === 'hd' ? `assets/person-${color}.png` : personURL(mood, color));
 
 // ===== 화면 =====
 // 방 위 안내는 4초 뒤 사라짐 (HTS 주문 결과 칸은 계속 남음)
@@ -772,7 +775,7 @@ function renderLabels(ants) {
     if (n.textContent !== a.name) n.textContent = a.name;
     n.classList.toggle('me', !!a.me);
     n.style.left = `${a.x / 3.2}%`;
-    n.style.top = `${(a.y - (store.settings.gfx === 'hd' ? 22 : 18)) / 1.76}%`;
+    n.style.top = `${(a.y - (store.settings.gfx === 'hd' ? PERSON_H + 2.5 : 18)) / 1.76}%`;
     const r = n.getBoundingClientRect();
     const hidden = shown.some(s => r.left < s.right && r.right > s.left && r.top < s.bottom && r.bottom > s.top);
     n.style.visibility = hidden ? 'hidden' : 'visible';

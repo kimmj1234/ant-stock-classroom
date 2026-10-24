@@ -359,8 +359,27 @@ function darken(hex, k) {
   return `rgb(${c.join(',')})`;
 }
 const SKIN = '#f3cba5', HAIR = '#4a2f1c', PANTS = '#2b2f38';
-// a: { x, y(발 위치), mood, bob(걷는 중 한 걸음), color(재킷 색) }
+// 고화질 캐릭터 그림 (assets/person-색.png, 재킷 색만 다른 5장). 불러오기 전에는 아래 도형 캐릭터로 그림
+const PERSON_IMG = {};
+for (const c of ['red', 'blue', 'yellow', 'white', 'black']) { const im = new Image(); im.src = `assets/person-${c}.png`; PERSON_IMG[c] = im; }
+const PERSON_H = 24;   // 방 칸 기준 키
+const MOOD_ICON = { happy: ['♪', '#e0a800'], sad: ['💧', '#3b82f6'], shock: ['❗', '#d9534f'], sleep: ['Z', '#6f6aa8'] };
 function hdPerson(ctx, a) {
+  const im = PERSON_IMG[a.color] || PERSON_IMG.red;
+  if (!im.complete || !im.naturalWidth) return hdPersonShapes(ctx, a);
+  const h = PERSON_H * (a.bob ? 0.97 : 1), w = PERSON_H * im.naturalWidth / im.naturalHeight * (a.bob ? 1.03 : 1);
+  shadow(ctx, a.x, a.y - 0.4, w * 0.5, 1.5, 0.3);   // 그림 아래 끝 = 발끝, 가운데 = 몸 가운데
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(im, a.x - w / 2, a.y - h - (a.bob ? 0.6 : 0), w, h);
+  const icon = MOOD_ICON[a.mood];
+  if (icon) {
+    const bx = a.x + w * 0.62, by = a.y - PERSON_H + 3;
+    rr(ctx, bx - 2.6, by - 2.6, 5.2, 5.2, 2, 'rgba(255, 255, 255, .92)', 'rgba(43, 29, 20, .6)', 0.3);
+    text(ctx, icon[0], bx, by + 0.2, 3.6, icon[1], 900);
+  }
+}
+// a: { x, y(발 위치), mood, bob(걷는 중 한 걸음), color(재킷 색) }
+function hdPersonShapes(ctx, a) {
   const x = a.x, y = a.y, coat = (BODY[a.color] || BODY.red).r, ty = y - (a.bob ? 0.5 : 0);
   shadow(ctx, x, y - 0.3, 5, 1.5, 0.28);
   // 다리·구두 (걸을 때 번갈아 들림)
