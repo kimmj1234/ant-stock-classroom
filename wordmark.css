@@ -1,4 +1,4 @@
-/* 글자 로고 "나의 두번째 인생": 맑은 고딕 Bold 12px을 안티앨리어싱 없이 찍은 픽셀 글자 + 오른쪽 아래 금색(#f7c948) 그림자 한 칸.
+/* 글자 로고 "나의 두번째 인생": 맑은 고딕 Bold 12px을 안티앨리어싱 없이 찍은 픽셀 글자 + 오른쪽 아래 회색 그림자 한 칸(밝은 바탕 #a8a8a8, 어두운 바탕 #5f6470).
    그림은 assets/logo-text.svg(검은 글자), logo-text-light.svg(흰 글자). 크기는 img의 width·height(한 칸 = 2~3px)로 정함.
    확대해도 칸이 흐려지지 않게 pixelated. 메인(/)과 게임(/play)이 함께 씀 */
 .wordmark { display: block; image-rendering: pixelated; max-width: 100%; height: auto; }
