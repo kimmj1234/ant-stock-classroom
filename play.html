@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>나의 두번째 인생 — 마을</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/site.css">
+<link rel="stylesheet" href="/wordmark.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&text=%EB%82%98%EC%9D%98%EB%91%90%EB%B2%88%EC%A7%B8%EC%9D%B8%EC%83%9D&display=swap">
+<style>
+  /* 게임 화면: 위 얇은 메뉴바 + 나머지 전부 게임 캔버스. 그림(맵·캐릭터·물건)은 앞으로 하나씩 디자인해서 바꿀 자리 */
+  html, body { height: 100%; overflow: hidden; background: #e4e4e2; color: #000; }
+  body { display: grid; grid-template-rows: auto 1fr; }
+  .menubar { padding: 10px 18px; border-bottom: 3px solid #000; }
+  .brand .logo3d { font-size: 22px; }
+  .menubar nav { display: flex; align-items: center; gap: 18px; }
+  .who { font-size: 14px; font-weight: bold; }
+  #game { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+  .view { position: relative; min-height: 0; }
+  .hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); margin: 0; padding: 6px 14px; border-radius: 999px; background: #000; color: #fff; font-size: 13px; pointer-events: none; white-space: nowrap; }
+
+  /* 휴대폰·태블릿(손가락): 왼쪽 아래 조이스틱, 오른쪽 아래 E 버튼. 마우스 기기에서는 숨김 */
+  .stick, .ebtn { display: none; }
+  @media (pointer: coarse) {
+    .hint { display: none; }
+    .stick { display: block; position: absolute; left: 24px; bottom: 24px; width: 120px; height: 120px; border-radius: 50%; background: rgba(0, 0, 0, .12); border: 3px solid #000; touch-action: none; }
+    .knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: #000; }
+    .ebtn { display: grid; place-items: center; position: absolute; right: 28px; bottom: 40px; width: 76px; height: 76px; border-radius: 50%; border: 3px solid #000; background: #fff; font: bold 28px sans-serif; color: #000; touch-action: none; }
+  }
+  /* 가로로 눕힌 낮은 화면: 메뉴바를 숨겨 게임을 크게 */
+  @media (pointer: coarse) and (max-height: 500px) { .menubar { display: none; } }
+</style>
+</head>
+<body>
+<header class="menubar">
+  <a class="brand" href="/"><span class="logo3d">나의 두번째 인생</span></a>
+  <nav aria-label="메뉴"><span class="who" id="who"></span><a id="account" href="#" hidden>로그아웃</a></nav>
+</header>
+<main class="view">
+  <canvas id="game" tabindex="0" aria-label="마을 화면. 방향키나 WASD로 움직이고 E로 상호작용"></canvas>
+  <p class="hint">방향키나 WASD로 움직이고, E 버튼으로 상호작용</p>
+  <div class="stick" id="stick" aria-hidden="true"><div class="knob" id="knob"></div></div>
+  <button class="ebtn" id="ebtn" type="button" aria-label="상호작용">E</button>
+</main>
+<script src="/site.js"></script>
+<script src="/game.js"></script>
+</body>
+</html>
