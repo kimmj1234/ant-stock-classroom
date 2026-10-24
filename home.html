@@ -20,10 +20,10 @@
   :root { --bar: 88px; }
   /* 영역 사이 이동(휠 한 번·↓ 화살표·로그인 링크)은 스크립트가 0.9초 동안 천천히 출발·멈춤으로 그림(glideTo). 터치 스크롤은 영역 가까이서 살짝 맞춰 멈춤(proximity) */
   html { scroll-snap-type: y proximity; }
-  .panel { min-height: 100svh; display: grid; place-items: center; padding: 32px 0; box-sizing: border-box; scroll-snap-align: start; }
+  .panel { position: relative; z-index: 2; min-height: 100svh; display: grid; place-items: center; padding: 32px 0; box-sizing: border-box; scroll-snap-align: start; }
 
   /* ----- 히어로 ----- */
-  .hero { position: relative; overflow: hidden; height: calc(100svh - var(--bar)); min-height: 560px; display: grid; place-items: center; padding: 48px 16px; box-sizing: border-box; scroll-snap-align: end; }
+  .hero { position: relative; overflow-x: clip; overflow-y: visible; height: calc(100svh - var(--bar)); min-height: 560px; display: grid; place-items: center; padding: 48px 16px; box-sizing: border-box; scroll-snap-align: end; }
   .hero-text { position: relative; z-index: 2; text-align: center; max-width: 100%; }
   /* 입체 제목: 흰 글자 + 검은 테두리 + 오른쪽 아래로 겹겹이 밀린 검은 그림자(두께감) */
   .extrude {
@@ -55,9 +55,9 @@
   .blob circle, .blob .spark { fill: #fff; }
   .b1 { width: clamp(220px, 27vw, 420px); top: 5%; right: 5%; transform: rotate(8deg); }
   .b2 { width: clamp(110px, 13vw, 200px); top: 30%; left: -3%; transform: rotate(-20deg); }
-  /* 아래쪽 두 덩어리는 영역 1 안에 다 들어오게(아래 끝에서 잘리지 않음). 화면 양옆에서만 잘림 */
-  .b3 { width: clamp(240px, 28vw, 440px); bottom: 3%; left: -9%; transform: rotate(150deg); }
-  .b4 { width: clamp(240px, 30vw, 470px); bottom: 2%; right: -10%; transform: rotate(40deg); }
+  /* 아래쪽 두 덩어리는 영역 1 아래 끝을 넘어 영역 2까지 이어짐(잘리지 않음). 영역 2의 게임 상자보다는 뒤 */
+  .b3 { width: clamp(260px, 32vw, 500px); bottom: -14%; left: -8%; transform: rotate(150deg); }
+  .b4 { width: clamp(260px, 34vw, 540px); bottom: -22%; right: -9%; transform: rotate(40deg); }
   .line { fill: #fff; stroke: #000; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
   .study { width: clamp(150px, 17vw, 260px); top: 13%; right: 9%; }   /* 검은 덩어리 안: 검은 바탕 + 흰 선 */
   .study .line { fill: #000; stroke: #fff; }
