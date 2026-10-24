@@ -9,8 +9,8 @@
 <link rel="stylesheet" href="/wordmark.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&text=%EB%82%98%EC%9D%98%EB%91%90%EB%B2%88%EC%A7%B8%EC%9D%B8%EC%83%9D&display=swap">
 <style>
-  /* 게임 화면: 위 얇은 메뉴바 + 나머지 전부 게임 캔버스. 그림(맵·캐릭터·물건)은 앞으로 하나씩 디자인해서 바꿀 자리 */
-  html, body { height: 100%; overflow: hidden; background: #e4e4e2; color: #000; }
+  /* 게임 화면: 위 얇은 메뉴바 + 나머지 전부 게임 캔버스(대각선 시점 픽셀 마을) */
+  html, body { height: 100%; overflow: hidden; background: #1d2a1b; color: #000; }
   body { display: grid; grid-template-rows: auto 1fr; }
   .menubar { padding: 10px 18px; border-bottom: 3px solid #000; }
   .brand .logo3d { font-size: 22px; }
@@ -44,6 +44,7 @@
   <button class="ebtn" id="ebtn" type="button" aria-label="상호작용">E</button>
 </main>
 <script src="/site.js"></script>
+<script src="/sprites.js"></script>
 <script src="/game.js"></script>
 </body>
 </html>
