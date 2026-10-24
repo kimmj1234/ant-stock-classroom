@@ -298,8 +298,8 @@ const EVENT_WEIGHTS = Object.fromEntries(EVENTS.map((e, i) => [i, e.weight]));
 const LESSON_KEYS = [...EVENTS.map(e => ({ key: e.key, name: e.name })), ...Object.keys(WEATHER_EVENTS).map(k => ({ key: 'w_' + k, name: WEATHER[k].name }))];
 
 // ===== 시장 =====
-// 장은 오전 9시에 열려 오후 6시에 닫힙니다. 그 사이 10분마다 한 번(TICKS_PER_DAY번) 조금씩 움직이고, 하루가 일봉 하나가 됩니다.
-const TICKS_PER_DAY = 54;
+// 장은 닫히지 않습니다. 10분마다 한 번(하루 TICKS_PER_DAY번) 조금씩 움직이고, 자정~자정 하루가 일봉 하나가 됩니다.
+const TICKS_PER_DAY = 144;
 const DEPOSIT_RATE = { base: 0.001, min: 0.0003, max: 0.003, step: 0.0005 };   // 은행 예금 하루 이자율
 
 function createMarket() {
@@ -338,7 +338,7 @@ function applyEvent(m, e, key, icon) {
   if (m.open) m.index[m.index.length - 1] = indexOf(m);
   const def = EVENTS.find(x => x.key === key);
   const item = {
-    id: ++m.newsId, key, icon, title: e.title, crash: !!def?.crash,
+    id: ++m.newsId, key, icon, title: e.title, crash: !!def?.crash, day: m.day, clock: m.clock,   // 언제 일어났는지 (종목별 "오늘 왜 움직였나"에 씀)
     lesson: def ? def.lesson : WEATHER_EVENTS[key.slice(2)].lesson,
     impacts: Object.entries(impact).map(([sym, j]) => ({ sym, j: +j.toFixed(4) })).sort((a, b) => Math.abs(b.j) - Math.abs(a.j)),
   };
@@ -347,7 +347,9 @@ function applyEvent(m, e, key, icon) {
   return item;
 }
 
-// 오전 9시 개장: 오늘 날씨 → 날씨 사건, 오늘 일어날 사건(0~2건)의 시각을 미리 정함, 새 일봉 시작
+// 뉴스는 게임 8시간마다 하루 3번: 자정(0시)·오전 8시·오후 4시. stepTick 한 번 = 10분이라 8시간 = 48번째
+const NEWS_TICKS = [48, 96];
+// 새 하루(자정): 오늘 날씨 → 자정 뉴스(날씨 사건이 있으면 그것, 없으면 일반 사건), 8시·16시 사건을 미리 정함, 새 일봉 시작
 function openDay(m) {
   m.day++;
   m.open = true; m.tick = 0;
@@ -359,13 +361,19 @@ function openDay(m) {
   if (WEATHER[m.weather].extreme && m.weather !== prev) {
     const w = WEATHER_EVENTS[m.weather];
     happened.push(applyEvent(m, { title: w.title(), hits: w.hits() }, 'w_' + m.weather, 'w_' + m.weather));
+  } else {
+    const def = EVENTS[weighted(EVENT_WEIGHTS)];
+    happened.push(applyEvent(m, def.make(), def.key, def.icon));
   }
-  const n = chance(0.55) ? (chance(0.25) ? 2 : 1) : 0;
-  m.pending = Array.from({ length: n }, () => ({ tick: 1 + Math.floor(Math.random() * (TICKS_PER_DAY - 2)), e: weighted(EVENT_WEIGHTS) }));
+  scheduleNews(m);
   return happened;
 }
+// 오늘 남은 뉴스(8시·16시) 중 아직 지나지 않은 것만 정함. 서버를 켤 때도 불러서, 예전 규칙으로 저장된 날도 바로 이 규칙을 따르게
+function scheduleNews(m) {
+  m.pending = NEWS_TICKS.filter(tick => tick > m.tick).map(tick => ({ tick, e: weighted(EVENT_WEIGHTS) }));
+}
 
-// 장중 10분: 예정된 사건 → 시장·업종·종목 고유 움직임을 하루치의 1/54만큼
+// 10분마다: 예정된 사건 → 시장·업종·종목 고유 움직임을 하루치의 1/TICKS_PER_DAY만큼
 function stepTick(m) {
   if (!m.open) return [];
   m.tick++;
@@ -386,7 +394,14 @@ function stepTick(m) {
   return happened;
 }
 
-// 오후 6시 마감: 사건 여파가 하루만큼 줄어듦
+// 종목마다 지금 작용하는 힘 (stepTick 식의 무작위가 아닌 부분, 하루 기준):
+// news = 지난 사건이 남긴 여파(종목 여파 + 베타 × 시장 여파), pull = 기준가 쪽으로 돌아오려는 힘
+const forcesOf = m => m.stocks.map((st, i) => ({
+  news: +(st.drift + STOCK_DEFS[i].beta * m.marketDrift).toFixed(4),
+  pull: +(REVERT * Math.log(STOCK_DEFS[i].price / st.raw)).toFixed(4),
+}));
+
+// 하루 마감(자정): 사건 여파가 하루만큼 줄어듦
 function closeDay(m) {
   m.open = false; m.pending = [];
   m.stocks.forEach(st => { st.drift *= DRIFT_DECAY; });
@@ -406,7 +421,7 @@ const seasonName = m => SEASON_NAME[seasonOf(monthOf(m))];
 
 module.exports = {
   VOL, SECTORS, TAG_LABEL, STOCK_DEFS, WEATHER, LESSON_KEYS, TICKS_PER_DAY,
-  createMarket, openDay, stepTick, closeDay, stepDay, monthOf, seasonName, tickSize,
+  createMarket, openDay, stepTick, closeDay, stepDay, monthOf, seasonName, tickSize, forcesOf, scheduleNews,
 };
 
 // ===== 점검: node market.js → 60거래일 × 300판 모의 실행 =====

@@ -2,7 +2,7 @@
 // ===== 개미 투자 교실 (브라우저) =====
 // 시장·사건·계좌·기록은 서버(server.js)가 정하고, 여기서는 보여 주기·내 개미 이동·주문 보내기만 합니다.
 // 끝이 없는 게임: 클리어·실패·다시 시작이 없고, 계좌는 계정에 계속 이어집니다.
-// 게임 시계: 오전 9시 개장 ~ 오후 6시 마감. 장 밖 시간에는 집 밖에서 알바·동전·은행으로 돈을 벌 수 있습니다.
+// 게임 시계: 장은 닫히지 않아 언제든 사고팔 수 있습니다. 집 밖에서는 알바·동전·은행으로도 돈을 벌 수 있습니다.
 
 const STORE_KEY = 'stockGame.v2';
 const START_POS = { x: 168, y: 150 };
@@ -38,10 +38,20 @@ let { store, note } = loadStore();
 save();
 
 // ===== 서버에서 받는 값 =====
-let META = null;   // 종목·업종 (접속 때 한 번)
+let META = null;
+// 오늘 수익률: 서버가 보낸 기준 금액(오늘 자정 총자산 + 그 뒤 알바·동전·이자) 대비. 게임 하루마다 0%에서 다시 시작
+const baseOf = p => p?.base || META.START_CASH;
+const retOf = (total, p) => total / baseOf(p) - 1;   // 종목·업종 (접속 때 한 번)
 let ST = null;     // 공유 시장 상태
 let ME = null;     // 내 계좌·기록 (로그인했을 때만)
-const others = new Map();   // 다른 참가자 개미 위치
+const others = new Map();   // 다른 참가자 개미 위치 (x,y = 화면에 그리는 곳, tx,ty = 서버에서 받은 곳)
+// 받은 위치를 바로 그리지 않고 목표로만 둠 → update()에서 걸어가듯 따라가서, 0.5초마다 받아도 순간이동처럼 끊겨 보이지 않음
+function setOther(p) {
+  const o = others.get(p.id);
+  // 처음 보이거나, 장소가 바뀌었거나, 너무 멀면(새로고침 등) 바로 그 자리로
+  if (!o || o.scene !== p.scene || Math.hypot(o.x - p.x, o.y - p.y) > 80) others.set(p.id, { id: p.id, x: p.x, y: p.y, tx: p.x, ty: p.y, scene: p.scene });
+  else { o.tx = p.x; o.ty = p.y; }
+}
 let sel = 0, sector = 'all', pcTab = 'hold', newsSeen = 0;
 
 // ===== 내 개미 (위치는 이 브라우저가 정하고 서버에 알림) =====
@@ -49,6 +59,7 @@ const P = { ...START_POS, moving: false, scene: 'inside' };
 let placed = false;   // 서버에 저장된 마지막 자리로 옮겼는지
 let near = null;
 const held = new Set();
+const stick = { x: 0, y: 0 };   // 모바일 조이스틱 방향 (-1 ~ 1)
 
 const loggedIn = () => !!ME;
 const atDesk = () => near?.act === 'trade';
@@ -86,7 +97,7 @@ function connect() {
   es = new EventSource('/api/stream');
   es.addEventListener('meta', e => { live = true; META = JSON.parse(e.data); buildSectors(); render(); });
   es.addEventListener('state', e => { live = true; onState(JSON.parse(e.data)); });
-  es.addEventListener('pos', e => JSON.parse(e.data).forEach(p => others.set(p.id, p)));
+  es.addEventListener('pos', e => JSON.parse(e.data).forEach(setOther));
   es.onerror = () => say('서버 연결이 끊겼어요. 다시 연결하는 중…');
   // 무료 터널(trycloudflare)은 실시간 스트림을 붙잡아 둘 때가 있음 → 3초 안에 아무것도 안 오면 0.5초마다 직접 받아 옴
   setTimeout(() => {
@@ -100,7 +111,7 @@ async function poll() {
   try {
     const s = await (await fetch('/api/poll' + (META ? '' : '?meta'))).json();
     if (s.meta) { META = s.meta; buildSectors(); }
-    for (const p of s.players) others.set(p.id, { id: p.id, ...p.pos, scene: p.scene });
+    for (const p of s.players) setOther({ id: p.id, ...p.pos, scene: p.scene });
     onState(s);
   } catch {
     say('서버 연결이 끊겼어요. 다시 연결하는 중…');
@@ -122,7 +133,7 @@ function onState(s) {
   const latest = s.news[0]?.id || 0;
   if (!first) for (const n of s.news) if (n.id > newsSeen && n.crash) effect('crash');
   newsSeen = Math.max(newsSeen, latest);
-  for (const p of s.players) if (!others.has(p.id)) others.set(p.id, { id: p.id, ...p.pos, scene: p.scene });
+  for (const p of s.players) if (!others.has(p.id)) setOther({ id: p.id, ...p.pos, scene: p.scene });
   render();
 }
 
@@ -145,7 +156,7 @@ $('loginForm').addEventListener('submit', async e => {
   if (!d.ok) { $('loginMsg').textContent = d.msg; return; }
   $('login').hidden = true;
   connect();          // 쿠키를 가진 채로 다시 연결 → 서버가 내 계좌를 보내 줌
-  say(d.msg + ' 방향키로 움직이고, 물건 앞에서 E를 누르세요.');
+  say(d.msg + ' 방향키나 WASD로 움직이고, 물건 앞에서 E를 누르세요.');
 });
 $('logoutBtn').addEventListener('click', async () => {
   await api('logout');
@@ -153,7 +164,7 @@ $('logoutBtn').addEventListener('click', async () => {
   connect();
 });
 
-// ===== 주문 한 번 = 체결 한 번 (B/S 키는 1주, 컴퓨터 주문창은 입력한 수량) =====
+// ===== 주문 한 번 = 체결 한 번 (B/N 키는 1주, 컴퓨터 주문창은 입력한 수량) =====
 let orderQueue = Promise.resolve();
 function trade(side, qty) {
   if (!loggedIn()) return say('로그인이 필요해요.');
@@ -208,7 +219,7 @@ function dlRows(dl, pairs) { dl.replaceChildren(...pairs.flatMap(([k, v, c]) => 
 
 // ===== 🗂 캐비닛: 내 기록만 (서버의 내 계정에서 옴) =====
 function buildRecords() {
-  const frag = tpl('tpl-records'), total = totalAssets(), ret = (total / META.START_CASH - 1) * 100;
+  const frag = tpl('tpl-records'), total = totalAssets(), ret = retOf(total, ME) * 100;
   const set = (cls, text, c) => { const e = frag.querySelector(cls); e.textContent = text; if (c) e.className += ' ' + c; };
   set('.r-total', won(total));
   set('.r-ret', pct(ret), upDown(ret));
@@ -247,7 +258,7 @@ async function startWork() {
   }, 100);
 }
 
-// ===== 🏦 은행: 예금은 원금이 줄지 않고 장 마감 때마다 이자 =====
+// ===== 🏦 은행: 예금은 원금이 줄지 않고 자정마다 이자 =====
 function openBank() {
   const frag = tpl('tpl-bank');
   const amt = frag.querySelector('.b-amount');
@@ -296,7 +307,7 @@ function renderTV() {
   drawNewsStudio(n.crash ? 'shock' : sum >= 0 ? 'happy' : 'sad', sum >= 0);
   $('tvWeather').textContent = `${ST.season} · ${META.weather[ST.weather].name}`;
   $('tvIcon').src = icon(n.icon);
-  $('tvTag').textContent = newsTag(n);
+  $('tvTag').textContent = newsTag(n) + (newsWhen(n) ? ` · 🕒 ${newsWhen(n)}` : '');
   $('tvTag').className = 'tv-tag' + (n.crash ? ' breaking' : '');
   $('tvHeadline').textContent = n.title;
   $('tvLearn').textContent = '📘 배우기 · ' + n.lesson;
@@ -350,8 +361,8 @@ const TERMS = [
     example: '🗂 캐비닛의 내 투자 기록에서 실현 손익을, HTS 잔고 탭에서 평가손익을 볼 수 있어요.',
     tip: '평가이익이 났다고 안심하지 마세요. 팔기 전까지는 언제든 바뀔 수 있어요.' },
   { term: '수익률', icon: 'up', lead: '처음 돈에 비해 얼마나 늘었는지(줄었는지)의 비율.',
-    detail: '수익률 = (지금 자산 ÷ 처음 자산 − 1) × 100%입니다. 100만 원이 110만 원이 되면 +10%입니다. 금액보다 수익률로 비교해야 시작 금액이 다른 사람과도 공정하게 비교할 수 있습니다.',
-    example: '화면 위 "수익률 (100만 원 대비)"가 내 수익률이에요.',
+    detail: '수익률 = (지금 자산 ÷ 처음 자산 − 1) × 100%입니다. 이 게임의 화면 위 수익률은 「오늘 수익률」이에요. 게임 자정마다 그때 자산을 기준으로 0%에서 다시 시작하고, 알바·동전·예금 이자로 번 돈은 기준에 더해서 주식으로 번 만큼만 나타나요. 100만 원이 110만 원이 되면 +10%입니다. 금액보다 수익률로 비교해야 시작 금액이 다른 사람과도 공정하게 비교할 수 있습니다.',
+    example: '화면 위 "오늘 수익률"이 오늘 주식으로 번 비율이에요. 게임 자정이 지나면 0%부터 다시 시작해요.',
     tip: '-50%가 되면 다시 원금으로 돌아가려면 +100%가 필요해요. 큰 손실을 피하는 게 중요한 이유예요.' },
   { term: '업종 (섹터)', icon: 'tech', lead: '비슷한 일을 하는 회사들의 묶음.',
     detail: '같은 업종의 회사들은 같은 뉴스에 함께 움직이는 경우가 많습니다. 반도체 가격이 오르면 반도체 회사들이 함께 오르는 식입니다.',
@@ -454,20 +465,20 @@ function renderNewsApp() {
   const list = ST.news;
   if (!list.length) {
     $('newsList').replaceChildren(el('p', 'pc-empty', '아직 뉴스가 없어요.'));
-    return $('newsView').replaceChildren(el('p', 'pc-empty', '장이 열리면 사건이 일어나고 뉴스가 도착해요.'));
+    return $('newsView').replaceChildren(el('p', 'pc-empty', '곧 사건이 일어나고 뉴스가 도착해요.'));
   }
   if (!list.some(n => n.id === newsSel)) newsSel = list[0].id;
   $('newsList').replaceChildren(...list.map(n => {
     const b = el('button', 'split-item' + (n.id === newsSel ? ' sel' : '') + (ME && n.id > ME.readUpTo ? ' unread' : ''));
     const img = el('img', 'px'); img.src = icon(n.icon); img.width = img.height = 16; img.alt = '';
-    b.append(img, el('span', 'si-tag', newsTag(n)), el('span', 'si-text', n.title));
+    b.append(img, el('span', 'si-tag', newsTag(n)), el('span', 'si-text', n.title), el('span', 'si-time', newsWhen(n)));
     b.addEventListener('click', () => { newsSel = n.id; render(); });
     return b;
   }));
   const n = list.find(x => x.id === newsSel), v = $('newsView');
   const head = el('div', 'nv-head'), img = el('img', 'px');
   img.src = icon(n.icon); img.width = img.height = 40; img.alt = '';
-  head.append(img, el('span', 'tv-tag' + (n.crash ? ' breaking' : ''), newsTag(n)));
+  head.append(img, el('span', 'tv-tag' + (n.crash ? ' breaking' : ''), newsTag(n)), el('span', 'nv-time', newsWhen(n) && `🕒 ${newsWhen(n)}`));
   const imp = el('ul', 'tv-impacts');
   const max = Math.max(...n.impacts.map(i => Math.abs(i.j)), 0.01);
   n.impacts.forEach(i => {
@@ -503,7 +514,7 @@ function renderTermsApp() {
     el('h3', '', '자세히 알아보기'), el('p', '', t.detail), el('h3', '', '게임에서 보면'), el('p', '', t.example), el('p', 'term-tip', '💡 ' + t.tip));
 }
 const SECTOR_COLOR = { tech: '#3b82f6', bio: '#e03e3e', food: '#f7c948', energy: '#8a76b8', auto: '#22a35a', leisure: '#f08a24' };
-const marketText = () => `${fmtTime(ST.clock)} · ${ST.open ? '장 운영 중' : '장 마감'} · ${ST.season} · ${META.weather[ST.weather].name}`;
+const marketText = () => `${fmtTime(ST.clock)} · 장 운영 중 · ${ST.season} · ${META.weather[ST.weather].name}`;
 
 // 📂 내 주식: 내가 가진 종목만 모아 보기
 function renderMine() {
@@ -572,6 +583,30 @@ function select(i) { sel = i; render(); }
 const tickSize = p => (p < 2000 ? 1 : p < 5000 ? 5 : p < 20000 ? 10 : p < 50000 ? 50 : p < 200000 ? 100 : 500);
 const fakeVol = (...k) => 30 + (k.reduce((h, v) => (h * 31 + v) % 9973, 7) * 37) % 900;
 
+// ===== 이 종목은 왜 움직였나 — market.js의 주가 식을 그대로 나눠 보여 줌 =====
+// 뉴스가 난 순간 바로 뛴 몫(impacts) + 지난 뉴스의 남은 여파(forces.news) + 기준가로 돌아오려는 힘(forces.pull) + 시장·업종·종목의 무작위 흐름
+// 뉴스가 올라온 때: "오늘 오후 4:00" / "어제 오전 8:00" / "3일 전 오전 12:00" (시각이 기록되기 전의 옛 뉴스는 빈칸)
+const newsWhen = n => {
+  if (n.day === undefined) return '';
+  const d = ST.day - n.day;
+  return `${d === 0 ? '오늘' : d === 1 ? '어제' : `${d}일 전`} ${fmtTime(n.clock)}`;
+};
+function whyMoved(i) {
+  const st = stockOf(i), h = ST.hist[i], now = h[h.length - 1], prev = h[h.length - 2] ?? now, rate = now / prev - 1;
+  const today = ST.news.filter(n => n.day === ST.day).map(n => ({ n, j: n.impacts.find(x => x.sym === st.sym)?.j || 0 })).filter(x => x.j);
+  const newsJ = today.reduce((a, x) => a + x.j, 0), rest = rate - newsJ;
+  const box = el('div', 'pc-why');
+  box.append(el('p', 'pc-why-head', `왜 움직였나 · 오늘 ${pct(rate * 100)}`));
+  const line = (text, v) => box.append(el('p', 'pc-why-row ' + upDown(v), text));
+  if (today.length) today.forEach(x => line(`📰 ${fmtTime(x.n.clock)} ${x.n.title} → ${pct(x.j * 100)}`, x.j));
+  else line('📰 오늘은 이 종목을 움직인 뉴스가 없어요', 0);
+  line(`🌊 시장·업종 흐름과 일반 매매 → ${pct(rest * 100)}`, rest);
+  const f = ST.forces?.[i];
+  if (f && Math.abs(f.news) >= 0.001) line(`⏳ 지난 뉴스 여파: 하루 약 ${pct(f.news * 100)}씩 ${f.news > 0 ? '오르는' : '내리는'} 힘이 남아 있어요 (매일 30%씩 약해짐)`, f.news);
+  if (f && Math.abs(f.pull) >= 0.001) line(`🧲 기준가보다 ${f.pull < 0 ? '많이 올라 내려오려는' : '많이 내려 올라가려는'} 힘: 하루 약 ${pct(f.pull * 100)}`, f.pull);
+  return box;
+}
+
 function renderPC() {
   if (!isOpen('pc') || !META || !ST) return;
   $('taskTray').textContent = marketText();
@@ -595,9 +630,9 @@ function renderPC() {
     b.addEventListener('click', () => select(i));
     return b;
   }));
-  const total = totalAssets(), ret = ME ? (total / META.START_CASH - 1) * 100 : 0;
+  const total = totalAssets(), ret = ME ? retOf(total, ME) * 100 : 0;
   dlRows($('pcAccount'), ME ? [
-    ['총자산', won(total)], ['수익률', pct(ret), upDown(ret)], ['예수금(현금)', won(ME.cash)],
+    ['총자산', won(total)], ['오늘 수익률', pct(ret), upDown(ret)], ['예수금(현금)', won(ME.cash)],
     ['주식 평가액', won(stockValue())], ['은행 예금', won(ME.bank)], ['실현 손익', signed(ME.realized, won(ME.realized)), upDown(ME.realized)],
   ] : [['로그인', '필요']]);
 
@@ -607,7 +642,7 @@ function renderPC() {
   const pr = el('div', 'pc-q-price ' + upDown(diff));
   pr.append(el('span', 'big', won(price)), el('span', '', `${diff > 0 ? '▲' : diff < 0 ? '▼' : '-'} ${won(Math.abs(diff))} (${pct(rate)})`));
   const h = ST.hist[sel];
-  q.append(head, pr, el('div', 'pc-q-meta', `최근 고가 ${won(Math.max(...h))} · 저가 ${won(Math.min(...h))}` + (mine ? ` · 보유 ${mine.qty}주 · 평단 ${won(avg)}` : '')));
+  q.append(head, pr, el('div', 'pc-q-meta', `최근 고가 ${won(Math.max(...h))} · 저가 ${won(Math.min(...h))}` + (mine ? ` · 보유 ${mine.qty}주 · 평단 ${won(avg)}` : '')), whyMoved(sel));
   drawChart($('pcChart'), h, mine ? avg : null, 60);
 
   document.querySelectorAll('.pc-tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === pcTab));
@@ -635,11 +670,11 @@ function renderPC() {
     tab.append(el('p', 'pc-sub', '특징: ' + st.tags.map(t => META.tagLabel[t]).join(' / ')));
     const related = ST.news.filter(n => n.impacts.some(i => i.sym === st.sym));
     tab.append(el('p', 'pc-sub', related.length ? '이 종목을 움직인 최근 사건' : '최근 이 종목을 움직인 사건이 없습니다.'));
-    related.slice(0, 5).forEach(n => { const j = n.impacts.find(i => i.sym === st.sym).j; tab.append(el('p', 'pc-news ' + upDown(j), `${n.title} (${pct(j * 100)})`)); });
+    related.slice(0, 5).forEach(n => { const j = n.impacts.find(i => i.sym === st.sym).j; tab.append(el('p', 'pc-news ' + upDown(j), `${newsWhen(n)} ${n.title} (${pct(j * 100)})`)); });
   } else {
-    const t = el('table'); t.append(row([['순위'], ['참가자'], ['총자산'], ['수익률']], 'th'));
+    const t = el('table'); t.append(row([['순위'], ['참가자'], ['총자산'], ['오늘 수익률']], 'th'));
     [...ST.players].sort((a, b) => b.total - a.total).forEach((p, k) => {
-      const r = (p.total / META.START_CASH - 1) * 100;
+      const r = retOf(p.total, p) * 100;
       t.append(row([[`${k + 1}`], [p.name + (p.id === ME?.id ? ' (나)' : '')], [won(p.total)], [pct(r), upDown(r)]]));
     });
     tab.append(t);
@@ -657,12 +692,12 @@ function renderPC() {
   const qty = Number($('pcQty').value);
   $('pcOrderName').textContent = `${st.name} · ${won(price)}`;
   dlRows($('pcOrderInfo'), [
+    ['현금(예수금)', ME ? won(ME.cash) : '-'],
     ['주문 금액', Number.isInteger(qty) && qty > 0 ? won(price * qty) : '-'],
     ['매수 가능', ME ? `${Math.floor(ME.cash / price)}주` : '-'], ['보유 수량', `${mine?.qty || 0}주`],
   ]);
-  $('pcBuy').disabled = $('pcSell').disabled = !ME || !ST.open;
-  $('pcStatus').textContent = (ST.open ? `● 장 운영 중 (${fmtTime(ST.clock)}) — 오후 6시에 마감 · 모든 참가자가 같은 시세를 봅니다`
-    : `● 장 마감 (${fmtTime(ST.clock)}) — 오전 9시에 다시 열려요. 그동안 집 밖에서 알바·은행을 이용해 보세요`) + ' · ↑↓ 종목 · Esc 닫기';
+  $('pcBuy').disabled = $('pcSell').disabled = !ME;
+  $('pcStatus').textContent = `● 장 운영 중 (${fmtTime(ST.clock)}) — 24시간 거래 · 모든 참가자가 같은 시세를 봅니다 · ↑↓ 종목 · Esc 닫기`;
 }
 function setQty(kind) {
   const n = kind === 'max' ? Math.floor((ME?.cash || 0) / priceOf(sel)) : kind === 'all' ? (ME?.hold[stockOf(sel).sym]?.qty || 0) : Number(kind);
@@ -733,10 +768,9 @@ function say(text) {
 
 function render() {
   if (!META || !ST) return;
-  const total = totalAssets(), ret = ME ? (total / META.START_CASH - 1) * 100 : 0;
+  const total = totalAssets(), ret = ME ? retOf(total, ME) * 100 : 0;
   const idx = ST.index, iNow = idx[idx.length - 1], iPrev = idx[idx.length - 2] ?? iNow;
-  $('time').textContent = `${fmtTime(ST.clock)} ${ST.open ? '개장' : '마감'}`;
-  $('time').className = ST.open ? 'up' : '';
+  $('time').textContent = fmtTime(ST.clock);
   $('weather').textContent = `${ST.season} · ${META.weather[ST.weather].name}`;
   $('bank').textContent = ME ? won(ME.bank) : '-';
   $('index').textContent = `${iNow.toFixed(1)} (${pct((iNow / iPrev - 1) * 100)})`;
@@ -752,10 +786,10 @@ function render() {
 
   const coin = nearCoin();
   $('prompt').textContent = coin ? `[E] 🪙 동전 줍기 (${won(coin.value)})`
-    : near ? (near.act === 'trade' ? `[E] 💻 컴퓨터 켜기 (HTS) · B 매수 · S 매도 — 선택 종목: ${stockOf(sel).name} ${won(priceOf(sel))}`
+    : near ? (near.act === 'trade' ? `[E] 💻 컴퓨터 켜기 (HTS) · B 매수 · N 매도 — 선택 종목: ${stockOf(sel).name} ${won(priceOf(sel))}`
       : near.act === 'work' ? `[E] ${near.label} (시급 ${won(META.WAGE)}, 오늘 ${ME?.shiftsLeft ?? 0}번 남음)` : `[E] ${near.label}`)
     : P.scene === 'inside'
-      ? '←↑↓→ 이동 · 물건 앞에서 E · 💻 책상: HTS · 📺 TV: 뉴스 · 🎨 고양이 옆 발판: 색 · ↓ 가운데 방 아래 현관으로 나가기'
+      ? '←↑↓→·WASD 이동 · 물건 앞에서 E · 💻 책상: HTS · 📺 TV: 뉴스 · 🎨 고양이 옆 발판: 색 · ↓ 가운데 방 아래 현관으로 나가기'
       : '🏪 편의점 알바 · 🏦 은행 예금 · 🪙 동전 줍기 · ↑ 집 문으로 들어가기';
   $('prompt').classList.toggle('on', !!(near || coin));
 
@@ -769,7 +803,7 @@ function render() {
   $('onlineBtn').setAttribute('aria-expanded', boardOpen);
   $('scoreboard').classList.toggle('open', boardOpen);
   $('scoreboard').replaceChildren(...ranked.map((p, k) => {
-    const li = el('li', p.id === ME?.id ? 'me' : ''), r = (p.total / META.START_CASH - 1) * 100;
+    const li = el('li', p.id === ME?.id ? 'me' : ''), r = retOf(p.total, p) * 100;
     const sw = el('i'); sw.style.background = BODY[p.color]?.r || BODY.red.r;
     li.append(el('span', 'rk', `${k + 1}`), sw, el('span', 'nm', p.name), el('span', 'rt ' + upDown(r), pct(r)));
     return li;
@@ -785,7 +819,8 @@ $('onlineBtn').addEventListener('click', () => { boardOpen = !boardOpen; render(
 // 방 크기: 화면에 들어가는 가장 큰 '정수 배율'(3배, 4배…)로 맞춰 픽셀이 고르고 또렷하게 보이게 함
 function fitRoom() {
   const col = $('roomCol');
-  const availW = col.parentElement.clientWidth - 8;
+  const row = getComputedStyle(col.parentElement).flexDirection === 'row';   // 휴대폰 가로: 상태판이 방 왼쪽에 있음
+  const availW = col.parentElement.clientWidth - 8 - (row ? col.previousElementSibling.offsetWidth + 6 : 0);
   const availH = innerHeight - col.getBoundingClientRect().top - $('prompt').offsetHeight - 20;
   const raw = Math.min(availW / 320, availH / 176);
   // 픽셀: 정수 배율(도트가 고르게). 고화질: 화면에 들어가는 최대 크기까지
@@ -852,6 +887,14 @@ function update(dt, now) {
   let dx = canMove ? held.has('ArrowRight') - held.has('ArrowLeft') : 0;
   let dy = canMove ? held.has('ArrowDown') - held.has('ArrowUp') : 0;
   if (dx && dy) { dx *= Math.SQRT1_2; dy *= Math.SQRT1_2; }
+  if (canMove && !dx && !dy) { dx = stick.x; dy = stick.y; }
+  // 다른 참가자: 목표 위치까지 걷는 속도로 따라감. 뒤처질수록 빨리 따라잡음
+  for (const o of others.values()) {
+    const ddx = o.tx - o.x, ddy = o.ty - o.y, d = Math.hypot(ddx, ddy);
+    if (!d) continue;
+    const step = Math.min(d, Math.max(SPEED, d * 4) * dt);
+    o.x += ddx / d * step; o.y += ddy / d * step;
+  }   // 모바일 조이스틱 (많이 밀수록 빠르게)
   P.moving = !!(dx || dy);
   if (dx && !blocked(P.x + dx * SPEED * dt, P.y, P.scene)) P.x += dx * SPEED * dt;
   if (dy && !blocked(P.x, P.y + dy * SPEED * dt, P.scene)) P.y += dy * SPEED * dt;
@@ -883,11 +926,13 @@ function loop(now) {
   if (META && ST) {
     const still = store.settings.reduce;
     const ants = ST.players.filter(p => p.id !== ME?.id && (others.get(p.id)?.scene || p.scene) === P.scene).map(p => {
-      const pos = others.get(p.id) || p.pos, r = p.total / META.START_CASH - 1;
-      return { id: p.id, name: p.name, x: pos.x, y: pos.y, color: p.color, mood: r > 0.01 ? 'happy' : r < -0.01 ? 'sad' : 'normal' };
+      const pos = others.get(p.id) || p.pos, r = retOf(p.total, p);
+      const walking = pos.tx !== undefined && Math.hypot(pos.tx - pos.x, pos.ty - pos.y) > 0.5;
+      return { id: p.id, name: p.name, x: pos.x, y: pos.y, color: p.color, mood: r > 0.01 ? 'happy' : r < -0.01 ? 'sad' : 'normal',
+        bob: !still && walking && Math.floor(now / 150) % 2 === 0 };
     });
     if (ME) {
-      const r = totalAssets() / META.START_CASH - 1;
+      const r = retOf(totalAssets(), ME);
       ants.push({ id: ME.id, name: ME.name, me: true, x: P.x, y: P.y, color: ME.color,
         mood: now < shockUntil ? 'shock' : r > 0.01 ? 'happy' : r < -0.01 ? 'sad' : 'normal',
         bob: !still && (P.moving || isOpen('work')) && Math.floor(now / 150) % 2 === 0 });
@@ -924,53 +969,83 @@ document.querySelectorAll('.pc-quick button').forEach(b => b.addEventListener('c
 document.querySelectorAll('.pc-tabs button').forEach(b => b.addEventListener('click', () => { pcTab = b.dataset.tab; renderPC(); }));
 
 const ARROWS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const WASD = { KeyW: 'ArrowUp', KeyA: 'ArrowLeft', KeyS: 'ArrowDown', KeyD: 'ArrowRight' };
 document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey || !$('login').hidden) return;
   const t = e.target instanceof Element ? e.target : document.body;
-  const closeKey = e.code === 'Escape' || (e.code === 'KeyE' && !t.closest('input'));
+  // WASD도 방향키처럼 (글자를 입력하는 칸에서는 그대로 글자)
+  const code = (!t.closest('input, textarea, select') && WASD[e.code]) || e.code;
+  const closeKey = code === 'Escape' || (code === 'KeyE' && !t.closest('input'));
   if (isOpen('tv') || isOpen('book')) {
     const id = isOpen('tv') ? 'tv' : 'book';
     if (closeKey) { e.preventDefault(); return hide(id); }
-    if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+    if (code === 'ArrowLeft' || code === 'ArrowRight') {
       e.preventDefault();
-      const step = e.code === 'ArrowRight' ? 1 : -1;
+      const step = code === 'ArrowRight' ? 1 : -1;
       return id === 'tv' ? tvMove(step) : turnPage(step);
     }
-    if (ARROWS.has(e.code)) e.preventDefault();
+    if (ARROWS.has(code)) e.preventDefault();
     return;
   }
   if (isOpen('pc')) {
     // Esc·E: 앱 → 바탕화면 → 컴퓨터 끄기
     if (closeKey) { e.preventDefault(); return pcApp ? openApp(null) : hide('pc'); }
-    if (t.closest('input') && !(t.id === 'termSearch' && (e.code === 'ArrowUp' || e.code === 'ArrowDown'))) return; // 입력 중
+    if (t.closest('input') && !(t.id === 'termSearch' && (code === 'ArrowUp' || code === 'ArrowDown'))) return; // 입력 중
     // 뉴스·용어 앱: ↑↓로 목록 이동 (검색창에서도 됨)
-    if ((pcApp === 'news' || pcApp === 'terms') && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
+    if ((pcApp === 'news' || pcApp === 'terms') && (code === 'ArrowUp' || code === 'ArrowDown')) {
       e.preventDefault();
-      const step = e.code === 'ArrowDown' ? 1 : -1;
+      const step = code === 'ArrowDown' ? 1 : -1;
       if (pcApp === 'news') { const k = ST.news.findIndex(n => n.id === newsSel); newsSel = ST.news[Math.max(0, Math.min(ST.news.length - 1, k + step))]?.id ?? newsSel; }
       else { const ids = termMatches(), k = ids.indexOf(termSel); termSel = ids[Math.max(0, Math.min(ids.length - 1, k + step))] ?? termSel; }
       return render();
     }
-    if (pcApp === 'hts' && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
+    if (pcApp === 'hts' && (code === 'ArrowUp' || code === 'ArrowDown')) {
       e.preventDefault();
       const list = visibleStocks(), k = list.indexOf(sel);
-      return select(list[(k + (e.code === 'ArrowDown' ? 1 : list.length - 1)) % list.length] ?? list[0]);
+      return select(list[(k + (code === 'ArrowDown' ? 1 : list.length - 1)) % list.length] ?? list[0]);
     }
-    if (ARROWS.has(e.code)) return e.preventDefault();
+    if (ARROWS.has(code)) return e.preventDefault();
   }
   if (t.closest('select, input, textarea')) return;
-  if (ARROWS.has(e.code)) { e.preventDefault(); held.add(e.code); return; }
+  if (ARROWS.has(code)) { e.preventDefault(); held.add(code); return; }
   // 키를 누르고 있을 때의 자동 반복은 무시 → 키 한 번 = 동작 한 번
   if (e.repeat) return;
   if (isOpen('modal')) {
     if (closeKey) { e.preventDefault(); hide('modal'); }
     return;
   }
-  if (e.code === 'KeyE') { e.preventDefault(); return interact(); }
-  if (e.code === 'KeyB') { e.preventDefault(); return trade('buy', 1); }
-  if (e.code === 'KeyS') { e.preventDefault(); return trade('sell', 1); }
+  if (code === 'KeyE') { e.preventDefault(); return interact(); }
+  if (code === 'KeyB') { e.preventDefault(); return trade('buy', 1); }
+  if (code === 'KeyN') { e.preventDefault(); return trade('sell', 1); }   // 매도는 N (S는 아래로 이동)
 });
-document.addEventListener('keyup', e => held.delete(e.code));
+document.addEventListener('keyup', e => held.delete(WASD[e.code] || e.code));
+
+// ===== 모바일: 조이스틱으로 이동, E 버튼, 게임 화면을 터치하면 가로 전체화면 =====
+{
+  const base = $('stick'), knob = base.firstElementChild;
+  let id = null;
+  const move = e => {
+    const r = base.getBoundingClientRect(), R = r.width / 2;
+    let x = (e.clientX - r.left - R) / R, y = (e.clientY - r.top - R) / R;
+    const m = Math.hypot(x, y);
+    if (m > 1) { x /= m; y /= m; }
+    knob.style.transform = `translate(${x * R * 0.6}px, ${y * R * 0.6}px)`;
+    if (m < 0.2) x = y = 0;   // 가운데 살짝 닿은 건 무시
+    stick.x = x; stick.y = y;
+  };
+  const end = e => { if (e.pointerId !== id) return; id = null; stick.x = stick.y = 0; knob.style.transform = ''; };
+  base.addEventListener('pointerdown', e => { id = e.pointerId; base.setPointerCapture(id); move(e); });
+  base.addEventListener('pointermove', e => { if (e.pointerId === id) move(e); });
+  base.addEventListener('pointerup', end);
+  base.addEventListener('pointercancel', end);
+}
+// E 버튼은 키보드 E와 똑같이 처리 (물건 사용·동전 줍기·창 닫기)
+$('touchE').addEventListener('click', () => document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' })));
+// 전체화면은 사용자가 화면을 터치할 때만 요청할 수 있음. 가로 고정은 지원하는 브라우저(안드로이드 크롬 등)에서만 됨
+$('roomWrap').addEventListener('pointerdown', e => {
+  if (e.pointerType !== 'touch' || document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+  document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
+});
 // 창을 벗어나면 눌린 키만 초기화 (시장은 모두의 것이라 멈추지 않음)
 window.addEventListener('blur', () => held.clear());
 // 새로고침·창 닫기 직전 마지막 위치를 한 번 더 보냄 (0.15초 간격 전송 사이에 움직인 것까지)
@@ -1003,6 +1078,6 @@ $('gfx').addEventListener('change', e => {
 if (note) { $('notice').textContent = '⚠ ' + note; $('notice').hidden = false; }
 refreshIcons();
 connect();
-api('me').then(d => { if (d.ok) { say('다시 오셨네요! 방향키로 움직이고, 물건 앞에서 E를 누르세요.'); render(); } else showLogin(); });
+api('me').then(d => { if (d.ok) { say('다시 오셨네요! 방향키나 WASD로 움직이고, 물건 앞에서 E를 누르세요.'); render(); } else showLogin(); });
 fitRoom();
 requestAnimationFrame(loop);

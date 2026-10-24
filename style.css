@@ -171,6 +171,33 @@ th { color: var(--mute); font-weight: normal; }
 .pc-tab p { margin: 4px 0; }
 .pc-empty { color: #7d8db3; }
 .pc-news { font-size: 12px; }
+
+/* 휴대폰 가로 화면: 머리줄을 숨기고, 상태판은 방 왼쪽에 좁은 세로 칸으로 → 방이 화면 높이를 꽉 채움 */
+@media (orientation: landscape) and (max-height: 500px) {
+  header, .prompt { display: none; }
+  .layout { padding: 4px 6px; }
+  .stage { flex-direction: row; align-items: center; gap: 6px; }
+  .hud { flex: 0 0 112px; align-self: stretch; padding: 4px 6px; box-shadow: none; }
+  .stats { grid-template-columns: 1fr; gap: 2px; }
+  .stats dt { font-size: 10px; line-height: 1.2; }
+  .stats dd { font-size: 12px; line-height: 1.3; }
+  .stats > div:nth-child(2), .stats > div:nth-child(3), .stats > div:nth-child(10) { display: none; }   /* 날씨·개미지수·배운 개념은 컴퓨터·TV에서 */
+  .msg { font-size: 12px; max-width: 70%; border-width: 2px; }
+  .touch.stick { left: 136px; }   /* 왼쪽 상태판을 가리지 않게 방 위로 */
+}
+
+/* 모바일 터치 조작: 손가락으로 쓰는 기기에서만 보임. 창(모달·컴퓨터·TV, z-index 5~7)보다 아래 */
+.touch { display: none; }
+@media (pointer: coarse) {
+  .touch { display: block; position: fixed; z-index: 4; bottom: 16px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .stick { left: 16px; width: 120px; height: 120px; border-radius: 50% !important; background: rgba(16, 16, 32, .3); border: 2px solid rgba(255, 255, 255, .6); }
+  .stick .knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50% !important; background: rgba(255, 255, 255, .85); box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
+  .touch-e { right: 16px; width: 76px; height: 76px; border-radius: 50% !important; font: bold 28px sans-serif; color: #2b2b3a; background: rgba(247, 201, 72, .92); border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
+}
+.pc-why { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: rgba(125, 141, 179, .12); }
+.pc-why p { margin: 0; font-size: 12px; line-height: 1.5; }
+.pc-why-head { font-weight: bold; color: #f7c948; }
+.pc-why-row:not(.up):not(.down) { color: #b8c3dd; }
 .pc-book td { padding: 2px 4px; border: 1px solid #0b1426; text-align: right; color: #d7e3ff; }
 .pc-book .ask td { background: #142a52; }
 .pc-book .bid td { background: #3a1626; }
@@ -410,6 +437,10 @@ body.reduce .tv-live { animation: none; }
 .split-view p { margin: 0 0 8px; }
 .split-view .tv-learn { margin: 8px 0; }
 .nv-head { display: flex; align-items: center; gap: 10px; }
+/* 뉴스가 올라온 때 (목록에서는 제목 아래 줄, 기사에서는 머리 오른쪽) */
+.split-item .si-time { grid-column: 2 / -1; font-size: 11px; color: #7d8db3; }
+.split-item .si-time:empty, .nv-time:empty { display: none; }
+.nv-time { font-size: 12px; color: #9aa8c7; }
 .nv-title { margin: 8px 0; font-size: 20px; color: #fff; }
 .term-tip { background: #2a2610; border-left: 4px solid #f7c948; padding: 6px 8px; }
 .term-search { font: inherit; padding: 5px 8px; background: #0b1426; color: #fff; border: 2px solid #3b82f6; }

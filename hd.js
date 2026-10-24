@@ -171,12 +171,6 @@ const HD_IN = {
     ctx.save(); ctx.translate(f.x + 20, f.y + 4.5); ctx.rotate(-0.12); rr(ctx, -4.5, -2.5, 9, 5, 0.4, '#fffbea', 'rgba(0, 0, 0, .3)', 0.25);
     line(ctx, [[-3, -1], [3, -1]], '#9aa3b5', 0.3); line(ctx, [[-3, 0.6], [2, 0.6]], '#9aa3b5', 0.3); ctx.restore();
   },
-  armchair(ctx, f) {
-    shadow(ctx, f.x + f.w / 2, f.y + f.h, f.w / 2 + 1, 2);
-    rr(ctx, f.x, f.y, f.w, f.h, 3, vg(ctx, f.y, f.y + f.h, '#e6d6b2', '#c9b68c'), INK);
-    rr(ctx, f.x + 3, f.y + 3, f.w - 6, f.h - 7, 2, vg(ctx, f.y, f.y + f.h, '#fbf2dc', '#eadcbc'));
-    rr(ctx, f.x + 3.5, f.y + 3.5, f.w - 7, 2, 1, 'rgba(255, 255, 255, .6)');
-  },
   cabinet(ctx, f) {
     shadow(ctx, f.x + f.w / 2, f.y + f.h, f.w / 2 + 1, 2);
     rr(ctx, f.x, f.y, f.w, f.h, 1.5, hg(ctx, f.x, f.x + f.w, '#8a93a5', '#b9c1cf', '#8a93a5'), INK);

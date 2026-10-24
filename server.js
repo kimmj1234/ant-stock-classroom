@@ -1,7 +1,7 @@
 'use strict';
 // ===== 개미 투자 교실 서버: 파일 제공 + 계정 + 하나의 공유 시장 =====
 // 실행: node server.js → http://localhost:5000
-// 끝이 없는 게임입니다. 게임 시계는 접속자가 있으면 계속 흐르고(오전 9시 개장 ~ 오후 6시 마감),
+// 끝이 없는 게임입니다. 게임 시계는 접속자가 있으면 계속 흐르고, 장은 닫히지 않습니다(자정마다 하루가 바뀜),
 // 시장·계좌는 data/ 에 저장되어 서버를 다시 켜도 이어집니다.
 const http = require('http');
 const fs = require('fs');
@@ -11,9 +11,8 @@ const market = require('./market');
 
 const PORT = 5000, HOST = '127.0.0.1';
 const START_CASH = 1000000;
-const OPEN = 9 * 60, CLOSE = 18 * 60;          // 게임 시계(분): 장 여는 시각·닫는 시각
 const GAME_MINUTE_MS = 2000;                   // 게임 1분 = 실제 2초 (실제 1분 = 게임 30분, 하루 = 실제 48분)
-const MARKET_STEP = 10;                        // 장중 시세는 게임 10분(실제 20초)마다 움직임
+const MARKET_STEP = 10;                        // 시세는 게임 10분(실제 20초)마다 움직임
 // 집 밖에서 돈 버는 방법 (위치는 pixel.js의 바깥 지도와 같음)
 const STORE = { x: 8, y: 6, w: 88, h: 50 }, BANK = { x: 224, y: 6, w: 88, h: 50 };
 const WAGE = 15000, WORK_MS = 8000, SHIFTS_PER_DAY = 3;
@@ -48,9 +47,8 @@ function loadMarket(saved) {
 }
 const saved = readJSONFile(STATE_FILE) || {};
 const M = loadMarket(saved.market);
-const isMarketHours = () => M.clock >= OPEN && M.clock < CLOSE;
-if (M.open && !isMarketHours()) market.closeDay(M);
-if (!M.open && isMarketHours()) market.openDay(M);
+if (!M.open) market.openDay(M);   // 장은 항상 열려 있음 (예전 저장 파일이 마감 상태여도 바로 개장)
+else market.scheduleNews(M);      // 오늘 남은 뉴스 시각을 8시간 규칙으로 다시 정함
 let coins = [], coinId = 0;
 
 // ===== 계정: 별명이 처음이면 자동 생성, 있으면 비밀번호 확인 =====
@@ -82,7 +80,9 @@ function makePlayer(key, acc, s = {}) {
   return {
     id: crypto.randomUUID(), key, name: acc.name, color: acc.color,
     cash: num(s.cash, START_CASH), bank: Math.max(0, num(s.bank, 0)), hold, realized: num(s.realized, 0), best: num(s.best, START_CASH),
-    earned: num(s.earned, 0), interest: num(s.interest, 0), shiftDay: num(s.shiftDay, -1), shifts: num(s.shifts, 0), work: null,
+    earned: num(s.earned, 0), interest: num(s.interest, 0),
+    // 오늘 수익률의 출발점 (처음엔 시작 100만 원 기준, 자정마다 그때 총자산으로 바뀜)
+    dayStart: num(s.dayStart, START_CASH), dayExtra: num(s.dayExtra, 0), shiftDay: num(s.shiftDay, -1), shifts: num(s.shifts, 0), work: null,
     scene: s.scene === 'outside' ? 'outside' : 'inside',
     log: Array.isArray(s.log) ? s.log.slice(0, LOG_MAX) : [], assetHist: Array.isArray(s.assetHist) ? s.assetHist.filter(Number.isFinite).slice(-ASSET_MAX) : [],
     learned: Array.isArray(s.learned) ? s.learned.filter(k => market.LESSON_KEYS.some(l => l.key === k)) : [],
@@ -100,14 +100,16 @@ for (const [h, key] of Object.entries(saved.sessions || {})) {
 
 const nearRect = (p, r, d = 24) => Math.hypot(Math.max(r.x - p.pos.x, 0, p.pos.x - (r.x + r.w)), Math.max(r.y - p.pos.y, 0, p.pos.y - (r.y + r.h))) <= d;
 const priceOf = sym => M.stocks.find(s => s.sym === sym).price;
+// 오늘 수익률의 기준: 오늘 자정의 총자산 + 그 뒤 알바·동전·예금 이자로 번 돈 (주식으로 번 것만, 게임 하루마다 새로 시작)
+const baseOf = p => p.dayStart + (p.earned + p.interest - p.dayExtra);
 const totalOf = p => p.cash + p.bank + Object.entries(p.hold).reduce((a, [sym, h]) => a + h.qty * priceOf(sym), 0);
 const online = id => [...clients].some(c => c.id === id);
 
 function saveState() {
   const portfolios = {};
   for (const p of players.values()) {
-    const { cash, bank, hold, realized, best, log, assetHist, learned, readUpTo, earned, interest, shiftDay, shifts, pos, scene } = p;
-    portfolios[p.key] = { cash, bank, hold, realized, best, log, assetHist, learned, readUpTo, earned, interest, shiftDay, shifts, pos, scene };
+    const { cash, bank, hold, realized, best, log, assetHist, learned, readUpTo, earned, interest, dayStart, dayExtra, shiftDay, shifts, pos, scene } = p;
+    portfolios[p.key] = { cash, bank, hold, realized, best, log, assetHist, learned, readUpTo, earned, interest, dayStart, dayExtra, shiftDay, shifts, pos, scene };
   }
   const sessions = {};
   for (const [h, id] of tokens) { const p = players.get(id); if (p) sessions[h] = p.key; }
@@ -119,16 +121,16 @@ function publicState() {
   return {
     season: market.seasonName(M), weather: M.weather, clock: M.clock, open: M.open, depositRate: M.depositRate, coins,
     // 전광판: 접속하지 않은 사람까지 모든 계정의 자산 순위 TOP 10
-    top10: [...players.values()].map(p => ({ name: p.name, total: totalOf(p) })).sort((a, b) => b.total - a.total).slice(0, 10),
-    hist: M.stocks.map(s => s.hist), index: M.index, news: M.news.slice(0, 20),
-    players: [...players.values()].filter(p => online(p.id)).map(p => ({ id: p.id, name: p.name, color: p.color, total: totalOf(p), pos: p.pos, scene: p.scene })),
+    top10: [...players.values()].map(p => ({ name: p.name, total: totalOf(p), base: baseOf(p) })).sort((a, b) => b.total - a.total).slice(0, 10),
+    hist: M.stocks.map(s => s.hist), index: M.index, news: M.news.slice(0, 20), day: M.day, forces: market.forcesOf(M),
+    players: [...players.values()].filter(p => online(p.id)).map(p => ({ id: p.id, name: p.name, color: p.color, total: totalOf(p), base: baseOf(p), pos: p.pos, scene: p.scene })),
   };
 }
 // 내 기록은 나에게만 보냄
 const meOf = p => p && {
   id: p.id, name: p.name, color: p.color, cash: p.cash, bank: p.bank, hold: p.hold, log: p.log, realized: p.realized,
   earned: p.earned, interest: p.interest, shiftsLeft: SHIFTS_PER_DAY - (p.shiftDay === M.day ? p.shifts : 0), workUntil: p.work?.until || 0,
-  best: p.best, assetHist: p.assetHist, learned: p.learned, readUpTo: p.readUpTo, pos: p.pos, scene: p.scene,
+  base: baseOf(p), best: p.best, assetHist: p.assetHist, learned: p.learned, readUpTo: p.readUpTo, pos: p.pos, scene: p.scene,
 };
 const send = (res, event, data) => res?.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 function broadcast() {
@@ -137,12 +139,12 @@ function broadcast() {
 }
 
 const META = {
-  vol: market.VOL, START_CASH, OPEN, CLOSE, BODY_COLORS, WAGE, WORK_MS, SHIFTS_PER_DAY,
+  vol: market.VOL, START_CASH, BODY_COLORS, WAGE, WORK_MS, SHIFTS_PER_DAY,
   sectors: market.SECTORS, tagLabel: market.TAG_LABEL, weather: market.WEATHER, lessons: market.LESSON_KEYS,
   stocks: market.STOCK_DEFS.map(({ sym, sector, name, price, beta, tags, desc }) => ({ sym, sector, name, base: price, beta, tags, desc })),
 };
 
-// ===== 게임 시계: 접속자가 있을 때만 흐름. 9시 개장 → 10분마다 시세 → 18시 마감(예금 이자) → 밤 =====
+// ===== 게임 시계: 접속자가 있을 때만 흐름. 장은 쉬지 않고 10분마다 시세, 자정에 하루 마감(예금 이자) → 바로 새 하루 =====
 function closeOfDay() {
   for (const p of players.values()) {
     const pay = Math.floor(p.bank * M.depositRate);
@@ -151,22 +153,22 @@ function closeOfDay() {
     p.assetHist.push(t);
     if (p.assetHist.length > ASSET_MAX) p.assetHist.shift();
     p.best = Math.max(p.best, t);
+    p.dayStart = t; p.dayExtra = p.earned + p.interest;   // 오늘 수익률 0%에서 다시 시작
   }
 }
 function maybeSpawnCoin() {
   if (coins.length >= MAX_COINS || Math.random() > 0.3) return;   // 2초마다 30% → 이전과 비슷한 빈도
   const free = COIN_SPOTS.filter(([x, y]) => !coins.some(c => c.x === x && c.y === y));
   const [x, y] = free[Math.floor(Math.random() * free.length)];
-  coins.push({ id: ++coinId, x, y, value: 1000 + 500 * Math.floor(Math.random() * 9) });
+  coins.push({ id: ++coinId, x, y, value: 100 + 50 * Math.floor(Math.random() * 9) });
 }
 let ticks = 0;
 setInterval(() => {
   for (const c of clients) if (!c.res && Date.now() - c.seen > 5000) clients.delete(c);   // 5초 넘게 안 받아 간 폴링 접속자는 나간 것으로 봄
   if (!clients.size) return;
   M.clock = (Math.floor(M.clock) + 1) % 1440;
-  if (!M.open && isMarketHours()) market.openDay(M);
-  else if (M.open && !isMarketHours()) { market.closeDay(M); closeOfDay(); }
-  else if (M.open && M.clock % MARKET_STEP === 0) market.stepTick(M);
+  if (M.clock === 0) { market.closeDay(M); closeOfDay(); market.openDay(M); }   // 자정: 오늘 일봉을 닫고 곧바로 새 일봉 (거래는 끊기지 않음)
+  else if (M.clock % MARKET_STEP === 0) market.stepTick(M);
   maybeSpawnCoin();
   broadcast();
   if (++ticks % 5 === 0) saveState();
@@ -211,7 +213,6 @@ function login(b) {
 
 const API = {
   order(b, p) {
-    if (!M.open) return { ok: false, msg: '장이 닫혀 있어요. 주식은 오전 9시부터 오후 6시까지만 사고팔 수 있어요.' };
     const st = M.stocks.find(s => s.sym === b.sym), qty = b.qty;
     if (!st) return { ok: false, msg: '없는 종목이에요.' };
     if (!Number.isInteger(qty) || qty < 1 || qty > 100000) return { ok: false, msg: '수량은 1주 이상의 정수로 입력하세요.' };
@@ -262,7 +263,7 @@ const API = {
     if (p.scene !== 'outside' || !nearRect(p, STORE)) return { ok: false, msg: '편의점 앞에서만 알바를 할 수 있어요.' };
     if (p.work) return { ok: false, msg: '이미 일하는 중이에요.' };
     if (p.shiftDay !== M.day) { p.shiftDay = M.day; p.shifts = 0; }
-    if (p.shifts >= SHIFTS_PER_DAY) return { ok: false, msg: '오늘 알바는 다 했어요. 다음 날 장이 열리면 다시 할 수 있어요.' };
+    if (p.shifts >= SHIFTS_PER_DAY) return { ok: false, msg: '오늘 알바는 다 했어요. 자정이 지나면 다시 할 수 있어요.' };
     p.work = { until: Date.now() + WORK_MS };
     return { ok: true, msg: '🏪 편의점 알바 시작! 손님을 맞는 중…' };
   },
@@ -283,7 +284,7 @@ const API = {
     broadcast();
     return { ok: true, msg: `🪙 동전 ${c.value.toLocaleString('ko-KR')}원을 주웠어요!` };
   },
-  // 🏦 은행: 예금은 원금이 그대로이고, 장 마감 때마다 이자가 붙음
+  // 🏦 은행: 예금은 원금이 그대로이고, 자정마다 이자가 붙음
   bank(b, p) {
     if (p.scene !== 'outside' || !nearRect(p, BANK)) return { ok: false, msg: '은행 앞에서만 이용할 수 있어요.' };
     const amt = b.amount;

@@ -256,9 +256,6 @@ function drawTable(ctx, f) {
   box(ctx, C.wood, f.x, f.y, f.w, 9); box(ctx, '#ffffff', f.x + 6, f.y + 2, 5, 5); R(ctx, '#6b3f22', f.x + 7, f.y + 3, 3, 2);
   box(ctx, PAL.y, f.x + 16, f.y + 3, 8, 4);
 }
-function drawArmchair(ctx, f) {
-  box(ctx, '#d9c9a3', f.x, f.y, f.w, f.h); R(ctx, C.cream, f.x + 3, f.y + 3, f.w - 6, f.h - 6); R(ctx, '#d9c9a3', f.x + 3, f.y + f.h - 8, f.w - 6, 1);
-}
 function drawCabinet(ctx, f) {
   box(ctx, '#9aa3b5', f.x, f.y, f.w, f.h);
   for (let i = 0; i < 3; i++) { const dy = f.y + 3 + i * 10; box(ctx, '#b8c0cf', f.x + 3, dy, f.w - 6, 9); R(ctx, PAL.k, f.x + f.w / 2 - 3, dy + 4, 6, 1); }
@@ -290,7 +287,7 @@ const FURN = [
   { id: 'doormat', x: 160, y: 162, w: 24, h: 10, floor: true, draw: drawDoormat },
   { id: 'window1', x: 66, y: 6, w: 34, h: 20, draw: drawWindow },
   { id: 'plant1', x: 100, y: 30, w: 14, h: 20, solid: true, draw: drawPlant },
-  { id: 'desk', x: 26, y: 64, w: 50, h: 20, solid: true, act: 'trade', label: '💻 컴퓨터 켜기 (증권 HTS: 시세·차트·호가·주문) · 여기서 B/S로 1주 바로 거래', draw: drawDesk },
+  { id: 'desk', x: 26, y: 64, w: 50, h: 20, solid: true, act: 'trade', label: '💻 컴퓨터 켜기 (증권 HTS: 시세·차트·호가·주문) · 여기서 B(매수)/N(매도)로 1주 바로 거래', draw: drawDesk },
   { id: 'catbed', x: 6, y: 140, w: 28, h: 20, solid: true, draw: drawCatBed },
   ...['red', 'blue', 'yellow', 'white', 'black'].map((color, i) => ({
     id: 'pad-' + color, color, x: 42 + i * 14, y: 152, w: 12, h: 12, floor: true, act: 'color',
@@ -299,7 +296,6 @@ const FURN = [
   { id: 'chalkboard', x: 130, y: 5, w: 34, h: 24, act: 'rules', label: '🧑‍🏫 칠판 — 게임 규칙', draw: drawChalkboard },
   { id: 'tv', x: 170, y: 14, w: 36, h: 30, solid: true, act: 'news', label: '📺 뉴스 TV — 배우기 읽기', draw: drawTV },
   { id: 'table', x: 152, y: 86, w: 28, h: 14, solid: true, draw: drawTable },
-  { id: 'armchair', x: 186, y: 64, w: 20, h: 20, solid: true, draw: drawArmchair },
   { id: 'plant2', x: 128, y: 150, w: 14, h: 20, solid: true, draw: drawPlant },
   { id: 'window2', x: 234, y: 6, w: 34, h: 20, draw: drawWindow },
   { id: 'plant3', x: 224, y: 30, w: 14, h: 20, solid: true, draw: drawPlant },
@@ -405,7 +401,7 @@ function drawBillboard(ctx, f) {
 const OUT_FURN = [
   { id: 'house', x: 112, y: 0, w: 96, h: 44, solid: true, draw: drawHouseFront },
   { id: 'store', x: 8, y: 6, w: 88, h: 50, solid: true, act: 'work', label: '🏪 24시 편의점 — 알바하기', draw: drawStore },
-  { id: 'bank', x: 224, y: 6, w: 88, h: 50, solid: true, act: 'bank', label: '🏦 개미은행 — 예금·출금 (장 마감 때마다 이자)', draw: drawBank },
+  { id: 'bank', x: 224, y: 6, w: 88, h: 50, solid: true, act: 'bank', label: '🏦 개미은행 — 예금·출금 (자정마다 이자)', draw: drawBank },
   { id: 'tree1', x: 20, y: 118, w: 16, h: 22, solid: true, draw: drawTree },
   { id: 'tree3', x: 118, y: 140, w: 16, h: 22, solid: true, draw: drawTree },
   { id: 'bench', x: 44, y: 146, w: 26, h: 10, solid: true, draw: drawBench },
