@@ -77,14 +77,34 @@ async function api(name, body = {}) {
   }
 }
 
-let es = null;
+let es = null, pollTimer = 0, gen = 0;
 function connect() {
   es?.close();
+  clearInterval(pollTimer);
+  const g = ++gen;
+  let live = false;
   es = new EventSource('/api/stream');
-  es.addEventListener('meta', e => { META = JSON.parse(e.data); buildSectors(); render(); });
-  es.addEventListener('state', e => onState(JSON.parse(e.data)));
+  es.addEventListener('meta', e => { live = true; META = JSON.parse(e.data); buildSectors(); render(); });
+  es.addEventListener('state', e => { live = true; onState(JSON.parse(e.data)); });
   es.addEventListener('pos', e => JSON.parse(e.data).forEach(p => others.set(p.id, p)));
   es.onerror = () => say('서버 연결이 끊겼어요. 다시 연결하는 중…');
+  // 무료 터널(trycloudflare)은 실시간 스트림을 붙잡아 둘 때가 있음 → 3초 안에 아무것도 안 오면 0.5초마다 직접 받아 옴
+  setTimeout(() => {
+    if (g !== gen || live) return;
+    es.close();
+    pollTimer = setInterval(poll, 500);
+    poll();
+  }, 3000);
+}
+async function poll() {
+  try {
+    const s = await (await fetch('/api/poll' + (META ? '' : '?meta'))).json();
+    if (s.meta) { META = s.meta; buildSectors(); }
+    for (const p of s.players) others.set(p.id, { id: p.id, ...p.pos, scene: p.scene });
+    onState(s);
+  } catch {
+    say('서버 연결이 끊겼어요. 다시 연결하는 중…');
+  }
 }
 
 function onState(s) {

@@ -130,7 +130,7 @@ const meOf = p => p && {
   earned: p.earned, interest: p.interest, shiftsLeft: SHIFTS_PER_DAY - (p.shiftDay === M.day ? p.shifts : 0), workUntil: p.work?.until || 0,
   best: p.best, assetHist: p.assetHist, learned: p.learned, readUpTo: p.readUpTo, pos: p.pos, scene: p.scene,
 };
-const send = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+const send = (res, event, data) => res?.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 function broadcast() {
   const pub = publicState();
   for (const c of clients) send(c.res, 'state', { ...pub, me: meOf(players.get(c.id)) });
@@ -161,6 +161,7 @@ function maybeSpawnCoin() {
 }
 let ticks = 0;
 setInterval(() => {
+  for (const c of clients) if (!c.res && Date.now() - c.seen > 5000) clients.delete(c);   // 5초 넘게 안 받아 간 폴링 접속자는 나간 것으로 봄
   if (!clients.size) return;
   M.clock = (Math.floor(M.clock) + 1) % 1440;
   if (!M.open && isMarketHours()) market.openDay(M);
@@ -316,13 +317,14 @@ function json(res, code, data, headers = {}) {
 // 로그인 토큰은 HttpOnly 쿠키로만 주고받음 (화면·주소·페이지 저장소에 남지 않음)
 const COOKIE = 'antTok';
 const tokenOf = req => (req.headers.cookie || '').split(';').map(c => c.trim().split('=')).find(([k]) => k === COOKIE)?.[1] || '';
-const setCookie = token => ({ 'Set-Cookie': `${COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${token ? 2592000 : 0}` });
+// 터널(https)로 들어온 요청이면 Secure를 붙여 https에서만 쿠키가 오가게 함
+const setCookie = (token, req) => ({ 'Set-Cookie': `${COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${token ? 2592000 : 0}${req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''}` });
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
   if (req.method === 'GET' && url.pathname === '/api/stream') {
-    res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
+    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', Connection: 'keep-alive' });
     const c = { res, id: tokens.get(tokenHash(tokenOf(req))) || '' };
     clients.add(c);
     send(res, 'meta', META);
@@ -332,14 +334,24 @@ http.createServer(async (req, res) => {
     return;
   }
 
+  // 무료 터널(trycloudflare)은 실시간 스트림을 붙잡아 둘 때가 있음 → 화면이 직접 최신 상태를 받아 감.
+  // 이렇게 받아 가는 사람도 접속자(clients)로 셈 (res 없이 seen 시각만)
+  if (req.method === 'GET' && url.pathname === '/api/poll') {
+    const id = tokens.get(tokenHash(tokenOf(req))) || '';
+    let c = id && [...clients].find(c => !c.res && c.id === id);
+    if (id && !c) clients.add(c = { id });
+    if (c) c.seen = Date.now();
+    return json(res, 200, { ...publicState(), me: meOf(players.get(id)), meta: url.searchParams.has('meta') ? META : undefined });
+  }
+
   if (req.method === 'POST' && url.pathname.startsWith('/api/')) {
     const name = url.pathname.slice(5), b = await readBody(req);
     if (!b || (!['login', 'logout'].includes(name) && !API[name])) return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });
     if (name === 'login') {
       const { token, ...rest } = login(b);
-      return json(res, 200, rest, token ? setCookie(token) : {});
+      return json(res, 200, rest, token ? setCookie(token, req) : {});
     }
-    if (name === 'logout') { tokens.delete(tokenHash(tokenOf(req))); return json(res, 200, { ok: true }, setCookie('')); }
+    if (name === 'logout') { tokens.delete(tokenHash(tokenOf(req))); return json(res, 200, { ok: true }, setCookie('', req)); }
     const p = players.get(tokens.get(tokenHash(tokenOf(req))));
     // 로그인 전은 정상 상황이라 200 + auth:false (브라우저 콘솔에 빨간 오류가 남지 않게)
     if (!p) return json(res, 200, { ok: false, auth: false, msg: '로그인이 필요해요.' });
