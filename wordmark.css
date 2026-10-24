@@ -1,4 +1,10 @@
-/* 글자 로고 "나의 두번째 인생": 맑은 고딕 Bold 12px을 안티앨리어싱 없이 찍은 픽셀 글자 + 오른쪽 아래 회색 그림자 한 칸(밝은 바탕 #a8a8a8, 어두운 바탕 #5f6470).
-   그림은 assets/logo-text.svg(검은 글자), logo-text-light.svg(흰 글자). 크기는 img의 width·height(한 칸 = 2~3px)로 정함.
-   확대해도 칸이 흐려지지 않게 pixelated. 메인(/)과 게임(/play)이 함께 씀 */
-.wordmark { display: block; image-rendering: pixelated; max-width: 100%; height: auto; }
+/* 글자 로고 "나의 두번째 인생": 메인 첫 화면의 입체 제목과 같은 모양을 작게.
+   흰 글자 + 검은 테두리 + 오른쪽 아래로 겹겹이 밀린 검은 그림자(두께감). 글꼴은 Black Han Sans(로고 글자만 받아 옴).
+   크기는 font-size로만 정하고 테두리·그림자는 em이라 같이 커지고 작아짐. 메인(/)과 게임(/play)이 함께 씀 */
+.logo3d {
+  display: inline-block; font-family: "Black Han Sans", "Malgun Gothic", sans-serif; font-weight: 400; font-size: 34px;
+  line-height: 1.1; letter-spacing: .01em; white-space: nowrap; color: #fff;
+  -webkit-text-stroke: .05em #000; paint-order: stroke fill;
+  text-shadow: .02em .02em 0 #000, .04em .04em 0 #000, .06em .06em 0 #000, .08em .08em 0 #000, .1em .1em 0 #000;
+  padding: 0 .1em .1em 0;   /* 오른쪽 아래 그림자가 잘리지 않게 */
+}

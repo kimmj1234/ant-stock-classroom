@@ -25,7 +25,7 @@ const ICONS = {
     'DDDD.....',
   ],
 };
-const COLOR = { D: '#000', A: '#e8454b' };
+const COLOR = { D: '#8a8a8a', A: '#000' };   // 흑백: 문은 회색, 화살표는 검정
 const pixelIcon = rows => `<svg viewBox="0 0 ${rows[0].length} ${rows.length}" width="${rows[0].length * 3}" height="${rows.length * 3}" shape-rendering="crispEdges" aria-hidden="true">${
   rows.flatMap((row, y) => [...row].map((c, x) => (COLOR[c] ? `<rect x="${x}" y="${y}" width="1" height="1" fill="${COLOR[c]}"/>` : ''))).join('')}</svg>`;
 
