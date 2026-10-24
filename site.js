@@ -1,5 +1,7 @@
 'use strict';
-// 메뉴바 오른쪽: 로그인 안 했으면 "로그인"(게임 입장 창으로), 했으면 "로그아웃"
+// 이 파일의 이름(ICONS 등)이 게임 그림 코드(pixel.js)와 겹치지 않도록 블록 안에 둠. 밖으로는 window.setAuth만 내놓음
+{
+// 메뉴바 오른쪽: 로그인 안 했으면 "로그인"(같은 페이지 위쪽 로그인 칸으로), 했으면 "로그아웃"
 // 로그인은 HttpOnly 쿠키라 페이지에서 직접 볼 수 없어서, 서버에 내 정보(/api/me)를 물어봄
 
 // 로고와 같은 픽셀 그림 아이콘 (D = 문, A = 화살표). 한 칸 = 3px
@@ -29,10 +31,15 @@ const pixelIcon = rows => `<svg viewBox="0 0 ${rows[0].length} ${rows.length}" w
 
 const link = document.getElementById('account');
 const api = async name => (await fetch('/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
-function show(loggedIn) {
+// 로그인 상태가 바뀌면 메뉴를 바꾸고, 페이지(home.html)에도 'auth' 이벤트로 알려 줌 (detail = 내 정보 또는 null)
+function show(me) {
+  const loggedIn = !!me;
   link.innerHTML = pixelIcon(ICONS[loggedIn ? 'logout' : 'login']) + `<span>${loggedIn ? '로그아웃' : '로그인'}</span>`;
-  link.href = loggedIn ? '#' : '/play';
-  link.onclick = loggedIn ? async e => { e.preventDefault(); await api('logout').catch(() => {}); show(false); } : null;
+  link.href = loggedIn ? '#' : '#login';
+  link.onclick = loggedIn ? async e => { e.preventDefault(); await api('logout').catch(() => {}); show(null); } : null;
   link.hidden = false;
+  document.dispatchEvent(new CustomEvent('auth', { detail: me }));
 }
-api('me').then(d => show(!!d.ok)).catch(() => show(false));   // 서버에 못 닿으면 로그인 안 한 것으로
+window.setAuth = show;   // 페이지에서 로그인에 성공하면 불러서 메뉴까지 바꿈
+api('me').then(d => show(d.ok ? d.me : null)).catch(() => show(null));   // 서버에 못 닿으면 로그인 안 한 것으로
+}
