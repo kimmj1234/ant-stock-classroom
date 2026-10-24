@@ -284,7 +284,7 @@ function openBank() {
 
 // ===== 📺 TV: 개미뉴스 방송 =====
 const MACRO = ['rate', 'fx', 'oil', 'crash', 'rally'], INDUSTRY = ['chipCycle', 'evPolicy', 'flu'];
-const newsTag = n => (n.crash ? '속보' : n.key.startsWith('w_') ? '날씨' : MACRO.includes(n.key) ? '경제' : INDUSTRY.includes(n.key) ? '산업' : '기업');
+const newsTag = n => (n.crash ? '속보' : n.key === 'breakthrough' ? '🚀 대박' : n.key.startsWith('w_') ? '날씨' : MACRO.includes(n.key) ? '경제' : INDUSTRY.includes(n.key) ? '산업' : '기업');
 let tvId = null;   // 보고 있는 뉴스 (새 뉴스가 와도 화면이 바뀌지 않게 id로 기억)
 
 function openTV() {

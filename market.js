@@ -151,6 +151,20 @@ const EVENTS = [
     },
   },
   {
+    // 가끔 터지는 대박 호재: 한 번에 20~40% 뛰고, 며칠 동안 더 오르려는 힘(하루 2~4%, 매일 30%씩 약해짐)이 남음
+    key: 'breakthrough', icon: 'star', weight: 1.5, name: '대박 호재',
+    lesson: '세상을 바꿀 만한 신제품·신약·신기술은 회사의 미래 이익 기대를 통째로 바꿔, 주가가 하루에 수십 % 뛰고 며칠 더 오르기도 합니다. 다만 이미 크게 오른 뒤에 뛰어들면 비싸게 살 수 있습니다.',
+    make() {
+      const s = pick(STOCK_DEFS), r = Math.random();
+      const title = s.sector === 'bio'
+        ? `${s.name}, ${pick(['치매', '비만', '폐암', '당뇨', '탈모'])} 완치 신약 세계 첫 승인… 블록버스터 기대`
+        : ['tech', 'energy', 'auto'].includes(s.sector) && r < 0.5
+          ? `${s.name}, 세계 최초 '${pick(['10분 완충 배터리', '상온 초전도체', '양자 컴퓨터 칩', '무한 동력 엔진', '투명 태양전지'])}' 기술 개발 성공`
+          : `${s.name} 신제품 '${pick(PRODUCTS[s.sector])}' 전 세계 품절 대란… 주문 1년 치 밀려`;
+      return { title, hits: hit(s, .2, .4, .02, .04) };
+    },
+  },
+  {
     key: 'earnings', icon: 'up', weight: 5, name: '실적 발표',
     lesson: '주가는 실적 자체보다 "시장이 예상한 것보다" 좋은지 나쁜지에 반응합니다. 예상보다 좋으면 어닝 서프라이즈, 나쁘면 어닝 쇼크라고 합니다.',
     make() {
