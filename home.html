@@ -118,6 +118,9 @@
   /* 가운데 칸 (로그인 / 게임 시작) */
   .center { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 16px; }   /* 칸 너비 = 화면 너비 - 여백 → 카드가 좁은 화면을 넘지 않음 */
   .center[hidden] { display: none; }
+  .center { overflow-y: auto; place-items: safe center; scrollbar-width: none; }
+  .center::-webkit-scrollbar { display: none; }   /* 넘칠 때도 스크롤은 되고 막대만 숨김 */   /* 카드가 상자보다 길어지면 위가 잘리지 않고 상자 안에서 스크롤 */
+  .card:has(.pw-login[open]) .logo3d.big { display: none; }   /* 닉네임 로그인을 펼치면 카드 위 로고는 접어 공간 확보 */
   .card {
     width: min(360px, 100%); box-sizing: border-box; background: #fff; color: #000; border-radius: 18px; padding: 28px 28px 24px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, .25); text-align: center;
@@ -142,6 +145,19 @@
   .btn:hover { background: #2a2a2a; }
   .btn:focus-visible { outline: 3px solid #e8454b; outline-offset: 2px; }
   .msg { min-height: 1.4em; margin: 2px 0 0; font-size: 13px; color: #c62828; }
+  .msg:empty { min-height: 0; }
+  /* 구글 버튼(구글이 그려 줌)은 가운데, 닉네임·비밀번호 로그인은 눌러야 펼쳐짐 */
+  .gbtn { display: flex; justify-content: center; min-height: 44px; }
+  .pw-login { margin-top: 14px; text-align: left; }
+  .pw-login summary { cursor: pointer; font-size: 13px; color: #555; text-align: center; list-style: none; }
+  .pw-login summary::-webkit-details-marker { display: none; }
+  .pw-login summary::after { content: " ▾"; }
+  .pw-login[open] summary::after { content: " ▴"; }
+  .pw-login summary:focus-visible { outline: 2px solid #000; outline-offset: 3px; border-radius: 4px; }
+  .pw-login form { margin-top: 12px; }
+  #nameForm { display: grid; gap: 10px; text-align: left; }
+  #nameForm[hidden] { display: none; }
+  #nameForm h1, #nameForm p { text-align: center; }
   .hint { margin: 12px 0 0 !important; font-size: 12px !important; color: #777 !important; }
 
   @media (prefers-reduced-motion: reduce) { .veil { transition: none; } }
@@ -223,13 +239,29 @@
   <div class="center veil" id="veil" hidden>
     <div class="card" id="login">
       <p class="logo3d big" aria-hidden="true">나의 두번째 인생</p>
-      <h1>로그인</h1>
-      <p>처음 쓰는 닉네임이면 계정이 바로 만들어져요.</p>
-      <form id="loginForm" autocomplete="on">
-        <label>닉네임<input id="name" name="username" autocomplete="username" maxlength="10" required></label>
-        <label>비밀번호<input id="pw" name="password" type="password" autocomplete="current-password" minlength="4" maxlength="30" required></label>
-        <p class="msg" id="msg" role="alert"></p>
-        <button class="btn" type="submit">로그인</button>
+      <!-- 1단계: 구글로 로그인 (닉네임·비밀번호는 눌렀을 때만 펼침) -->
+      <div id="stepMain">
+        <h1>로그인</h1>
+        <p>구글 계정으로 바로 시작할 수 있어요.</p>
+        <div class="gbtn" id="gbtn"></div>
+        <p class="msg" id="gmsg" role="alert"></p>
+        <details class="pw-login">
+          <summary>닉네임·비밀번호로 로그인</summary>
+          <form id="loginForm" autocomplete="on">
+            <label>닉네임<input id="name" name="username" autocomplete="username" maxlength="10" required></label>
+            <label>비밀번호<input id="pw" name="password" type="password" autocomplete="current-password" minlength="4" maxlength="30" required></label>
+            <p class="msg" id="msg" role="alert"></p>
+            <button class="btn" type="submit">로그인</button>
+          </form>
+        </details>
+      </div>
+      <!-- 2단계: 처음 온 구글 계정은 마을에서 쓸 닉네임 정하기 -->
+      <form id="nameForm" hidden>
+        <h1>닉네임 정하기</h1>
+        <p>처음 오셨네요! 마을 사람들에게 보일 이름을 정해 주세요. (1~10자)</p>
+        <label>닉네임<input id="newName" maxlength="10" required autocomplete="nickname"></label>
+        <p class="msg" id="nmsg" role="alert"></p>
+        <button class="btn" type="submit">이 이름으로 시작하기</button>
       </form>
     </div>
   </div>
@@ -304,19 +336,55 @@ function applyAuth(me) {
 }
 document.addEventListener('auth', e => applyAuth(e.detail));
 if (window.authState) applyAuth(window.authState.me);   // 이 스크립트보다 먼저 결과가 나왔으면 그것으로
+// ===== 로그인 =====
+const post = async (name, body) => (await fetch('/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+const OFFLINE = '서버에 연결할 수 없어요. 잠시 뒤 다시 시도하세요.';
+async function enter() {   // 로그인 성공 → 메뉴바·가운데 칸을 로그인 상태로
+  const me = await post('me', {});
+  $('nameForm').hidden = true; $('stepMain').hidden = false;
+  window.setAuth(me.ok ? me.me : null);
+}
+// 닉네임·비밀번호
 $('loginForm').addEventListener('submit', async e => {
   e.preventDefault();
   $('msg').textContent = '';
   try {
-    const d = await (await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: $('name').value, password: $('pw').value }) })).json();
+    const d = await post('login', { name: $('name').value, password: $('pw').value });
     $('pw').value = '';
     if (!d.ok) { $('msg').textContent = d.msg; return; }
-    const me = await (await fetch('/api/me', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
-    window.setAuth(me.ok ? me.me : null);
-  } catch {
-    $('msg').textContent = '서버에 연결할 수 없어요. 잠시 뒤 다시 시도하세요.';
-  }
+    enter();
+  } catch { $('msg').textContent = OFFLINE; }
 });
+// 구글: 서버에서 클라이언트 ID를 받아 구글 로그인 스크립트를 붙이고 버튼을 그림
+let pending = null;   // 처음 온 구글 계정의 임시 번호 (닉네임 정하는 동안)
+async function onGoogle({ credential }) {
+  $('gmsg').textContent = '';
+  try {
+    const d = await post('google', { credential });
+    if (d.ok) return enter();
+    if (d.needName) { pending = d.pending; $('stepMain').hidden = true; $('nameForm').hidden = false; $('newName').focus(); return; }
+    $('gmsg').textContent = d.msg;
+  } catch { $('gmsg').textContent = OFFLINE; }
+}
+$('nameForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('nmsg').textContent = '';
+  try {
+    const d = await post('googleName', { pending, name: $('newName').value });
+    if (!d.ok) { $('nmsg').textContent = d.msg; return; }
+    enter();
+  } catch { $('nmsg').textContent = OFFLINE; }
+});
+fetch('/api/config').then(r => r.json()).then(({ googleClientId }) => {
+  const s = document.createElement('script');
+  s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+  s.onload = () => {
+    google.accounts.id.initialize({ client_id: googleClientId, callback: onGoogle });
+    google.accounts.id.renderButton($('gbtn'), { theme: 'filled_black', size: 'large', shape: 'pill', text: 'signin_with', locale: 'ko', width: 280 });
+  };
+  s.onerror = () => { $('gmsg').textContent = '구글 로그인 버튼을 불러오지 못했어요. 닉네임·비밀번호로 로그인할 수 있어요.'; };
+  document.head.append(s);
+}).catch(() => {});
 
 // ===== 실시간 마을 풍경 =====
 let ST = null;

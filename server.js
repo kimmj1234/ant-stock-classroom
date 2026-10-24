@@ -199,6 +199,7 @@ function login(b) {
   const key = nameKey(name), f = failures.get(key);
   if (f && f.until > Date.now()) return { ok: false, msg: `비밀번호를 여러 번 틀렸어요. ${Math.ceil((f.until - Date.now()) / 1000)}초 뒤에 다시 시도하세요.` };
   let acc = accounts[key], created = false;
+  if (acc && !acc.hash) return { ok: false, msg: '구글 계정으로 만든 닉네임이에요. "Google로 로그인"을 눌러 주세요.' };
   if (acc) {
     if (!checkPw(pw, acc)) {
       const n = (f?.n || 0) + 1;
@@ -213,12 +214,65 @@ function login(b) {
     created = true;
   }
   failures.delete(key);
+  return { ok: true, token: startSession(key, acc), created, msg: created ? `'${acc.name}' 계정을 새로 만들었어요. 100만 원으로 시작합니다.` : `'${acc.name}'(으)로 로그인했어요.` };
+}
+// 계정으로 들어가기: 계좌가 없으면 만들고, 로그인 토큰(쿠키에 넣을 원문)을 돌려줌
+function startSession(key, acc) {
   let p = [...players.values()].find(x => x.key === key);
   if (!p) { p = makePlayer(key, acc); players.set(p.id, p); }
   const token = crypto.randomBytes(24).toString('hex');
   tokens.set(tokenHash(token), p.id);
-  return { ok: true, token, created, msg: created ? `'${acc.name}' 계정을 새로 만들었어요. 100만 원으로 시작합니다.` : `'${acc.name}'(으)로 로그인했어요.` };
+  return token;
 }
+
+// ===== 구글 계정 로그인 (Google Identity Services) =====
+// 화면의 "Google로 로그인" 버튼 → 구글이 서명한 확인증(ID 토큰) → 여기서 구글에 진짜인지 물어봄.
+// 계정에는 비밀번호 대신 구글 계정 고유 번호(sub)만 저장. 처음 온 구글 계정은 게임 닉네임을 정해야 들어옴.
+// 클라이언트 ID는 공개 값(웹페이지에 그대로 들어감). 보안 비밀(secret)은 이 방식에서 쓰지 않음
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '943771274143-m1i8fsum0lko2tnf7010ld0b8uin6agg.apps.googleusercontent.com';
+const pendingGoogle = new Map();   // 임시 번호 → { sub, until }: 처음 온 구글 계정이 닉네임을 정하는 10분 동안만
+async function verifyGoogle(credential) {
+  if (typeof credential !== 'string' || credential.length > 4096) return null;
+  try {
+    // 확인증은 주소(URL)에 넣지 않고 본문으로 보냄
+    const r = await fetch('https://oauth2.googleapis.com/tokeninfo', { method: 'POST', body: new URLSearchParams({ id_token: credential }) });
+    if (!r.ok) return null;
+    const t = await r.json();
+    const ok = t.aud === GOOGLE_CLIENT_ID                                     // 우리 앱용으로 발급됐는지
+      && (t.iss === 'accounts.google.com' || t.iss === 'https://accounts.google.com')   // 구글이 발급했는지
+      && Number(t.exp) * 1000 > Date.now()                                    // 기간이 지나지 않았는지
+      && (t.email_verified === 'true' || t.email_verified === true)           // 이메일 인증된 계정인지
+      && typeof t.sub === 'string' && t.sub;
+    return ok ? t.sub : null;
+  } catch { return null; }
+}
+const findGoogle = sub => Object.keys(accounts).find(k => accounts[k].google === sub);
+async function googleLogin(b) {
+  const sub = await verifyGoogle(b.credential);
+  if (!sub) return { ok: false, msg: '구글 로그인을 확인하지 못했어요. 다시 시도해 주세요.' };
+  const key = findGoogle(sub);
+  if (key) return { ok: true, token: startSession(key, accounts[key]), msg: `'${accounts[key].name}'(으)로 로그인했어요.` };
+  for (const [id, pg] of pendingGoogle) if (pg.until < Date.now()) pendingGoogle.delete(id);
+  const pending = crypto.randomBytes(16).toString('hex');
+  pendingGoogle.set(pending, { sub, until: Date.now() + 10 * 60 * 1000 });
+  return { ok: false, needName: true, pending, msg: '처음 오셨네요! 마을에서 쓸 닉네임을 정해 주세요.' };
+}
+function googleName(b) {
+  const pg = pendingGoogle.get(b.pending);
+  if (!pg || pg.until < Date.now()) return { ok: false, msg: '시간이 지났어요. "Google로 로그인"을 다시 눌러 주세요.' };
+  const name = cleanName(b.name);
+  if (!name) return { ok: false, msg: '닉네임을 1~10자로 입력하세요.' };
+  const key = nameKey(name);
+  if (accounts[key]) return { ok: false, msg: '이미 있는 닉네임이에요. 다른 닉네임을 정해 주세요.' };
+  if (Object.keys(accounts).length >= MAX_ACCOUNTS) return { ok: false, msg: '계정이 너무 많아 새로 만들 수 없어요.' };
+  pendingGoogle.delete(b.pending);
+  const had = findGoogle(pg.sub);   // 같은 구글 계정으로 두 번 눌렀으면 먼저 만든 계정으로
+  if (had) return { ok: true, token: startSession(had, accounts[had]), msg: `'${accounts[had].name}'(으)로 로그인했어요.` };
+  const acc = accounts[key] = { name, google: pg.sub, color: 'red' };
+  writeJSONFile(ACCOUNTS_FILE, accounts);
+  return { ok: true, token: startSession(key, acc), created: true, msg: `'${name}' 계정을 새로 만들었어요. 100만 원으로 시작합니다.` };
+}
+const AUTH = { login, google: googleLogin, googleName };   // 로그인 전에 부르는 API
 
 const API = {
   order(b, p) {
@@ -346,6 +400,9 @@ http.createServer(async (req, res) => {
 
   // 무료 터널(trycloudflare)은 실시간 스트림을 붙잡아 둘 때가 있음 → 화면이 직접 최신 상태를 받아 감.
   // 이렇게 받아 가는 사람도 접속자(clients)로 셈 (res 없이 seen 시각만)
+  // 화면이 처음에 필요한 설정 (구글 로그인 버튼에 넣을 클라이언트 ID: 공개 값)
+  if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { googleClientId: GOOGLE_CLIENT_ID });
+
   if (req.method === 'GET' && url.pathname === '/api/poll') {
     const id = tokens.get(tokenHash(tokenOf(req))) || '';
     // ?peek: 홈페이지가 마을 모습만 보는 것은 접속으로 세지 않음 (아무도 게임에 없으면 시계·시세는 멈춰 있음)
@@ -359,9 +416,9 @@ http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && url.pathname.startsWith('/api/')) {
     const name = url.pathname.slice(5), b = await readBody(req);
-    if (!b || (!['login', 'logout'].includes(name) && !API[name])) return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });
-    if (name === 'login') {
-      const { token, ...rest } = login(b);
+    if (!b || (!AUTH[name] && name !== 'logout' && !API[name])) return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });
+    if (AUTH[name]) {
+      const { token, ...rest } = await AUTH[name](b);
       return json(res, 200, rest, token ? setCookie(token, req) : {});
     }
     if (name === 'logout') { tokens.delete(tokenHash(tokenOf(req))); return json(res, 200, { ok: true }, setCookie('', req)); }
