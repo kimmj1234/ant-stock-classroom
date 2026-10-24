@@ -390,3 +390,24 @@ body.reduce .tv-live { animation: none; }
 .mc-chart { width: 100%; height: auto; border: 2px solid #24365e; }
 .pc .mine-go { margin-left: 6px; background: #1f3a8a; color: #fff; border: 2px solid #3b82f6; padding: 2px 10px; }
 @media (max-width: 1000px) { .mine-sum { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* 📰 뉴스 · 📖 용어 앱: 목록 + 내용 */
+.split-app { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 8px; padding: 8px; height: min(560px, calc(100vh - 150px)); }
+.split-side { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.split-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; min-height: 0; background: #111d35; border: 2px solid #24365e; padding: 6px; }
+.split-app > .split-list { height: 100%; }
+.pc .split-item { display: grid; grid-template-columns: 16px auto 1fr; gap: 6px; align-items: center; text-align: left; padding: 5px 6px; background: #0b1426; border: 2px solid #24365e; font-size: 13px; }
+.pc .split-item.sel { border-color: #f7c948; background: #1b2a4d; }
+.split-item .si-tag { font-size: 11px; background: #1f3a8a; color: #fff; padding: 0 5px; }
+.split-item .si-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.split-item.unread .si-text::before { content: "● "; color: #ff6b6b; }
+#termList .split-item { grid-template-columns: 16px 1fr; }
+.split-view { overflow-y: auto; background: #111d35; border: 2px solid #24365e; padding: 12px 16px; line-height: 1.65; }
+.split-view h3 { margin: 12px 0 4px; font-size: 14px; color: #f7c948; }
+.split-view p { margin: 0 0 8px; }
+.split-view .tv-learn { margin: 8px 0; }
+.nv-head { display: flex; align-items: center; gap: 10px; }
+.nv-title { margin: 8px 0; font-size: 20px; color: #fff; }
+.term-tip { background: #2a2610; border-left: 4px solid #f7c948; padding: 6px 8px; }
+.term-search { font: inherit; padding: 5px 8px; background: #0b1426; color: #fff; border: 2px solid #3b82f6; }
+@media (max-width: 1000px) { .split-app { grid-template-columns: minmax(0, 1fr); height: auto; } .split-list { max-height: 200px; } }

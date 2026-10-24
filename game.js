@@ -282,7 +282,14 @@ function renderTV() {
   $('tvPage').textContent = `${ST.news.length - k} / ${ST.news.length}` + (hasUnread() ? ' · 안 본 뉴스 있음' : '');
   $('tvPrev').disabled = k === ST.news.length - 1;
   $('tvNext').disabled = k === 0;
-  if (ME && (n.id > ME.readUpTo || !ME.learned.includes(n.key))) api('learn', { newsId: n.id }).then(render);
+  markRead(n);
+}
+// 뉴스를 보면 읽은 것으로 표시하고 그 사건의 개념을 '배운 개념'에 더함 (TV·뉴스 앱 공통)
+const learning = new Set();
+function markRead(n) {
+  if (!ME || learning.has(n.id) || (n.id <= ME.readUpTo && ME.learned.includes(n.key))) return;
+  learning.add(n.id);
+  api('learn', { newsId: n.id }).then(() => { learning.delete(n.id); render(); });
 }
 
 // ===== 📚 책장: 용어책 (한 장 = 용어 하나) =====
@@ -395,13 +402,75 @@ function openPC() {
   openApp(null);
   say('컴퓨터를 켰어요. 바탕화면에서 앱을 고르세요.');
 }
+const APPS = {
+  hts: { el: 'appHts', name: '📈 개미증권 HTS', icon: 'up' },
+  mine: { el: 'appMine', name: '📂 내 주식', icon: 'bag' },
+  news: { el: 'appNews', name: '📰 최근 뉴스', icon: 'rumor' },
+  terms: { el: 'appTerms', name: '📖 주식 용어', icon: 'doc' },
+};
 function openApp(app) {
   pcApp = app;
   $('pcDesktop').hidden = !!app;
-  $('appHts').hidden = app !== 'hts';
-  $('appMine').hidden = app !== 'mine';
+  for (const [k, a] of Object.entries(APPS)) $(a.el).hidden = app !== k;
+  if (app === 'news') newsSel = (ME && ST.news.filter(n => n.id > ME.readUpTo).pop()?.id) || ST.news[0]?.id || null;
   render();
-  (app === 'hts' ? $('pcBuy') : app === 'mine' ? $('appMine').querySelector('.app-close') : $('pcDesktop').querySelector('.desk-icon'))?.focus();
+  (app === 'hts' ? $('pcBuy') : app === 'terms' ? $('termSearch') : app ? $(APPS[app].el).querySelector('.app-close') : $('pcDesktop').querySelector('.desk-icon'))?.focus();
+}
+
+// 📰 최근 뉴스 앱: 왼쪽 목록, 오른쪽 기사
+let newsSel = null;
+function renderNewsApp() {
+  $('newsClock').textContent = marketText();
+  const list = ST.news;
+  if (!list.length) {
+    $('newsList').replaceChildren(el('p', 'pc-empty', '아직 뉴스가 없어요.'));
+    return $('newsView').replaceChildren(el('p', 'pc-empty', '장이 열리면 사건이 일어나고 뉴스가 도착해요.'));
+  }
+  if (!list.some(n => n.id === newsSel)) newsSel = list[0].id;
+  $('newsList').replaceChildren(...list.map(n => {
+    const b = el('button', 'split-item' + (n.id === newsSel ? ' sel' : '') + (ME && n.id > ME.readUpTo ? ' unread' : ''));
+    const img = el('img', 'px'); img.src = iconURL(n.icon); img.width = img.height = 16; img.alt = '';
+    b.append(img, el('span', 'si-tag', newsTag(n)), el('span', 'si-text', n.title));
+    b.addEventListener('click', () => { newsSel = n.id; render(); });
+    return b;
+  }));
+  const n = list.find(x => x.id === newsSel), v = $('newsView');
+  const head = el('div', 'nv-head'), img = el('img', 'px');
+  img.src = iconURL(n.icon); img.width = img.height = 40; img.alt = '';
+  head.append(img, el('span', 'tv-tag' + (n.crash ? ' breaking' : ''), newsTag(n)));
+  const imp = el('ul', 'tv-impacts');
+  const max = Math.max(...n.impacts.map(i => Math.abs(i.j)), 0.01);
+  n.impacts.forEach(i => {
+    const li = el('li', upDown(i.j)), bar = el('span', 'bar');
+    bar.style.width = `${Math.abs(i.j) / max * 100}%`;
+    li.append(el('span', 'nm', stockOf(symIndex(i.sym)).name), bar, el('span', 'v', `${i.j > 0 ? '▲' : '▼'} ${pct(i.j * 100)}`));
+    imp.append(li);
+  });
+  v.replaceChildren(head, el('h2', 'nv-title', n.title), el('h3', '', '영향받은 종목'), imp, el('p', 'tv-learn', '📘 배우기 · ' + n.lesson));
+  markRead(n);
+}
+
+// 📖 주식 용어 앱: 검색 + 목록 + 설명 (책장 용어책과 같은 내용)
+let termSel = 0;
+const termMatches = () => {
+  const q = $('termSearch').value.trim();
+  return TERMS.map((t, i) => i).filter(i => !q || [TERMS[i].term, TERMS[i].lead, TERMS[i].detail].some(x => x.includes(q)));
+};
+function renderTermsApp() {
+  const ids = termMatches();
+  if (ids.length && !ids.includes(termSel)) termSel = ids[0];
+  $('termList').replaceChildren(...(ids.length ? ids.map(i => {
+    const b = el('button', 'split-item' + (i === termSel ? ' sel' : ''));
+    const img = el('img', 'px'); img.src = iconURL(TERMS[i].icon); img.width = img.height = 16; img.alt = '';
+    b.append(img, el('span', 'si-text', TERMS[i].term));
+    b.addEventListener('click', () => { termSel = i; render(); });
+    return b;
+  }) : [el('p', 'pc-empty', '찾는 용어가 없어요.')]));
+  if (!ids.length) return $('termView').replaceChildren();
+  const t = TERMS[termSel], img = el('img', 'px');
+  img.src = iconURL(t.icon); img.width = img.height = 48; img.alt = '';
+  $('termView').replaceChildren(img, el('h2', 'nv-title', t.term), el('p', 'tv-learn', t.lead),
+    el('h3', '', '자세히 알아보기'), el('p', '', t.detail), el('h3', '', '게임에서 보면'), el('p', '', t.example), el('p', 'term-tip', '💡 ' + t.tip));
 }
 const SECTOR_COLOR = { tech: '#3b82f6', bio: '#e03e3e', food: '#f7c948', energy: '#8a76b8', auto: '#22a35a', leisure: '#f08a24' };
 const marketText = () => `${fmtTime(ST.clock)} · ${ST.open ? '장 운영 중' : '장 마감'} · ${ST.season} · ${META.weather[ST.weather].name}`;
@@ -476,8 +545,10 @@ const fakeVol = (...k) => 30 + (k.reduce((h, v) => (h * 31 + v) % 9973, 7) * 37)
 function renderPC() {
   if (!isOpen('pc') || !META || !ST) return;
   $('taskTray').textContent = marketText();
-  $('taskApp').textContent = pcApp === 'hts' ? '📈 개미증권 HTS' : pcApp === 'mine' ? '📂 내 주식' : '';
+  $('taskApp').textContent = pcApp ? APPS[pcApp].name : '';
   if (pcApp === 'mine') return renderMine();
+  if (pcApp === 'news') return renderNewsApp();
+  if (pcApp === 'terms') return renderTermsApp();
   if (pcApp !== 'hts') return;
   const st = stockOf(sel), price = priceOf(sel), { diff, rate } = changeOf(sel);
   const mine = ME?.hold[st.sym], avg = mine ? mine.cost / mine.qty : 0;
@@ -744,10 +815,11 @@ function loop(now) {
 $('modalClose').addEventListener('click', () => hide('modal'));
 document.querySelectorAll('.app-close').forEach(b => b.addEventListener('click', () => openApp(null)));
 document.querySelectorAll('.desk-icon').forEach(b => {
-  b.querySelector('img').src = iconURL(b.dataset.app === 'hts' ? 'up' : 'bag');
+  b.querySelector('img').src = iconURL(APPS[b.dataset.app].icon);
   b.addEventListener('click', () => openApp(b.dataset.app));
 });
 $('pcPower').addEventListener('click', () => hide('pc'));
+$('termSearch').addEventListener('input', render);
 $('tvClose').addEventListener('click', () => hide('tv'));
 $('tvPrev').addEventListener('click', () => tvMove(-1));
 $('tvNext').addEventListener('click', () => tvMove(1));
@@ -779,7 +851,15 @@ document.addEventListener('keydown', e => {
   if (isOpen('pc')) {
     // Esc·E: 앱 → 바탕화면 → 컴퓨터 끄기
     if (closeKey) { e.preventDefault(); return pcApp ? openApp(null) : hide('pc'); }
-    if (t.closest('input')) return; // 수량 입력 중
+    if (t.closest('input') && !(t.id === 'termSearch' && (e.code === 'ArrowUp' || e.code === 'ArrowDown'))) return; // 입력 중
+    // 뉴스·용어 앱: ↑↓로 목록 이동 (검색창에서도 됨)
+    if ((pcApp === 'news' || pcApp === 'terms') && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
+      e.preventDefault();
+      const step = e.code === 'ArrowDown' ? 1 : -1;
+      if (pcApp === 'news') { const k = ST.news.findIndex(n => n.id === newsSel); newsSel = ST.news[Math.max(0, Math.min(ST.news.length - 1, k + step))]?.id ?? newsSel; }
+      else { const ids = termMatches(), k = ids.indexOf(termSel); termSel = ids[Math.max(0, Math.min(ids.length - 1, k + step))] ?? termSel; }
+      return render();
+    }
     if (pcApp === 'hts' && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
       e.preventDefault();
       const list = visibleStocks(), k = list.indexOf(sel);

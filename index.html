@@ -81,6 +81,8 @@
         <div class="desk-icons">
           <button class="desk-icon" data-app="hts"><img class="px" width="48" height="48" alt=""><span>개미증권 HTS</span></button>
           <button class="desk-icon" data-app="mine"><img class="px" width="48" height="48" alt=""><span>내 주식</span></button>
+          <button class="desk-icon" data-app="news"><img class="px" width="48" height="48" alt=""><span>최근 뉴스</span></button>
+          <button class="desk-icon" data-app="terms"><img class="px" width="48" height="48" alt=""><span>주식 용어</span></button>
         </div>
         <p class="desk-hint">아이콘을 눌러 앱을 여세요 · Esc 컴퓨터 끄기</p>
         <div class="taskbar">
@@ -106,6 +108,37 @@
           <div id="mineList" class="mine-list"></div>
         </div>
         <div class="pc-statusbar">카드를 누르면 개미증권 HTS에서 그 종목을 열어요 · Esc 바탕화면</div>
+      </div>
+
+      <!-- 앱: 최근 뉴스 -->
+      <div id="appNews" class="app" hidden>
+        <div class="pc-titlebar">
+          <span>📰 최근 뉴스</span>
+          <span id="newsClock"></span>
+          <button class="pc-x app-close">✕ <kbd>Esc</kbd></button>
+        </div>
+        <div class="split-app">
+          <div id="newsList" class="split-list" aria-label="뉴스 목록"></div>
+          <article id="newsView" class="split-view"></article>
+        </div>
+        <div class="pc-statusbar">↑↓ 뉴스 고르기 · ● = 아직 안 본 뉴스 · 읽으면 '배운 개념'에 쌓여요 · Esc 바탕화면</div>
+      </div>
+
+      <!-- 앱: 주식 용어 -->
+      <div id="appTerms" class="app" hidden>
+        <div class="pc-titlebar">
+          <span>📖 주식 용어</span>
+          <span></span>
+          <button class="pc-x app-close">✕ <kbd>Esc</kbd></button>
+        </div>
+        <div class="split-app">
+          <div class="split-side">
+            <input id="termSearch" class="term-search" type="search" placeholder="용어 검색 (예: 금리)" aria-label="용어 검색">
+            <div id="termList" class="split-list" aria-label="용어 목록"></div>
+          </div>
+          <article id="termView" class="split-view"></article>
+        </div>
+        <div class="pc-statusbar">↑↓ 용어 고르기 · 검색창에 글자를 넣으면 뜻·설명에서 찾아요 · Esc 바탕화면</div>
       </div>
 
       <!-- 앱: 개미증권 HTS -->
