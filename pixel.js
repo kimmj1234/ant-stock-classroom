@@ -100,7 +100,9 @@ const iconURL = name => spriteURL('icon-' + name, ICONS[name]);
 // ===== 위에서 내려다본 사무실 (320×176, 1칸 = 16px) =====
 const ROOM_W = 320, ROOM_H = 176, FLOOR_TOP = 32;
 const DOOR = [104, 144]; // 칸막이 벽의 문 구간 (y)
-const WALLS = [[116, 0, 8, DOOR[0]], [116, DOOR[1], 8, ROOM_H - DOOR[1]], [212, 0, 8, DOOR[0]], [212, DOOR[1], 8, ROOM_H - DOOR[1]]]
+const EXIT = [158, 186];   // 가운데 방 아래쪽 현관 (x) → 집 밖
+const WALLS = [[116, 0, 8, DOOR[0]], [116, DOOR[1], 8, ROOM_H - DOOR[1]], [212, 0, 8, DOOR[0]], [212, DOOR[1], 8, ROOM_H - DOOR[1]],
+  [0, 172, EXIT[0], 4], [EXIT[1], 172, ROOM_W - EXIT[1], 4]]
   .map(([x, y, w, h]) => ({ x, y, w, h }));
 const C = {
   k: '#2b1d14', wood: '#8b5a2b', woodD: '#5a331b', woodL: '#b07a46', floorA: '#f3e3b8', floorB: '#e6d29e',
@@ -125,17 +127,42 @@ function drawBookshelf(ctx, f) {
     for (let bx = f.x + 3, i = s * 5; bx < f.x + f.w - 4; bx += 4, i++) { const bh = 6 + (i * 7) % 3; R(ctx, colors[i % 6], bx, base - bh, 3, bh); }
   }
 }
-function drawCalendar(ctx, f, v) {
-  box(ctx, '#ffffff', f.x, f.y, f.w, f.h);
-  R(ctx, PAL.u, f.x + 1, f.y + 1, f.w - 2, 4);
-  drawNum(ctx, v.day, f.x + Math.round((f.w - (String(v.day).length * 4 - 1)) / 2), f.y + 8, PAL.k);
+// 벽시계: 게임 시각 (clock = 0시부터 지난 분)
+function hand(ctx, c, x0, y0, ang, len) {
+  for (let t = 0; t <= len; t += 0.5) R(ctx, c, Math.round(x0 + Math.sin(ang) * t), Math.round(y0 - Math.cos(ang) * t), 1, 1);
+}
+function drawClock(ctx, f, v) {
+  R(ctx, C.k, f.x + 2, f.y, 12, 16); R(ctx, C.k, f.x, f.y + 2, 16, 12); R(ctx, C.k, f.x + 1, f.y + 1, 14, 14);
+  R(ctx, '#ffffff', f.x + 3, f.y + 1, 10, 14); R(ctx, '#ffffff', f.x + 1, f.y + 3, 14, 10); R(ctx, '#ffffff', f.x + 2, f.y + 2, 12, 12);
+  const cx = f.x + 8, cy = f.y + 8;
+  R(ctx, PAL.u, cx, f.y + 2, 1, 1); R(ctx, PAL.u, f.x + 13, cy, 1, 1); R(ctx, PAL.u, cx, f.y + 13, 1, 1); R(ctx, PAL.u, f.x + 2, cy, 1, 1);
+  hand(ctx, C.k, cx, cy, ((v.clock / 60) % 12) / 12 * 2 * Math.PI, 3.5);
+  hand(ctx, '#3b82f6', cx, cy, (v.clock % 60) / 60 * 2 * Math.PI, 5.5);
+}
+function drawDoormat(ctx, f) {
+  R(ctx, '#6b4226', f.x, f.y, f.w, f.h); R(ctx, '#9c6a3f', f.x + 2, f.y + 2, f.w - 4, f.h - 4);
+  R(ctx, '#ffd23f', f.x + f.w / 2 - 2, f.y + 3, 5, 1); R(ctx, '#ffd23f', f.x + f.w / 2 - 1, f.y + 4, 3, 1); R(ctx, '#ffd23f', f.x + f.w / 2, f.y + 5, 1, 1);
+}
+
+// TV 뉴스 스튜디오 (96×54): 배경 화면 그래프 + 앵커 개미 + 책상
+function drawStudio(ctx, mood, up) {
+  R(ctx, '#0d2547', 0, 0, 96, 54); R(ctx, '#15386b', 0, 0, 96, 20);
+  for (let x = 0; x < 96; x += 6) R(ctx, '#1d4a8a', x, 20, 1, 22);
+  box(ctx, '#0a1a33', 56, 6, 34, 22);
+  const pts = up ? [20, 18, 19, 15, 13, 9, 7] : [8, 10, 9, 13, 15, 18, 20];
+  pts.forEach((y, i) => R(ctx, up ? '#ff5c5c' : '#5c9dff', 59 + i * 4, 6 + y / 1.1, 3, 2));
+  drawRows(ctx, antRows(mood), 22, 18, { R: '#5a2d82' });
+  R(ctx, '#3a3f4b', 33, 31, 2, 4); R(ctx, '#1b1b2f', 32, 29, 4, 2);   // 마이크
+  box(ctx, '#8b5a2b', 6, 34, 50, 20); R(ctx, '#b07a46', 7, 35, 48, 2);
+  R(ctx, '#f7c948', 20, 42, 22, 5); R(ctx, '#1b1b2f', 22, 43, 18, 3);
 }
 // 창밖 = 오늘 날씨. anim: 비·눈이 내리는 정도 (움직임 줄이기면 0)
 function drawWindow(ctx, f, v) {
   box(ctx, C.woodL, f.x, f.y, f.w, f.h);
-  const w = v.weather, sky = SKY[v.flash ? 'crash' : w] || SKY.sunny, ix = f.x + 2, iy = f.y + 2, iw = f.w - 4, ih = f.h - 4;
+  const w = v.weather, sky = v.flash ? SKY.crash : v.night ? ['#141a3a', '#22295a'] : SKY[w] || SKY.sunny, ix = f.x + 2, iy = f.y + 2, iw = f.w - 4, ih = f.h - 4;
   R(ctx, sky[0], ix, iy, iw, ih / 2); R(ctx, sky[1], ix, iy + ih / 2, iw, ih / 2);
-  if (w === 'sunny' || w === 'heat' || w === 'cold') {
+  if (v.night) { R(ctx, '#f5f0d0', ix + iw - 9, iy + 3, 4, 4); R(ctx, sky[0], ix + iw - 8, iy + 3, 2, 2); }
+  else if (w === 'sunny' || w === 'heat' || w === 'cold') {
     const sz = w === 'heat' ? 6 : 5;
     R(ctx, w === 'heat' ? '#ff7a1a' : '#ffd23f', ix + (v.day * 3) % (iw - 6), iy + 3, sz, sz);
   }
@@ -234,7 +261,8 @@ const FURN = [
   { id: 'rug1', x: 14, y: 58, w: 80, h: 50, floor: true, draw: drawRug },
   { id: 'rug2', x: 134, y: 70, w: 70, h: 52, floor: true, draw: drawRug },
   { id: 'bookshelf', x: 6, y: 6, w: 30, h: 38, solid: true, act: 'glossary', label: '📚 책장 — 주식 용어 사전', draw: drawBookshelf },
-  { id: 'calendar', x: 42, y: 8, w: 16, h: 16, draw: drawCalendar },
+  { id: 'clock', x: 44, y: 6, w: 16, h: 16, draw: drawClock },
+  { id: 'doormat', x: 160, y: 162, w: 24, h: 10, floor: true, draw: drawDoormat },
   { id: 'window1', x: 66, y: 6, w: 34, h: 20, draw: drawWindow },
   { id: 'plant1', x: 100, y: 30, w: 14, h: 20, solid: true, draw: drawPlant },
   { id: 'desk', x: 26, y: 64, w: 50, h: 20, solid: true, act: 'trade', label: '💻 컴퓨터 켜기 (증권 HTS: 시세·차트·호가·주문) · 여기서 B/S로 1주 바로 거래', draw: drawDesk },
@@ -254,18 +282,17 @@ const FURN = [
   { id: 'lamp', x: 250, y: 118, w: 14, h: 16, solid: true, draw: drawLamp },
   { id: 'bed', x: 268, y: 112, w: 48, h: 60, solid: true, draw: drawBed },
 ];
-const SOLIDS = [...WALLS, ...FURN.filter(f => f.solid)];
 
 // 발 위치(x, y) 기준 10×4 충돌 상자
-function blocked(x, y) {
-  const l = x - 5, r = x + 5, t = y - 4, b = y;
-  if (l < 0 || r > ROOM_W || t < FLOOR_TOP || b > ROOM_H) return true;
-  return SOLIDS.some(s => l < s.x + s.w && r > s.x && t < s.y + s.h && b > s.y);
+function blocked(x, y, scene = 'inside') {
+  const l = x - 5, r = x + 5, t = y - 4, b = y, sc = SCENES[scene];
+  if (l < 0 || r > ROOM_W || t < sc.top || b > ROOM_H) return true;
+  return sc.solids.some(s => l < s.x + s.w && r > s.x && t < s.y + s.h && b > s.y);
 }
 
-function nearestObject(x, y) {
+function nearestObject(x, y, scene = 'inside') {
   let best = null, bd = 14;
-  for (const f of FURN) {
+  for (const f of SCENES[scene].furn) {
     if (!f.act) continue;
     const dx = Math.max(f.x - x, 0, x - (f.x + f.w)), dy = Math.max(f.y - (y - 4), 0, (y - 4) - (f.y + f.h));
     const d = Math.hypot(dx, dy);
@@ -286,6 +313,92 @@ function drawRoomBase(ctx) {
   for (const w of WALLS) { R(ctx, C.woodD, w.x, w.y, w.w, w.h); R(ctx, C.wood, w.x + 1, w.y, w.w - 2, w.h); }
 }
 
+// ===== 집 밖 (320×176): 위쪽 = 집 앞, 왼쪽 = 편의점, 오른쪽 = 은행 =====
+const HOUSE_DOOR = [160, 184];   // 이 앞에서 위로 가면 집 안으로
+function skyOf(clock) {
+  const h = clock / 60;
+  return h < 5 || h >= 20 ? ['#141a3a', '#22295a'] : h < 7 ? ['#5a4a8f', '#f0a868'] : h < 17 ? ['#7ec8f0', '#a8dcf5'] : ['#f08a24', '#f7c97a'];
+}
+const darkness = clock => { const h = clock / 60; return h < 5 || h >= 20 ? 0.45 : h < 6.5 || h >= 18.5 ? 0.25 : 0; };
+function drawOutsideBase(ctx, v) {
+  const sky = skyOf(v.clock);
+  R(ctx, sky[0], 0, 0, ROOM_W, 12); R(ctx, sky[1], 0, 12, ROOM_W, 14);
+  R(ctx, '#2f6b2a', 0, 26, ROOM_W, 14);
+  for (let x = 0; x < ROOM_W; x += 10) R(ctx, '#3f8f3a', x + 2, 28, 6, 10);
+  for (let y = 40; y < ROOM_H; y += 8) for (let x = 0; x < ROOM_W; x += 8) R(ctx, ((x + y) / 8) % 2 ? '#7cbf5a' : '#72b552', x, y, 8, 8);
+  R(ctx, '#d6cfbd', 0, 92, ROOM_W, 16);
+  for (let x = 0; x < ROOM_W; x += 16) R(ctx, '#bfb6a0', x, 92, 1, 16);
+  R(ctx, '#c9c2b0', HOUSE_DOOR[0], 40, HOUSE_DOOR[1] - HOUSE_DOOR[0], ROOM_H - 40);
+  for (let y = 44; y < ROOM_H; y += 8) R(ctx, '#aaa290', HOUSE_DOOR[0], y, HOUSE_DOOR[1] - HOUSE_DOOR[0], 1);
+}
+function drawHouseFront(ctx, f) {
+  R(ctx, C.mortar, f.x, f.y, f.w, f.h);
+  for (let y = f.y + 8; y < f.y + f.h; y += 5) for (let x = f.x + ((y / 5) % 2 ? -6 : 0); x < f.x + f.w; x += 12) R(ctx, C.brick, Math.max(f.x, x + 1), y + 1, 10, 4);
+  R(ctx, '#7a3b2a', f.x - 4, f.y, f.w + 8, 8); R(ctx, '#5a2a1e', f.x - 4, f.y + 7, f.w + 8, 2);
+  [f.x + 12, f.x + f.w - 30].forEach(x => { box(ctx, C.woodL, x, f.y + 14, 18, 14); R(ctx, '#ffe9a0', x + 2, f.y + 16, 14, 10); R(ctx, C.woodL, x + 8, f.y + 14, 2, 14); });
+  box(ctx, '#6b4226', HOUSE_DOOR[0], f.y + 22, HOUSE_DOOR[1] - HOUSE_DOOR[0], 22); R(ctx, PAL.y, HOUSE_DOOR[1] - 6, f.y + 33, 2, 2);
+}
+function drawStore(ctx, f) {
+  box(ctx, '#f2f2ee', f.x, f.y, f.w, f.h);
+  R(ctx, '#2f9e5a', f.x + 1, f.y + 1, f.w - 2, 10); R(ctx, '#f08a24', f.x + 1, f.y + 11, f.w - 2, 2);
+  drawNum(ctx, 24, f.x + 6, f.y + 3, '#ffffff');
+  for (let i = 0; i < 4; i++) R(ctx, '#ffffff', f.x + 18 + i * 4, f.y + 5, 2, 2);
+  box(ctx, '#9ed3f0', f.x + 6, f.y + 18, 26, 20); box(ctx, '#9ed3f0', f.x + f.w - 32, f.y + 18, 26, 20);
+  for (let i = 0; i < 3; i++) { R(ctx, '#e03e3e', f.x + 9 + i * 7, f.y + 26, 4, 4); R(ctx, '#f7c948', f.x + f.w - 29 + i * 7, f.y + 30, 4, 4); }
+  box(ctx, '#bfe3ff', f.x + f.w / 2 - 8, f.y + 30, 16, f.h - 30); R(ctx, C.k, f.x + f.w / 2, f.y + 30, 1, f.h - 30);
+}
+function drawBank(ctx, f) {
+  box(ctx, '#d9d4c7', f.x, f.y, f.w, f.h);
+  R(ctx, '#8a8576', f.x - 2, f.y, f.w + 4, 10); R(ctx, '#6f6a5c', f.x - 2, f.y + 9, f.w + 4, 2);
+  drawRows(ctx, ICONS.coin, f.x + f.w / 2 - 4, f.y + 1);
+  for (let i = 0; i < 4; i++) { R(ctx, '#efeae0', f.x + 8 + i * 22, f.y + 14, 6, f.h - 18); R(ctx, '#c9c2b0', f.x + 8 + i * 22, f.y + 14, 1, f.h - 18); }
+  box(ctx, '#4a3a2a', f.x + f.w / 2 - 8, f.y + 30, 16, f.h - 30);
+  R(ctx, '#8a8576', f.x, f.y + f.h - 4, f.w, 4);
+}
+function drawTree(ctx, f) {
+  R(ctx, '#6b4226', f.x + f.w / 2 - 2, f.y + 12, 4, f.h - 12);
+  R(ctx, C.leafD, f.x, f.y + 2, f.w, 12); R(ctx, C.leaf, f.x + 2, f.y, f.w - 4, 10); R(ctx, '#6fbf4f', f.x + 4, f.y + 2, 4, 3);
+}
+function drawBench(ctx, f) {
+  R(ctx, C.woodD, f.x + 2, f.y + 6, 2, 4); R(ctx, C.woodD, f.x + f.w - 4, f.y + 6, 2, 4);
+  box(ctx, C.wood, f.x, f.y, f.w, 4); box(ctx, C.wood, f.x, f.y + 4, f.w, 3);
+}
+function drawLamppost(ctx, f, v) {
+  R(ctx, '#3a3f4b', f.x + 1, f.y + 4, 2, f.h - 4);
+  R(ctx, darkness(v.clock) ? '#ffe9a0' : '#9aa3b5', f.x - 1, f.y, 6, 5);
+}
+// 전광판: 글자는 game.js가 HTML로 이 자리(BILLBOARD.screen) 위에 띄움
+const BILLBOARD = { x: 210, y: 112, w: 106, h: 62, screen: { x: 214, y: 116, w: 98, h: 44 } };
+function drawBillboard(ctx, f) {
+  R(ctx, '#3a3f4b', f.x + 14, f.y + 48, 4, f.h - 48); R(ctx, '#3a3f4b', f.x + f.w - 18, f.y + 48, 4, f.h - 48);
+  box(ctx, '#2a2a35', f.x, f.y, f.w, 52);
+  const sc = f.screen;
+  R(ctx, '#05080f', sc.x, sc.y, sc.w, sc.h);
+  for (let x = sc.x; x < sc.x + sc.w; x += 2) R(ctx, '#0d1422', x, sc.y, 1, sc.h);
+  R(ctx, '#f7c948', f.x + 2, f.y + 1, f.w - 4, 1);
+}
+const OUT_FURN = [
+  { id: 'house', x: 112, y: 0, w: 96, h: 44, solid: true, draw: drawHouseFront },
+  { id: 'store', x: 8, y: 6, w: 88, h: 50, solid: true, act: 'work', label: '🏪 24시 편의점 — 알바하기', draw: drawStore },
+  { id: 'bank', x: 224, y: 6, w: 88, h: 50, solid: true, act: 'bank', label: '🏦 개미은행 — 예금·출금 (장 마감 때마다 이자)', draw: drawBank },
+  { id: 'tree1', x: 20, y: 118, w: 16, h: 22, solid: true, draw: drawTree },
+  { id: 'tree3', x: 118, y: 140, w: 16, h: 22, solid: true, draw: drawTree },
+  { id: 'bench', x: 44, y: 146, w: 26, h: 10, solid: true, draw: drawBench },
+  { id: 'lamp1', x: 150, y: 52, w: 4, h: 24, solid: true, draw: drawLamppost },
+  { id: 'lamp2', x: 190, y: 52, w: 4, h: 24, solid: true, draw: drawLamppost },
+  { id: 'billboard', ...BILLBOARD, solid: true, draw: drawBillboard },
+];
+function drawCoins(ctx, coins, blink) {
+  for (const c of coins) {
+    box(ctx, PAL.y, c.x - 3, c.y - 6, 6, 6); R(ctx, '#c98a12', c.x - 1, c.y - 4, 2, 2);
+    if (blink) R(ctx, '#ffffff', c.x + 3, c.y - 8, 1, 1);
+  }
+}
+const SCENES = {
+  inside: { furn: FURN, solids: [...WALLS, ...FURN.filter(f => f.solid)], top: FLOOR_TOP, base: drawRoomBase },
+  outside: { furn: OUT_FURN, solids: OUT_FURN.filter(f => f.solid), top: 40, base: drawOutsideBase },
+};
+
 function drawAnt(ctx, a) {
   R(ctx, 'rgba(0,0,0,0.2)', Math.round(a.x) - 6, Math.round(a.y) - 2, 12, 3);
   drawRows(ctx, antRows(a.mood), Math.round(a.x) - 8, Math.round(a.y) - 16 - (a.bob ? 1 : 0), BODY[a.color] || BODY.red);
@@ -299,14 +412,21 @@ function drawHighlight(ctx, f, up) {
   R(ctx, '#ffd23f', cx - 2, ay, 5, 1); R(ctx, '#ffd23f', cx - 1, ay + 1, 3, 1); R(ctx, '#ffd23f', cx, ay + 2, 1, 1);
 }
 
-// v: { day, weather, anim, flash, hist, unread, blink, near, myColor, ants: [{ x, y, mood, bob, color }] }
+// v: { scene, clock, night, weather, anim, flash, hist, unread, blink, near, myColor, coins, ants: [{ x, y, mood, bob, color }] }
 function drawRoom(ctx, v) {
-  drawRoomBase(ctx);
-  FURN.filter(f => f.floor).forEach(f => f.draw(ctx, f, v));
-  const items = FURN.filter(f => !f.floor).map(f => ({ z: f.y + f.h, d: () => f.draw(ctx, f, v) }));
+  const sc = SCENES[v.scene];
+  sc.base(ctx, v);
+  sc.furn.filter(f => f.floor).forEach(f => f.draw(ctx, f, v));
+  if (v.scene === 'outside') drawCoins(ctx, v.coins, v.blink);
+  const items = sc.furn.filter(f => !f.floor).map(f => ({ z: f.y + f.h, d: () => f.draw(ctx, f, v) }));
   for (const a of v.ants) items.push({ z: a.y, d: () => drawAnt(ctx, a) });
   items.sort((a, b) => a.z - b.z).forEach(it => it.d());
   if (v.near) drawHighlight(ctx, v.near, v.blink);
+  const dk = v.scene === 'outside' ? darkness(v.clock) : 0;
+  if (dk) {
+    R(ctx, `rgba(10,16,48,${dk})`, 0, 0, ROOM_W, ROOM_H);
+    for (const f of OUT_FURN.filter(f => f.id.startsWith('lamp'))) R(ctx, 'rgba(255,233,160,0.25)', f.x - 10, f.y + 2, 24, 30);
+  }
 }
 
 // ===== 픽셀 캔들 차트 (300×90): 빨강 = 상승, 파랑 = 하락 =====

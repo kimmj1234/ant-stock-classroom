@@ -255,8 +255,8 @@ const EVENTS = [
     lesson: '금리가 오르면 돈을 빌리는 비용이 커지고 미래 이익의 현재 가치가 낮아집니다. 그래서 미래 기대가 큰 성장주가 더 크게 흔들립니다.',
     make() {
       return chance(0.5)
-        ? { title: '중앙은행, 기준금리 0.5%p 인상', hits: hit(byTag('rate'), -.06, -.03, -.004, -.001), market: { j: -.01, d: -.002 } }
-        : { title: '중앙은행, 기준금리 전격 인하', hits: hit(byTag('rate'), .03, .06, .001, .004), market: { j: .01, d: .002 } };
+        ? { title: '중앙은행, 기준금리 0.5%p 인상', hits: hit(byTag('rate'), -.06, -.03, -.004, -.001), market: { j: -.01, d: -.002 }, rateDelta: .0005 }
+        : { title: '중앙은행, 기준금리 전격 인하', hits: hit(byTag('rate'), .03, .06, .001, .004), market: { j: .01, d: .002 }, rateDelta: -.0005 };
     },
   },
   {
@@ -297,35 +297,48 @@ const EVENT_WEIGHTS = Object.fromEntries(EVENTS.map((e, i) => [i, e.weight]));
 // TV '배우기'에서 셀 수 있는 개념 목록 (사건 종류 + 날씨 사건 종류)
 const LESSON_KEYS = [...EVENTS.map(e => ({ key: e.key, name: e.name })), ...Object.keys(WEATHER_EVENTS).map(k => ({ key: 'w_' + k, name: WEATHER[k].name }))];
 
-// ===== 한 판의 시장 =====
+// ===== 시장 =====
+// 장은 오전 9시에 열려 오후 6시에 닫힙니다. 그 사이 10분마다 한 번(TICKS_PER_DAY번) 조금씩 움직이고, 하루가 일봉 하나가 됩니다.
+const TICKS_PER_DAY = 54;
+const DEPOSIT_RATE = { base: 0.001, min: 0.0003, max: 0.003, step: 0.0005 };   // 은행 예금 하루 이자율
+
 function createMarket() {
   const month0 = 1 + Math.floor(Math.random() * 12);
   return {
     day: 0, month0, weather: nextWeather(null, seasonOf(month0)), marketDrift: 0, newsId: 0, news: [],
-    stocks: STOCK_DEFS.map(s => ({ sym: s.sym, price: s.price, hist: [s.price], drift: 0 })), index: [1000],
+    open: false, tick: 0, pending: [], clock: 8 * 60 + 30, depositRate: DEPOSIT_RATE.base,
+    stocks: STOCK_DEFS.map(s => ({ sym: s.sym, price: s.price, raw: s.price, hist: [s.price], drift: 0 })), index: [1000],
   };
 }
 const monthOf = m => ((m.month0 - 1 + Math.floor(m.day / 20)) % 12) + 1; // 20거래일 ≈ 한 달
+const indexOf = m => +(1000 * m.stocks.reduce((a, st, i) => a + st.price / STOCK_DEFS[i].price, 0) / m.stocks.length).toFixed(2);
+function setPrice(m, st, raw) {
+  st.raw = raw;
+  st.price = roundTick(raw);
+  if (m.open) st.hist[st.hist.length - 1] = st.price;   // 오늘 일봉의 현재가
+}
 
 function applyEvent(m, e, key, icon) {
   const impact = {};
   for (const h of e.hits) {
     const st = m.stocks.find(s => s.sym === h.sym);
-    st.price = roundTick(st.price * (1 + h.j));
+    setPrice(m, st, st.raw * (1 + h.j));
     st.drift += h.d;
     impact[h.sym] = (impact[h.sym] || 0) + h.j;
   }
   if (e.market) {
     m.stocks.forEach((st, i) => {
       const j = e.market.j * STOCK_DEFS[i].beta;
-      st.price = roundTick(st.price * (1 + j));
+      setPrice(m, st, st.raw * (1 + j));
       impact[st.sym] = (impact[st.sym] || 0) + j;
     });
     m.marketDrift += e.market.d;
   }
+  if (e.rateDelta) m.depositRate = Math.min(DEPOSIT_RATE.max, Math.max(DEPOSIT_RATE.min, m.depositRate + e.rateDelta));
+  if (m.open) m.index[m.index.length - 1] = indexOf(m);
   const def = EVENTS.find(x => x.key === key);
   const item = {
-    id: ++m.newsId, day: m.day, key, icon, title: e.title, crash: !!def?.crash,
+    id: ++m.newsId, key, icon, title: e.title, crash: !!def?.crash,
     lesson: def ? def.lesson : WEATHER_EVENTS[key.slice(2)].lesson,
     impacts: Object.entries(impact).map(([sym, j]) => ({ sym, j: +j.toFixed(4) })).sort((a, b) => Math.abs(b.j) - Math.abs(a.j)),
   };
@@ -334,9 +347,12 @@ function applyEvent(m, e, key, icon) {
   return item;
 }
 
-// 하루 진행: 날씨 → 사건(0~2건) → 사건 반영 → 시장·업종·종목 고유 움직임
-function stepDay(m) {
+// 오전 9시 개장: 오늘 날씨 → 날씨 사건, 오늘 일어날 사건(0~2건)의 시각을 미리 정함, 새 일봉 시작
+function openDay(m) {
   m.day++;
+  m.open = true; m.tick = 0;
+  m.stocks.forEach(st => { st.hist.push(st.price); if (st.hist.length > 61) st.hist.shift(); });
+  m.index.push(indexOf(m)); if (m.index.length > 61) m.index.shift();
   const happened = [];
   const prev = m.weather;
   m.weather = nextWeather(prev, seasonOf(monthOf(m)));
@@ -345,26 +361,53 @@ function stepDay(m) {
     happened.push(applyEvent(m, { title: w.title(), hits: w.hits() }, 'w_' + m.weather, 'w_' + m.weather));
   }
   const n = chance(0.55) ? (chance(0.25) ? 2 : 1) : 0;
-  for (let i = 0; i < n; i++) {
-    const def = EVENTS[weighted(EVENT_WEIGHTS)];
-    happened.push(applyEvent(m, def.make(), def.key, def.icon));
-  }
-
-  const mk = gauss() * MARKET_VOL + m.marketDrift;
-  m.marketDrift *= DRIFT_DECAY;
-  const sec = Object.fromEntries(Object.keys(SECTORS).map(k => [k, gauss() * SECTOR_VOL]));
-  m.stocks.forEach((st, i) => {
-    const def = STOCK_DEFS[i];
-    const r = def.beta * mk + sec[def.sector] + gauss() * VOL + st.drift + REVERT * Math.log(def.price / st.price);
-    st.drift *= DRIFT_DECAY;
-    st.price = roundTick(st.price * Math.exp(r));
-    st.hist.push(st.price);
-  });
-  m.index.push(+(1000 * m.stocks.reduce((a, st, i) => a + st.price / STOCK_DEFS[i].price, 0) / m.stocks.length).toFixed(2));
+  m.pending = Array.from({ length: n }, () => ({ tick: 1 + Math.floor(Math.random() * (TICKS_PER_DAY - 2)), e: weighted(EVENT_WEIGHTS) }));
   return happened;
 }
 
-module.exports = { VOL, SECTORS, TAG_LABEL, STOCK_DEFS, WEATHER, LESSON_KEYS, createMarket, stepDay, monthOf, tickSize };
+// 장중 10분: 예정된 사건 → 시장·업종·종목 고유 움직임을 하루치의 1/54만큼
+function stepTick(m) {
+  if (!m.open) return [];
+  m.tick++;
+  const happened = [];
+  for (const p of m.pending.filter(p => p.tick === m.tick)) {
+    const def = EVENTS[p.e];
+    happened.push(applyEvent(m, def.make(), def.key, def.icon));
+  }
+  const s = Math.sqrt(TICKS_PER_DAY);
+  const mk = gauss() * MARKET_VOL / s + m.marketDrift / TICKS_PER_DAY;
+  const sec = Object.fromEntries(Object.keys(SECTORS).map(k => [k, gauss() * SECTOR_VOL / s]));
+  m.stocks.forEach((st, i) => {
+    const def = STOCK_DEFS[i];
+    const r = def.beta * mk + sec[def.sector] + gauss() * VOL / s + (st.drift + REVERT * Math.log(def.price / st.raw)) / TICKS_PER_DAY;
+    setPrice(m, st, st.raw * Math.exp(r));
+  });
+  m.index[m.index.length - 1] = indexOf(m);
+  return happened;
+}
+
+// 오후 6시 마감: 사건 여파가 하루만큼 줄어듦
+function closeDay(m) {
+  m.open = false; m.pending = [];
+  m.stocks.forEach(st => { st.drift *= DRIFT_DECAY; });
+  m.marketDrift *= DRIFT_DECAY;
+}
+
+// 하루 전체 (점검용)
+function stepDay(m) {
+  const happened = openDay(m);
+  for (let t = 0; t < TICKS_PER_DAY; t++) happened.push(...stepTick(m));
+  closeDay(m);
+  return happened;
+}
+
+const SEASON_NAME = { spring: '봄', summer: '여름', fall: '가을', winter: '겨울' };
+const seasonName = m => SEASON_NAME[seasonOf(monthOf(m))];
+
+module.exports = {
+  VOL, SECTORS, TAG_LABEL, STOCK_DEFS, WEATHER, LESSON_KEYS, TICKS_PER_DAY,
+  createMarket, openDay, stepTick, closeDay, stepDay, monthOf, seasonName, tickSize,
+};
 
 // ===== 점검: node market.js → 60거래일 × 300판 모의 실행 =====
 if (require.main === module) {
@@ -380,9 +423,11 @@ if (require.main === module) {
       assert.strictEqual(st.hist.length, 61);
       st.hist.forEach(p => assert.ok(Number.isFinite(p) && p > 0, `가격 오류 ${st.sym} ${p}`));
       assert.strictEqual(st.price % tickSize(st.price), 0, '호가 단위');
+      assert.strictEqual(st.hist[st.hist.length - 1], st.price, '오늘 일봉 = 현재가');
       stockRet.push(st.price / STOCK_DEFS[i].price - 1);
     });
-    idxRet.push(m.index[60] / 1000 - 1);
+    assert.ok(m.depositRate >= DEPOSIT_RATE.min && m.depositRate <= DEPOSIT_RATE.max);
+    idxRet.push(m.index[m.index.length - 1] / 1000 - 1);
   }
   assert.strictEqual(STOCK_DEFS.length, 30);
   assert.strictEqual(new Set(STOCK_DEFS.map(s => s.sym)).size, 30);
