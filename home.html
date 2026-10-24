@@ -15,7 +15,7 @@
      그림은 칸을 꽉 채우고 넘치는 부분만 잘림(object-fit: cover) → 어떤 해상도에서도 빈 곳·찌그러짐 없음 */
   .stage {
     position: relative; width: min(880px, calc(100% - 32px)); aspect-ratio: 320 / 176; min-height: 480px;
-    margin: 40px auto; border-radius: 18px; overflow: hidden; background: #6fb35f;
+    margin: 72px auto 40px; border-radius: 18px;   /* 메뉴바와 위 간격 72px */ overflow: hidden; background: #6fb35f;
   }
   .stage canvas { display: block; width: 100%; height: 100%; object-fit: cover; }
   /* 전광판 글자: 그림의 전광판 화면 칸 위에 띄움. 위치·크기는 그림 배율(--k: 그림 1칸 = k px)에 맞춰 스크립트가 정함 */
