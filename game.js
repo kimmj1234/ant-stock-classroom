@@ -46,6 +46,7 @@ let sel = 0, sector = 'all', pcTab = 'hold', newsSeen = 0;
 
 // ===== 내 개미 (위치는 이 브라우저가 정하고 서버에 알림) =====
 const P = { ...START_POS, moving: false, scene: 'inside' };
+let placed = false;   // 서버에 저장된 마지막 자리로 옮겼는지
 let near = null;
 const held = new Set();
 
@@ -90,6 +91,14 @@ function onState(s) {
   const first = !ST;
   ST = s;
   if (s.me) ME = s.me;
+  // 처음 받은 내 정보로 마지막 자리에서 시작 (새로고침해도 처음 위치로 가지 않게). 벽·가구 안이면 처음 위치
+  if (ME && !placed) {
+    placed = true;
+    const scene = ME.scene === 'outside' ? 'outside' : 'inside';
+    if (ME.pos && !blocked(ME.pos.x, ME.pos.y, scene)) Object.assign(P, { x: ME.pos.x, y: ME.pos.y, scene });
+    sentX = Math.round(P.x); sentY = Math.round(P.y); sentScene = P.scene;
+    near = undefined;
+  }
   const latest = s.news[0]?.id || 0;
   if (!first) for (const n of s.news) if (n.id > newsSeen && n.crash) effect('crash');
   newsSeen = Math.max(newsSeen, latest);
@@ -100,6 +109,8 @@ function onState(s) {
 // ===== 로그인: 닉네임이 처음이면 계정 생성, 있으면 비밀번호 확인 =====
 function showLogin(msg = '') {
   ME = null;
+  placed = false;
+  Object.assign(P, START_POS, { scene: 'inside' });
   closeAll();
   $('login').hidden = false;
   $('loginMsg').textContent = msg;
@@ -757,9 +768,13 @@ function fitRoom() {
   const availW = col.parentElement.clientWidth - 8;
   const availH = innerHeight - col.getBoundingClientRect().top - $('prompt').offsetHeight - 20;
   const raw = Math.min(availW / 320, availH / 176);
-  const scale = raw >= 2 ? Math.floor(raw) : Math.max(1, raw);   // 아주 작은 화면만 소수 배율
+  // 픽셀: 정수 배율(도트가 고르게). 고화질: 화면에 들어가는 최대 크기까지
+  const scale = isHD() ? Math.max(1, raw) : raw >= 2 ? Math.floor(raw) : Math.max(1, raw);
   const w = `${Math.floor(320 * scale) + 8}px`;
   if (col.style.width !== w) col.style.width = w;
+  // 고화질 캔버스는 실제로 보이는 크기 × 화면 배율만큼 해상도를 맞춰 흐려지지 않게 (너무 크면 2560px에서 멈춤)
+  const hd = $('roomHD'), cw = Math.min(2560, Math.round(320 * scale * (devicePixelRatio || 1)));
+  if (hd.width !== cw) { hd.width = cw; hd.height = Math.round(cw * 176 / 320); }
 }
 let fitW = 0, fitH = 0;
 addEventListener('resize', fitRoom);
@@ -809,6 +824,7 @@ function applyGfx() {
   $('room').hidden = hd;
   $('roomHD').hidden = !hd;
   document.body.classList.toggle('gfx-hd', hd);
+  fitRoom();
 }
 let lastSent = 0, sentX = 0, sentY = 0, sentScene = '', lastCoin = null;
 function update(dt, now) {
@@ -937,6 +953,10 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => held.delete(e.code));
 // 창을 벗어나면 눌린 키만 초기화 (시장은 모두의 것이라 멈추지 않음)
 window.addEventListener('blur', () => held.clear());
+// 새로고침·창 닫기 직전 마지막 위치를 한 번 더 보냄 (0.15초 간격 전송 사이에 움직인 것까지)
+window.addEventListener('pagehide', () => {
+  if (ME) navigator.sendBeacon('/api/move', JSON.stringify({ x: Math.round(P.x), y: Math.round(P.y), scene: P.scene }));
+});
 
 function applyReduce() {
   document.body.classList.toggle('reduce', store.settings.reduce);

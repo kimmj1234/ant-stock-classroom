@@ -82,10 +82,13 @@ function makePlayer(key, acc, s = {}) {
   return {
     id: crypto.randomUUID(), key, name: acc.name, color: acc.color,
     cash: num(s.cash, START_CASH), bank: Math.max(0, num(s.bank, 0)), hold, realized: num(s.realized, 0), best: num(s.best, START_CASH),
-    earned: num(s.earned, 0), interest: num(s.interest, 0), shiftDay: num(s.shiftDay, -1), shifts: num(s.shifts, 0), work: null, scene: 'inside',
+    earned: num(s.earned, 0), interest: num(s.interest, 0), shiftDay: num(s.shiftDay, -1), shifts: num(s.shifts, 0), work: null,
+    scene: s.scene === 'outside' ? 'outside' : 'inside',
     log: Array.isArray(s.log) ? s.log.slice(0, LOG_MAX) : [], assetHist: Array.isArray(s.assetHist) ? s.assetHist.filter(Number.isFinite).slice(-ASSET_MAX) : [],
     learned: Array.isArray(s.learned) ? s.learned.filter(k => market.LESSON_KEYS.some(l => l.key === k)) : [],
-    readUpTo: num(s.readUpTo, M.newsId), pos: { x: 168, y: 150 },
+    readUpTo: num(s.readUpTo, M.newsId),
+    // 마지막으로 서 있던 자리 (새로고침·재접속해도 이어서)
+    pos: { x: Math.max(0, Math.min(320, num(s.pos?.x, 168))), y: Math.max(0, Math.min(176, num(s.pos?.y, 150))) },
   };
 }
 for (const [key, s] of Object.entries(saved.portfolios || {})) if (accounts[key]) { const p = makePlayer(key, accounts[key], s); players.set(p.id, p); }
@@ -103,8 +106,8 @@ const online = id => [...clients].some(c => c.id === id);
 function saveState() {
   const portfolios = {};
   for (const p of players.values()) {
-    const { cash, bank, hold, realized, best, log, assetHist, learned, readUpTo, earned, interest, shiftDay, shifts } = p;
-    portfolios[p.key] = { cash, bank, hold, realized, best, log, assetHist, learned, readUpTo, earned, interest, shiftDay, shifts };
+    const { cash, bank, hold, realized, best, log, assetHist, learned, readUpTo, earned, interest, shiftDay, shifts, pos, scene } = p;
+    portfolios[p.key] = { cash, bank, hold, realized, best, log, assetHist, learned, readUpTo, earned, interest, shiftDay, shifts, pos, scene };
   }
   const sessions = {};
   for (const [h, id] of tokens) { const p = players.get(id); if (p) sessions[h] = p.key; }
@@ -125,7 +128,7 @@ function publicState() {
 const meOf = p => p && {
   id: p.id, name: p.name, color: p.color, cash: p.cash, bank: p.bank, hold: p.hold, log: p.log, realized: p.realized,
   earned: p.earned, interest: p.interest, shiftsLeft: SHIFTS_PER_DAY - (p.shiftDay === M.day ? p.shifts : 0), workUntil: p.work?.until || 0,
-  best: p.best, assetHist: p.assetHist, learned: p.learned, readUpTo: p.readUpTo,
+  best: p.best, assetHist: p.assetHist, learned: p.learned, readUpTo: p.readUpTo, pos: p.pos, scene: p.scene,
 };
 const send = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 function broadcast() {

@@ -451,7 +451,8 @@ function hdHighlight(ctx, f, up) {
 // ===== 한 장면 그리기 (drawRoom과 같은 v를 받음) =====
 const hdKey = f => (f.id.startsWith('pad-') ? 'pad' : f.id.replace(/\d+$/, ''));
 function drawRoomHD(ctx, v) {
-  ctx.setTransform(HD, 0, 0, HD, 0, 0);
+  const k = ctx.canvas.width / ROOM_W;   // 캔버스 해상도에 맞춰 (화면 크기에 따라 바뀜)
+  ctx.setTransform(k, 0, 0, k, 0, 0);
   ctx.imageSmoothingEnabled = true;
   const outside = v.scene === 'outside', set = outside ? HD_OUT : HD_IN, sc = SCENES[v.scene];
   if (outside) hdOutsideBase(ctx, v); else { ctx.clearRect(0, 0, ROOM_W, ROOM_H); hdFloor(ctx); hdWalls(ctx); }
