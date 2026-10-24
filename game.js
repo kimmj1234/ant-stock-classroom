@@ -5,7 +5,7 @@
 const cv = document.getElementById('game'), ctx = cv.getContext('2d');
 const SPEED = 240;                      // 화면에서 1초에 걷는 거리(px)
 // 위치는 마을 픽셀 좌표(왼쪽 위 = 0, 0). 발밑 자리
-const me = { name: '', x: MAP_W / 2, y: MAP_H / 2, look: DEFAULT_LOOK, dir: 'se', left: false, moving: false };   // dir: 보는 방향(sprites.js의 s·se·e·ne·n), left: 좌우 뒤집기
+const me = { name: '', x: START.x, y: START.y, look: DEFAULT_LOOK, dir: 'se', left: false, moving: false };   // dir: 보는 방향(sprites.js의 s·se·e·ne·n), left: 좌우 뒤집기
 let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). 가로로 눕힌 낮은 휴대폰 화면은 1
 
 // ===== 로그인 확인: 안 했거나 로그아웃하면 메인으로 =====
@@ -102,9 +102,12 @@ function sprite(look, dir, step) {   // step: 0 = 서 있음, 1·2 = 걸음 (왼
 const toScreen = (x, y) => ({ x: x * S, y: y * S });
 
 // ===== 그리기 =====
-// 바닥: 미리 그려 둔 마을 바닥 한 장(town.js의 GROUND)을 배율대로
-function drawGround(cam) {
-  ctx.drawImage(GROUND, -cam.x, -cam.y, MAP_W * S, MAP_H * S);
+// 바닥: 땅은 끝이 없으니 화면에 보이는 칸만 그림 (칸 그림은 town.js의 tileImage)
+function drawGround(cam, W, H) {
+  const t = TILE * S;
+  for (let ty = Math.floor(cam.y / t); ty * t < cam.y + H; ty++)
+    for (let tx = Math.floor(cam.x / t); tx * t < cam.x + W; tx++)
+      ctx.drawImage(tileImage(tx, ty), tx * t - cam.x, ty * t - cam.y, t, t);
 }
 // 나무·집: 발밑(y) 가운데(x)를 기준으로 세움
 function drawThing(t, cam) {
@@ -139,7 +142,7 @@ function drawToast(W) {
   ctx.fillStyle = '#fff'; ctx.fillText(toast.text, W / 2, 39);
 }
 
-// 발밑 네모(가로 ±6, 세로 -4~0 픽셀)가 지나갈 수 없는 칸(나무·집·마을 밖)에 걸리는지
+// 발밑 네모(가로 ±6, 세로 -4~0 픽셀)가 지나갈 수 없는 칸(나무·집)에 걸리는지
 function blockedAt(x, y) {
   for (const px of [x - 6, x + 6]) for (const py of [y - 4, y]) if (blockedTile(Math.floor(px / TILE), Math.floor(py / TILE))) return true;
   return false;
@@ -173,12 +176,10 @@ function frame(now) {
   const k = devicePixelRatio || 1, W = cv.width / k, H = cv.height / k;
   ctx.setTransform(k, 0, 0, k, 0, 0);
   ctx.imageSmoothingEnabled = false;      // 픽셀이 번지지 않고 또렷하게
-  ctx.fillStyle = '#1d2a1b'; ctx.fillRect(0, 0, W, H);   // 마을 바깥
   const f = toScreen(me.x, me.y);
-  // 카메라: 나를 화면 가운데에. 마을 끝에 가까우면 바깥이 안 보이게 멈춤(마을이 화면보다 작으면 마을을 가운데에)
-  const fitCam = (p, view, size) => Math.round(size > view ? Math.min(size - view, Math.max(0, p - view / 2)) : (size - view) / 2);
-  const cam = { x: fitCam(f.x, W, MAP_W * S), y: fitCam(f.y - SPRITE.h * S * SPRITE.scale / 2, H, MAP_H * S) };
-  drawGround(cam);
+  // 카메라: 늘 나를 화면 가운데에 (땅이 끝없으니 멈추는 곳 없음)
+  const cam = { x: Math.round(f.x - W / 2), y: Math.round(f.y - SPRITE.h * S * SPRITE.scale / 2 - H / 2) };
+  drawGround(cam, W, H);
   // 나무·집·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
   const scene = [...THINGS.map(t => ({ y: t.y, draw: () => drawThing(t, cam) })), { y: me.y, draw: () => drawPlayer(me, cam, now) }];
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());

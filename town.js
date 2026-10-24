@@ -1,11 +1,11 @@
 'use strict';
 // ===== 마을 모습: 바닥(풀밭·길·꽃밭)과 물건(나무·집)의 배치와 그림 =====
-// 배치는 아래 목록(칸 번호)만 고치면 됨. 칸 = 바닥 사각형 한 칸(32×32픽셀), 왼쪽 위가 (0, 0).
+// 땅은 끝없이 이어지는 풀밭이고, 그 위에 아래 목록(칸 번호)에 적은 것만 놓임. 칸 = 바닥 사각형 한 칸(32×32픽셀).
+// 칸 번호는 마이너스도 됨(마을 중심 왼쪽·위). 처음 서는 곳은 START.
 // 나무·집은 캐릭터와 같은 굵기의 픽셀(그림 1칸 = 바닥 2픽셀)로 그려서 어울리게 함.
 // 나무·집 자리는 지나갈 수 없음. 캐릭터가 나무·집 뒤(위쪽)로 가면 가려짐(아래쪽에 있는 것을 나중에 그림).
 const TILE = 32;                        // 바닥 한 칸(사각형)의 픽셀 크기
-const COLS = 40, ROWS = 20;             // 마을 크기: 가로 40칸 × 세로 20칸
-const MAP_W = COLS * TILE, MAP_H = ROWS * TILE;   // 마을 크기(픽셀): 1280 × 640
+const START = { x: 20 * TILE, y: 10 * TILE };   // 처음 서는 자리(픽셀): 큰길 네거리
 const ART = 2;                          // 나무·집 그림 1칸 = 바닥 2픽셀
 
 // ----- 배치 -----
@@ -18,7 +18,7 @@ const HOUSES = [  // 집: 왼쪽 위 칸 [x, y], 지붕 색. 집 하나 = 가로
   [4, 5, '#e8454b'], [10, 5, '#3d7fd6'], [26, 5, '#f2a03d'], [32, 5, '#7b5bd6'],
   [6, 13, '#4bb3a0'], [28, 13, '#d4537e'],
 ];
-const TREES = [   // 나무 [x, y] (마을 테두리 나무는 자동)
+const TREES = [   // 나무 [x, y]
   [14, 3], [15, 6], [16, 3], [23, 3], [24, 6], [36, 2], [2, 3], [8, 2],
   [2, 12], [13, 12], [16, 14], [23, 13], [24, 12], [35, 12], [37, 14], [11, 14], [33, 18],
 ];
@@ -26,21 +26,20 @@ const FLOWERS = [ // 꽃밭 [x, y]
   [8, 3], [9, 3], [3, 7], [12, 12], [25, 15], [26, 15], [34, 8], [30, 3], [17, 12], [22, 7],
 ];
 
-// ----- 칸 지도 만들기: '.' 풀밭, '=' 길, '*' 꽃밭, 'T' 나무, 'H' 집 -----
-const GRID = Array.from({ length: ROWS }, () => Array(COLS).fill('.'));
-for (const [x0, y0, x1, y1] of ROADS) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) GRID[y][x] = '=';
+// ----- 칸 지도 만들기: '.' 풀밭(적지 않은 칸은 모두 풀밭), '=' 길, '*' 꽃밭, 'T' 나무, 'H' 집 -----
+const TILES = new Map();   // "x,y" → 글자
+const tileAt = (x, y) => TILES.get(x + ',' + y) || '.';
+const setTile = (x, y, k) => TILES.set(x + ',' + y, k);
+for (const [x0, y0, x1, y1] of ROADS) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) setTile(x, y, '=');
 for (const [hx, hy] of HOUSES) {
-  for (let y = hy; y < hy + 2; y++) for (let x = hx; x < hx + 3; x++) GRID[y][x] = 'H';
-  for (let y = hy + 2; y < ROWS && GRID[y][hx + 1] !== '='; y++) GRID[y][hx + 1] = '=';   // 문 앞에서 길까지 오솔길
+  for (let y = hy; y < hy + 2; y++) for (let x = hx; x < hx + 3; x++) setTile(x, y, 'H');
+  for (let y = hy + 2, n = 0; tileAt(hx + 1, y) !== '=' && n < 20; y++, n++) setTile(hx + 1, y, '=');   // 문 앞에서 아래쪽 길까지 오솔길 (20칸 안에 길이 없으면 거기까지)
 }
-for (const [x, y] of FLOWERS) if (GRID[y][x] === '.') GRID[y][x] = '*';
-const treeSpots = [...TREES];
-for (let x = 0; x < COLS; x++) treeSpots.push([x, 0], [x, ROWS - 1]);   // 테두리 나무 (길이 끝나는 곳은 비움)
-for (let y = 1; y < ROWS - 1; y++) treeSpots.push([0, y], [COLS - 1, y]);
-for (const [x, y] of treeSpots) if (GRID[y][x] === '.' || GRID[y][x] === '*') GRID[y][x] = 'T';
+for (const [x, y] of FLOWERS) if (tileAt(x, y) === '.') setTile(x, y, '*');
+for (const [x, y] of TREES) if ('.*'.includes(tileAt(x, y))) setTile(x, y, 'T');
 
-// 지나갈 수 없는 칸인지 (마을 밖도 막힘)
-const blockedTile = (tx, ty) => tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS || 'TH'.includes(GRID[ty][tx]);
+// 지나갈 수 없는 칸인지
+const blockedTile = (tx, ty) => 'TH'.includes(tileAt(tx, ty));
 
 // ----- 그림 -----
 const makeCanvas = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h });
@@ -94,33 +93,36 @@ function houseArt(roof) {
   return c;
 }
 
-// 바닥 전체를 한 장으로 미리 그려 둠 (매 프레임 다시 그리지 않음)
-const GROUND = (() => {
-  const c = makeCanvas(MAP_W, MAP_H), g = c.getContext('2d');
+// 바닥 한 칸 그림: 칸 종류(+ 길은 이웃이 길인지)마다 한 번만 그려 저장해 두고 다시 씀
+const tileCache = new Map();
+function tileImage(tx, ty) {
+  const k = tileAt(tx, ty);
+  const road = (x, y) => tileAt(x, y) === '=';
+  const key = k === '=' ? '=' + [road(tx, ty - 1), road(tx, ty + 1), road(tx - 1, ty), road(tx + 1, ty)].map(Number).join('') : k === '*' ? '*' : '.';
+  if (tileCache.has(key)) return tileCache.get(key);
+  const c = makeCanvas(TILE, TILE), g = c.getContext('2d');
   const box = (x, y, w, h, color) => { g.fillStyle = color; g.fillRect(x, y, w, h); };
-  const isRoad = (x, y) => GRID[y]?.[x] === '=';
-  for (let ty = 0; ty < ROWS; ty++) for (let tx = 0; tx < COLS; tx++) {
-    const x = tx * TILE, y = ty * TILE, k = GRID[ty][tx];
-    if (k === '=') {   // 길: 흙색 + 작은 돌, 풀밭과 닿는 쪽만 테두리
-      box(x, y, TILE, TILE, '#dcbc85');
-      box(x, y, TILE, 2, isRoad(tx, ty - 1) ? '#dcbc85' : '#b98d55');
-      box(x, y + TILE - 2, TILE, 2, isRoad(tx, ty + 1) ? '#dcbc85' : '#c9a36a');
-      if (!isRoad(tx - 1, ty)) box(x, y, 2, TILE, '#b98d55');
-      if (!isRoad(tx + 1, ty)) box(x + TILE - 2, y, 2, TILE, '#c9a36a');
-      for (const [px, py] of [[7, 9], [21, 5], [14, 22], [26, 18]]) box(x + px, y + py, 2, 2, '#c49a5e');
-    } else {           // 풀밭 (꽃밭·나무·집 아래도 풀)
-      box(x, y, TILE, TILE, '#7cbf5a');
-      for (const [px, py] of [[6, 7], [20, 11], [13, 22], [25, 25], [9, 16]]) box(x + px, y + py, 2, 2, '#68a84a');
-      if (k === '*') for (const [px, py, col] of [[6, 6, '#ffffff'], [18, 9, '#f5a3b5'], [10, 19, '#f2c94c'], [23, 22, '#ffffff'], [26, 4, '#f2c94c'], [4, 26, '#f5a3b5']]) {
-        box(x + px - 2, y + py, 6, 2, col); box(x + px, y + py - 2, 2, 6, col); box(x + px, y + py, 2, 2, '#e8a33d');   // 꽃잎 + 가운데
-      }
+  if (k === '=') {   // 길: 흙색 + 작은 돌, 풀밭과 닿는 쪽만 테두리
+    const [up, down, left, right] = [...key.slice(1)].map(Number);
+    box(0, 0, TILE, TILE, '#dcbc85');
+    if (!up) box(0, 0, TILE, 2, '#b98d55');
+    if (!down) box(0, TILE - 2, TILE, 2, '#c9a36a');
+    if (!left) box(0, 0, 2, TILE, '#b98d55');
+    if (!right) box(TILE - 2, 0, 2, TILE, '#c9a36a');
+    for (const [px, py] of [[7, 9], [21, 5], [14, 22], [26, 18]]) box(px, py, 2, 2, '#c49a5e');
+  } else {           // 풀밭 (꽃밭·나무·집 아래도 풀)
+    box(0, 0, TILE, TILE, '#7cbf5a');
+    for (const [px, py] of [[6, 7], [20, 11], [13, 22], [25, 25], [9, 16]]) box(px, py, 2, 2, '#68a84a');
+    if (k === '*') for (const [px, py, col] of [[6, 6, '#ffffff'], [18, 9, '#f5a3b5'], [10, 19, '#f2c94c'], [23, 22, '#ffffff'], [26, 4, '#f2c94c'], [4, 26, '#f5a3b5']]) {
+      box(px - 2, py, 6, 2, col); box(px, py - 2, 2, 6, col); box(px, py, 2, 2, '#e8a33d');   // 꽃잎 + 가운데
     }
   }
+  tileCache.set(key, c);
   return c;
-})();
+}
 
 // 바닥 위에 서 있는 물건들. y = 발밑(바닥에 닿는 줄) 픽셀 → 이 값으로 캐릭터와 앞뒤 순서를 정함
 const THINGS = [
-  ...treeSpots.filter(([x, y]) => GRID[y][x] === 'T').map(([x, y]) => ({ img: TREE_ART, x: x * TILE + TILE / 2, y: (y + 1) * TILE })),
+  ...TREES.filter(([x, y]) => tileAt(x, y) === 'T').map(([x, y]) => ({ img: TREE_ART, x: x * TILE + TILE / 2, y: (y + 1) * TILE })),
   ...HOUSES.map(([x, y, roof]) => ({ img: houseArt(roof), x: x * TILE + TILE * 1.5, y: (y + 2) * TILE })),
 ];
