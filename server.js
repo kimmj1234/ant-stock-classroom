@@ -1,5 +1,5 @@
 'use strict';
-// ===== 개미 투자 교실 서버: 파일 제공 + 계정 + 하나의 공유 시장 =====
+// ===== 나의 작은 사회 서버: 파일 제공 + 계정 + 하나의 공유 시장 =====
 // 실행: node server.js → http://localhost:5000
 // 끝이 없는 게임입니다. 게임 시계는 접속자가 있으면 계속 흐르고, 장은 닫히지 않습니다(자정마다 하루가 바뀜),
 // 시장·계좌는 data/ 에 저장되어 서버를 다시 켜도 이어집니다.
@@ -23,7 +23,8 @@ const MAX_ACCOUNTS = 200, LOG_MAX = 200, ASSET_MAX = 120;
 const DATA_DIR = path.join(__dirname, 'data');
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');   // 별명·소금·해시·색 (비밀번호 원문 없음)
 const STATE_FILE = path.join(DATA_DIR, 'state.json');         // 시장과 각자의 계좌
-const FILES = { '/': 'index.html', '/index.html': 'index.html', '/style.css': 'style.css', '/pixel.js': 'pixel.js', '/hd.js': 'hd.js', '/game.js': 'game.js' };
+// / = 메인 홈페이지, /play = 게임
+const FILES = { '/': 'home.html', '/play': 'index.html', '/index.html': 'index.html', '/style.css': 'style.css', '/pixel.js': 'pixel.js', '/hd.js': 'hd.js', '/game.js': 'game.js' };
 for (const c of ['red', 'blue', 'yellow', 'white', 'black']) FILES[`/assets/person-${c}.png`] = `assets/person-${c}.png`;   // 고화질 캐릭터 그림
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png' };
 
@@ -345,9 +346,12 @@ http.createServer(async (req, res) => {
   // 이렇게 받아 가는 사람도 접속자(clients)로 셈 (res 없이 seen 시각만)
   if (req.method === 'GET' && url.pathname === '/api/poll') {
     const id = tokens.get(tokenHash(tokenOf(req))) || '';
-    let c = id && [...clients].find(c => !c.res && c.id === id);
-    if (id && !c) clients.add(c = { id });
-    if (c) c.seen = Date.now();
+    // ?peek: 홈페이지가 마을 모습만 보는 것은 접속으로 세지 않음 (아무도 게임에 없으면 시계·시세는 멈춰 있음)
+    if (id && !url.searchParams.has('peek')) {
+      let c = [...clients].find(c => !c.res && c.id === id);
+      if (!c) clients.add(c = { id });
+      c.seen = Date.now();
+    }
     return json(res, 200, { ...publicState(), me: meOf(players.get(id)), meta: url.searchParams.has('meta') ? META : undefined });
   }
 
@@ -377,7 +381,7 @@ http.createServer(async (req, res) => {
   }
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('없는 주소입니다.');
-}).listen(PORT, HOST, () => console.log(`개미 투자 교실: http://localhost:${PORT}`));
+}).listen(PORT, HOST, () => console.log(`나의 작은 사회: http://localhost:${PORT}`));
 
 // 서버를 끌 때 마지막 상태 저장
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveState(); process.exit(0); });
