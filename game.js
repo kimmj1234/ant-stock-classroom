@@ -155,32 +155,29 @@ function updateHud() {   // 글자가 바뀔 때만 고침
 
 // ===== 로그인 확인: 안 했거나 로그아웃하면 메인으로 =====
 // ===== 함께 돌아다니기(멀티플레이) =====
-// 받기: 서버와 실시간 연결(EventSource)로 같은 장면에 있는 다른 사람 목록을 0.1초마다 받음 → others
-// 보내기: 내 자리·방향·걷는지·앉은 벤치 자리·차림을 0.1초마다(바뀐 게 없으면 3초마다) 서버에 알림
+// 0.15초마다 내 자리·방향·걷는지·앉은 벤치 자리·차림을 서버에 알리고(/api/move), 답장으로 같은 장면에 있는 다른 사람 목록을 받음 → others
+// (앞 요청의 답장이 오기 전에는 새로 보내지 않아서, 느린 인터넷에서도 요청이 쌓이지 않음)
 // 그리기: 받은 자리로 부드럽게 따라가며(멀리 떨어지면 바로 이동) 같은 캐릭터 그림·이름표로 그림. 벤치에 앉아 있으면 앉은 모양
 const others = new Map();   // id → { name, look, x, y(지금 그리는 자리), tx, ty(받은 자리), dir, left, moving, seat }
-let live = null, sentMove = '', sentAt = 0;
+let online = false, moveBusy = false, sentAt = 0;
 const safeLook = l => (l && PARTS.body[l.body] && PARTS.face[l.face] && (!l.hat || PARTS.hat[l.hat.shape]) && (!l.suit || PARTS.suit[l.suit.shape]) ? l : DEFAULT_LOOK);   // 모르는 차림은 기본 차림으로
-function startLive() {
-  if (live) return;
-  live = new EventSource('/api/live');   // 끊기면 브라우저가 알아서 다시 연결
-  live.onmessage = e => {
-    const seen = new Set();
-    for (const p of JSON.parse(e.data)) {
-      seen.add(p.id);
-      const o = others.get(p.id);
-      others.set(p.id, Object.assign(o || { x: p.x, y: p.y }, p, { x: o ? o.x : p.x, y: o ? o.y : p.y, tx: p.x, ty: p.y, look: safeLook(p.look) }));
-    }
-    for (const id of others.keys()) if (!seen.has(id)) others.delete(id);
-  };
+function gotOthers(list) {
+  const seen = new Set();
+  for (const p of list) {
+    seen.add(p.id);
+    const o = others.get(p.id);
+    others.set(p.id, Object.assign(o || { x: p.x, y: p.y }, p, { x: o ? o.x : p.x, y: o ? o.y : p.y, tx: p.x, ty: p.y, look: safeLook(p.look) }));
+  }
+  for (const id of others.keys()) if (!seen.has(id)) others.delete(id);
 }
 function sendMove(now) {
-  if (!live || now - sentAt < 100) return;
+  if (!online || moveBusy || now - sentAt < 150) return;
+  moveBusy = true; sentAt = now;
   const seat = me.sit && me.sit.phase === 'on' ? SPOTS.indexOf(me.sit.sp) : null;
   const body = JSON.stringify({ scene: SCENE.name, x: Math.round(me.x), y: Math.round(me.y), dir: me.dir, left: me.left, moving: me.moving, seat, look: me.look });
-  if (body === sentMove && now - sentAt < 3000) return;   // 그대로면 3초마다만 (접속해 있다고 알림)
-  sentMove = body; sentAt = now;
-  fetch('/api/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).catch(() => {});
+  fetch('/api/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+    .then(r => r.json()).then(r => { if (r.ok) gotOthers(r.others || []); })
+    .catch(() => {}).finally(() => { moveBusy = false; });
 }
 function updateOthers(dt, now) {
   for (const sp of SPOTS) sp.othersOn = false;
@@ -201,7 +198,7 @@ const onAuth = who => {
   if (who.world != null) { clock.base = clock.min = who.world; clock.baseAt = performance.now(); }
   if (who.life) { me.cash = who.life.cash; me.bag = who.life.bag; me.stats = who.life.stats; clock.ready = true; }
   showHud();
-  startLive();
+  online = true;   // 이제부터 내 자리를 알리고 다른 사람을 받음
   // 서 있던 자리에서 이어서 시작. 튜토리얼을 이미 떠났으면 튜토리얼 쪽 자리는 무시하고 도시 입구로(다시 못 들어감)
   const pl = who.life?.place;
   if (pl && SCENES[pl.scene] && (!who.tutorialDone || pl.scene === 'city')) {

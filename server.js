@@ -177,12 +177,12 @@ function fameProblem(giver, giverKey, toKey, today) {
   return null;
 }
 const lifeOf = a => ({ cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null, stats: { ...STATS_START, ...a.stats } });
-const SCENE_NAMES = ['field', 'home', 'city'];
+const SCENE_NAMES = ['field', 'home', 'city'];   // town.js의 장면 이름 (튜토리얼 공간 = field·home)
 // ===== 함께 돌아다니기(멀티플레이) =====
-// 접속한 사람마다(로그인 세션마다) 마지막 자리를 메모리에 두고, 같은 장면에 있는 다른 사람들 목록을 0.1초마다 실시간 연결로 보냄.
-// 들어오는 값은 모두 검사(장면 이름·좌표 범위·방향·차림 글자 모양)하고, 10초 동안 소식이 없거나 연결이 끊기면 지움
+// 접속한 사람마다(로그인 세션마다) 마지막 자리를 메모리에 두고, 각자 자리를 알릴 때(/api/move, 0.15초마다) 답장으로 같은 장면에 있는 다른 사람 목록을 돌려줌.
+// (계속 열어 두는 실시간 연결은 인터넷 주소(Cloudflare 터널)가 중간에 모아 두는 바람에 늦게 와서, 보통 요청·답장으로 바꿈)
+// 들어오는 값은 모두 검사(장면 이름·좌표 범위·방향·차림 글자 모양)하고, 5초 동안 소식이 없으면 지움
 const online = new Map();    // 세션 토큰 해시 → { id(무작위), name, look, scene, x, y, dir, left, moving, seat, t }
-const streams = new Map();   // 실시간 연결(res) → { th: 세션 토큰 해시, last: 마지막으로 보낸 내용, t: 보낸 시각 }
 const LOOK_DIRS = ['s', 'se', 'e', 'ne', 'n'];
 const okColor = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
 const okShape = v => typeof v === 'string' && /^[a-z]{1,16}$/.test(v);
@@ -191,18 +191,7 @@ function cleanLook(l) {   // 차림: 모양 이름은 영어 소문자, 색은 #
   const part = p => (p && okShape(p.shape) ? { shape: p.shape, ...(okColor(p.color) ? { color: p.color } : {}) } : null);
   return { body: okShape(l.body) ? l.body : 'blob', color: okColor(l.color) ? l.color : '#f7f7f7', face: okShape(l.face) ? l.face : 'dot', hat: part(l.hat), suit: part(l.suit) };
 }
-setInterval(() => {
-  const now = Date.now();
-  for (const [th, p] of online) if (now - p.t > 10000) online.delete(th);
-  for (const [res, st] of streams) {
-    const mine = online.get(st.th);
-    const list = mine ? [...online].filter(([th, p]) => th !== st.th && p.scene === mine.scene)
-      .map(([, p]) => ({ id: p.id, name: p.name, look: p.look, x: p.x, y: p.y, dir: p.dir, left: p.left, moving: p.moving, seat: p.seat })) : [];
-    const data = JSON.stringify(list);
-    if (data !== st.last) { res.write(`data: ${data}\n\n`); st.last = data; st.t = now; }
-    else if (now - st.t > 15000) { res.write(': 연결 유지\n\n'); st.t = now; }   // 오래 조용하면 연결이 끊기지 않게
-  }
-}, 100);   // town.js의 장면 이름 (튜토리얼 공간 = field·home)
+setInterval(() => { const now = Date.now(); for (const [th, p] of online) if (now - p.t > 5000) online.delete(th); }, 1000);   // 5초 동안 소식 없는 사람 지움
 
 // ===== HTTP =====
 function readBody(req) {
@@ -226,16 +215,6 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
   // 화면이 처음에 필요한 설정 (구글 로그인 버튼에 넣을 클라이언트 ID: 공개 값)
-  // 실시간 연결: 같은 장면의 다른 사람들 자리를 계속 받음 (EventSource)
-  if (req.method === 'GET' && url.pathname === '/api/live') {
-    const th = tokenHash(tokenOf(req));
-    if (!accounts[sessions.get(th)]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
-    res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
-    res.write(': 연결됨\n\n');
-    streams.set(res, { th, last: '', t: Date.now() });
-    req.on('close', () => { streams.delete(res); if (![...streams.values()].some(v => v.th === th)) online.delete(th); });
-    return;
-  }
   if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { googleClientId: GOOGLE_CLIENT_ID });
 
   if (req.method === 'POST' && url.pathname.startsWith('/api/')) {
@@ -269,7 +248,9 @@ http.createServer(async (req, res) => {
         scene: b.scene, x: Math.round(b.x), y: Math.round(b.y), dir: LOOK_DIRS.includes(b.dir) ? b.dir : 's', left: !!b.left, moving: !!b.moving,
         seat: Number.isInteger(b.seat) && b.seat >= 0 && b.seat < 100 ? b.seat : null, t: Date.now(),
       });
-      return json(res, 200, { ok: true });
+      const others = [...online].filter(([t, p]) => t !== th && p.scene === b.scene)
+        .map(([, p]) => ({ id: p.id, name: p.name, look: p.look, x: p.x, y: p.y, dir: p.dir, left: p.left, moving: p.moving, seat: p.seat }));
+      return json(res, 200, { ok: true, others });
     }
     if (name === 'upgrade') {   // 능력치 강화: 돈을 내고 지능·근력 1레벨 올림 (돈·레벨은 서버가 계산)
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
