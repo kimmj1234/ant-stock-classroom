@@ -154,12 +154,53 @@ function updateHud() {   // 글자가 바뀔 때만 고침
 }
 
 // ===== 로그인 확인: 안 했거나 로그아웃하면 메인으로 =====
+// ===== 함께 돌아다니기(멀티플레이) =====
+// 받기: 서버와 실시간 연결(EventSource)로 같은 장면에 있는 다른 사람 목록을 0.1초마다 받음 → others
+// 보내기: 내 자리·방향·걷는지·앉은 벤치 자리·차림을 0.1초마다(바뀐 게 없으면 3초마다) 서버에 알림
+// 그리기: 받은 자리로 부드럽게 따라가며(멀리 떨어지면 바로 이동) 같은 캐릭터 그림·이름표로 그림. 벤치에 앉아 있으면 앉은 모양
+const others = new Map();   // id → { name, look, x, y(지금 그리는 자리), tx, ty(받은 자리), dir, left, moving, seat }
+let live = null, sentMove = '', sentAt = 0;
+const safeLook = l => (l && PARTS.body[l.body] && PARTS.face[l.face] && (!l.hat || PARTS.hat[l.hat.shape]) && (!l.suit || PARTS.suit[l.suit.shape]) ? l : DEFAULT_LOOK);   // 모르는 차림은 기본 차림으로
+function startLive() {
+  if (live) return;
+  live = new EventSource('/api/live');   // 끊기면 브라우저가 알아서 다시 연결
+  live.onmessage = e => {
+    const seen = new Set();
+    for (const p of JSON.parse(e.data)) {
+      seen.add(p.id);
+      const o = others.get(p.id);
+      others.set(p.id, Object.assign(o || { x: p.x, y: p.y }, p, { x: o ? o.x : p.x, y: o ? o.y : p.y, tx: p.x, ty: p.y, look: safeLook(p.look) }));
+    }
+    for (const id of others.keys()) if (!seen.has(id)) others.delete(id);
+  };
+}
+function sendMove(now) {
+  if (!live || now - sentAt < 100) return;
+  const seat = me.sit && me.sit.phase === 'on' ? SPOTS.indexOf(me.sit.sp) : null;
+  const body = JSON.stringify({ scene: SCENE.name, x: Math.round(me.x), y: Math.round(me.y), dir: me.dir, left: me.left, moving: me.moving, seat, look: me.look });
+  if (body === sentMove && now - sentAt < 3000) return;   // 그대로면 3초마다만 (접속해 있다고 알림)
+  sentMove = body; sentAt = now;
+  fetch('/api/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).catch(() => {});
+}
+function updateOthers(dt, now) {
+  for (const sp of SPOTS) sp.othersOn = false;
+  for (const o of others.values()) {
+    if (Math.hypot(o.tx - o.x, o.ty - o.y) > 160) { o.x = o.tx; o.y = o.ty; }   // 멀리 떨어지면(장면을 바꾼 직후 등) 바로 그 자리로
+    else { const k = Math.min(1, dt * 12); o.x += (o.tx - o.x) * k; o.y += (o.ty - o.y) * k; }
+    const sp = o.seat != null && SPOTS[o.seat];
+    o.sit = sp && sp.type === 'seat' ? sp : null;
+    if (o.sit) { sp.othersOn = true; o.pose = 'sit'; o.swing = Math.floor((now + o.x * 7) / 450) % 2 + 1; o.bob = Math.floor((now + o.x * 7) / 900) % 2; }
+    else o.pose = o.swing = o.bob = null;
+  }
+}
+
 const onAuth = who => {
   if (!who) return location.replace('/#login');
   me.name = who.name;
   me.basicUI = !!who.basicUI;   // 안내원에게 기본 UI를 받았는지 → 받았으면 화면 테두리에 기본 UI
   if (who.life) { clock.min = who.life.minutes; me.cash = who.life.cash; me.bag = who.life.bag; me.stats = who.life.stats; clock.ready = true; }
   showHud();
+  startLive();
   // 서 있던 자리에서 이어서 시작. 튜토리얼을 이미 떠났으면 튜토리얼 쪽 자리는 무시하고 도시 입구로(다시 못 들어감)
   const pl = who.life?.place;
   if (pl && SCENES[pl.scene] && (!who.tutorialDone || pl.scene === 'city')) {
@@ -583,6 +624,7 @@ function frame(now) {
     vx = vy = 0;
   }
   updateSit(now);
+  updateOthers(dt, now); sendMove(now);
   const len = Math.hypot(vx, vy);
   if (len > 1) { vx /= len; vy /= len; }   // 대각선도 같은 빠르기
   if (me.moving && len <= 0.1) saveProgress();   // 걷다가 멈추면 바로 저장
@@ -608,11 +650,11 @@ function frame(now) {
   drawShadows(ctx, S, cam);   // 물건 그림자 (바닥 위, 물건 아래)
   // 건물·나무·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
   // 바닥 무늬(맨홀·주차 P)는 맨 먼저 → 무엇에든 가려짐
-  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), { y: me.sit ? me.sit.sp.by + 1 : me.y, draw: () => drawPlayer(me, cam, now) }];   // 앉아 있으면 벤치보다 앞에 그림
+  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), ...[...others.values()].map(o => ({ y: o.sit ? o.sit.by + 1 : o.y, draw: () => drawPlayer(o, cam, now) })), { y: me.sit ? me.sit.sp.by + 1 : me.y, draw: () => drawPlayer(me, cam, now) }];   // 앉아 있으면 벤치보다 앞에 그림
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
   drawClocks(cam);
   drawSky(cam, W, H, dt, now);
-  NPCS.forEach(n => drawName(n, cam)); drawName(me, cam);
+  NPCS.forEach(n => drawName(n, cam)); others.forEach(o => drawName(o, cam)); drawName(me, cam);
   const sp = !busy && (me.sit ? me.sit.phase === 'on' && { type: 'stand' } : nearSpot(me.x, me.y));
   if (sp) drawPrompt(sp, cam);
   if (fade) {   // 검은 화면으로 어두워졌다 밝아짐

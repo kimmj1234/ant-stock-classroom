@@ -112,7 +112,7 @@ const thingsAround = () => THINGS;
 // (x, y) 픽셀 근처(보통 30픽셀, NPC는 42픽셀 안)에 E로 할 수 있는 곳이 있으면 그중 가장 가까운 것
 function nearSpot(x, y) {
   let best = null, bd = Infinity;
-  for (const sp of SPOTS) { if (sp.taken) continue; const d = Math.hypot(sp.x - x, sp.y - y); if (d < (sp.r || 30) && d < bd) { bd = d; best = sp; } }   // 누가 앉은 자리는 빼고
+  for (const sp of SPOTS) { if (sp.taken || sp.othersOn) continue; const d = Math.hypot(sp.x - x, sp.y - y); if (d < (sp.r || 30) && d < bd) { bd = d; best = sp; } }   // 누가 앉은 자리는 빼고
   return best;
 }
 
