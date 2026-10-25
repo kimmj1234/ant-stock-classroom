@@ -260,19 +260,19 @@ function createPeople() {
     // ----- 밖에서 보이는 사람들 (그 지역 맵에 걸어 다님) -----
     visible(S, region, min) {
       const day = Math.floor(min / DAY);
-      return Object.values(S.people.list).filter(n => n.region === region && (OUTDOOR.has(n.act) || n.act === 'work' && OCC[n.occ]?.place === 'market')).slice(0, 60).map(n => ({
-        id: n.id, name: n.name, age: ageOf(n, day), job: OCC[n.occ]?.name || { child: '어린이', student: '학생', retired: '은퇴', jobless: '구직 중' }[n.occ], act: STREET_NAME[n.act] || actName(n.act, min), look: { body: 'blob', face: 'dot', suit: null, ...n.look },
+      return Object.values(S.people.list).filter(n => n.region === region && (OUTDOOR.has(n.act) || n.act === 'work' && (OCC[n.occ]?.place === 'market' || n.occ === 'reporter'))).slice(0, 60).map(n => ({
+        id: n.id, name: n.name, age: ageOf(n, day), job: OCC[n.occ]?.name || { child: '어린이', student: '학생', retired: '은퇴', jobless: '구직 중' }[n.occ], act: n.occ === 'reporter' && n.act === 'work' ? '취재 중' : STREET_NAME[n.act] || actName(n.act, min), look: { body: 'blob', face: 'dot', suit: null, ...n.look },
       }));
     },
     // ----- 말 걸기: 지금 상태로 대사를 만듦 -----
     // ----- 말 걸기: talk.js가 그 사람의 지금 삶·말투로 대사를 만듦 -----
-    talk(S, id, min, news, quote, who) {
+    talk(S, id, min, news, quote, who, rumors = []) {
       const n = S.people.list[id];
       if (!n) return null;
       const job = OCC[n.occ], emp = S.work.emps[n.emp];
       n.met ||= {};
       const met = n.met[who] || { times: 0, last: null };   // 이 사람(플레이어)을 만난 횟수·마지막 시각
-      const lines = makeTalk({ S, n, min, age: ageOf(n, Math.floor(min / DAY)), empName: emp?.name, ageOf, news, quote, met, doing: STREET_NAME[n.act] || actName(n.act, min) });
+      const lines = makeTalk({ S, n, min, age: ageOf(n, Math.floor(min / DAY)), empName: emp?.name, ageOf, news, quote, met, rumors, doing: n.occ === 'reporter' && n.act === 'work' ? '취재 중' : STREET_NAME[n.act] || actName(n.act, min) });
       n.met[who] = { times: met.times + 1, last: Math.floor(min) };
       const keys = Object.keys(n.met);
       if (keys.length > 8) delete n.met[keys.reduce((a, b) => (n.met[a].last < n.met[b].last ? a : b))];   // 가장 오래전에 만난 사람부터 잊음

@@ -13,7 +13,7 @@ const { WORKPLACES } = require('./workplaces.js');
 const PART = new Set(['clerk', 'barista', 'cook', 'vendor']);   // 알바(시간제)
 const MIN_WAGE = 10030;                                           // 최저시급
 // 지원 조건 (능력치 레벨): 사무·전문직은 지능, 현장직은 근력
-const REQ = { office: ['smarts', 2], dev: ['smarts', 3], banker: ['smarts', 3], researcher: ['smarts', 4], teacher: ['smarts', 3], nurse: ['smarts', 3], doctor: ['smarts', 6], civil: ['smarts', 2],
+const REQ = { office: ['smarts', 2], dev: ['smarts', 3], banker: ['smarts', 3], researcher: ['smarts', 4], teacher: ['smarts', 3], nurse: ['smarts', 3], doctor: ['smarts', 6], civil: ['smarts', 2], reporter: ['smarts', 3],
   builder: ['strength', 2], fisher: ['strength', 2], docker: ['strength', 2], factory: ['strength', 1], farmer: ['strength', 1], trucker: ['strength', 1], driver: ['strength', 1] };
 const STAT_NAME = { smarts: '지능', strength: '근력' };
 const WP = Object.fromEntries(WORKPLACES.map(w => [w.key, w]));

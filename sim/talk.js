@@ -66,7 +66,26 @@ const WORK = {
   doctor: ['건강은 건강할 때 지키는 거예요.', '진료 대기가 길어서 환자분들께 미안해요.'],
   driver: ['버스 운전한 지 꽤 됐어요. 단골 승객도 있어요.', '출퇴근 시간엔 길이 꽉 막혀요.'],
   civil: ['민원 처리하다 보면 하루가 금방 가요.', '동네 일을 하니 보람이 있어요.'],
+  reporter: ['특종 하나 잡으려고 하루 종일 돌아다녀요.', '마감 시간만 다가오면 손이 떨려요.', '요즘 증권가 소식 취재하느라 정신없어요.'],
 };
+// ===== 회사 소문: 직원은 자기 회사 계획을, 기자는 여러 회사 계획을 앎 (주식 시장의 계획 q를 사람마다 다르게 느낌 → 대체로 맞지만 틀릴 때도 있음) =====
+const whenOf = (release, min) => { const d = Math.floor(release / DAY) - Math.floor(min / DAY); return d <= 0 ? '오늘' : d === 1 ? '내일' : d <= 3 ? '며칠 안에' : '다음 주쯤'; };
+const ga = s => s + (jong(s) ? '이' : '가');
+function insiderLine(p, sense, min) {
+  const w = whenOf(p.release, min), good = sense > 0.15, bad = sense < -0.15;
+  if (p.kind === 'product') return good ? `우리 회사에서 ${w} ${ga(p.item)} 나와요. 안에서 반응이 정말 좋아요. 기대해 봐도 좋을 거예요.` : bad ? `${w} 나올 ${p.item}, 솔직히 잘 될지 걱정이에요. 회사 안에서도 말이 많아요.` : `${w} ${p.item} 나온다는데, 잘 될지는 저도 잘 모르겠어요.`;
+  if (p.kind === 'earnings') return good ? `이번 분기 우리 회사 장사가 꽤 잘됐대요. ${w} 실적 발표인데 다들 기대하는 눈치예요.` : bad ? `이번 분기 실적이 별로라는 말이 돌아요. ${w} 발표인데 위에서 분위기가 안 좋아요.` : `이번 분기 실적은 그냥 예년 수준일 것 같아요.`;
+  if (p.kind === 'contract') return good ? `요즘 회사가 ${p.item} 협상 중인데 거의 다 됐다는 얘기가 있어요.` : bad ? `${p.item} 협상이 삐걱댄다는 말이 있어요. 잘 안 될 수도 있대요.` : `${p.item} 협상 중이라는데 어떻게 될지 모르겠어요.`;
+  return null;
+}
+function reporterLine(p, sense, min) {
+  const w = whenOf(p.release, min), good = sense > 0.15, bad = sense < -0.15;
+  if (p.kind === 'product') return `취재해 보니 ${ga(p.name)} ${w} ${eul(p.item)} 내놓는대요. ${good ? '업계 반응이 꽤 좋아요.' : bad ? '그런데 내부에서 걱정이 많다더라고요.' : '잘 될지는 아직 반반이에요.'}`;
+  if (p.kind === 'earnings') return `${p.name} 실적 발표가 ${w}인데, ${good ? '시장 예상보다 좋을 거란 말이 돌아요.' : bad ? '예상보다 나쁠 거란 얘기가 있어요.' : '예상 수준일 것 같아요.'}`;
+  if (p.kind === 'contract') return `${ga(p.name)} ${p.item} 따내려고 협상 중이래요. ${good ? '성사 가능성이 높다는 분위기예요.' : bad ? '경쟁사에 밀린다는 얘기도 있고요.' : '결과는 아직 모르겠어요.'}`;
+  if (p.kind === 'rate') return `${w} 한울은행 금리 회의가 있는데 ${sense > 0.3 ? '올릴 거란 전망이 많아요. 은행주엔 좋고 건설주엔 부담이죠.' : sense < -0.3 ? '내릴 거란 전망이 많아요. 건설주가 웃을지도요.' : '동결할 거란 전망이 많아요.'}`;
+  return null;
+}
 // 지역 이야기
 const REGION_TALK = {
   한가람: ['한가람은 나라 한가운데라 어디든 가기 편해요.', '높은 빌딩이 계속 들어서서 동네가 몰라보게 변했어요.'],
@@ -86,7 +105,7 @@ const AGAIN = { elder: ['허허, 오랜만일세.', '이게 얼마 만인가.'],
 //   · 하루 동안 바뀌는 것(오늘의 직업 이야기 등)은 그날 고정 → D
 //   · 첫마디는 늘 머리 위 표시와 같은 "지금 하는 일"(+ 실제 욕구에 맞는 이유)
 //   · 다시 말 걸면 아직 안 한 다음 주제로 넘어감 (만난 횟수만큼 순서를 돌림)
-function makeTalk({ S, n, min, age, empName, ageOf, news, quote, met, doing }) {
+function makeTalk({ S, n, min, age, empName, ageOf, news, quote, met, doing, rumors = [] }) {
   const day = Math.floor(min / DAY), h = Math.floor((min % DAY) / 60);
   const F = k => hash(n.id, 501, k), D = k => hash(day, n.id, k);
   const fix = (list, k) => list[Math.floor(F(k) * list.length)], today = (list, k) => list[Math.floor(D(k) * list.length)];
@@ -99,9 +118,18 @@ function makeTalk({ S, n, min, age, empName, ageOf, news, quote, met, doing }) {
   if (!met.times) lines.push(kid ? `나는 ${ira(n.name)}야! ${age}살이야.` : job ? fix([`저는 ${n.name}, ${empName ? empName + '에서 ' : ''}${ro(job.name)} 일해요.`, `${job.name} ${iE(n.name)}. ${age}살이고요.`, `${empName || '이 동네'}에서 일하는 ${ira2(n.name)} 해요.`], 2)
     : n.occ === 'retired' ? fix([`${n.name}일세. 일은 그만두고 쉬는 중이지.`, `나는 ${n.name}. 올해 ${age}이라네.`], 2) : n.occ === 'jobless' ? `저는 ${iE(n.name)}. 요즘 일자리를 찾는 중이에요.` : `저는 ${n.name}, ${age}살이에요.`);
   // 지금 하는 일 = 머리 위 표시와 같음 + 실제 욕구에 맞는 이유
-  const NOW = { commute: h < 12 ? '출근하는 길이에요.' : '퇴근하는 길이에요.', walk: '산책하는 중이에요.', shop: '장 보러 가는 길이에요.', cafe: '카페 가는 길이에요.', eatOut: '밥 먹으러 가는 길이에요.', visit: '친구 만나러 가는 길이에요.', jobhunt: '일자리 알아보러 다니는 중이에요.', market: '시장 구경하는 중이에요.', work: n.occ === 'vendor' ? '장사하는 중이에요.' : '일하는 중이에요.' };
+  const NOW = { reporter: '취재하는 중이에요.', commute: h < 12 ? '출근하는 길이에요.' : '퇴근하는 길이에요.', walk: '산책하는 중이에요.', shop: '장 보러 가는 길이에요.', cafe: '카페 가는 길이에요.', eatOut: '밥 먹으러 가는 길이에요.', visit: '친구 만나러 가는 길이에요.', jobhunt: '일자리 알아보러 다니는 중이에요.', market: '시장 구경하는 중이에요.', work: n.occ === 'vendor' ? '장사하는 중이에요.' : '일하는 중이에요.' };
   const why = n.act === 'eatOut' && N.food < 60 ? ' 배가 고파서요.' : n.act === 'cafe' && N.social < 50 ? ' 사람 구경도 할 겸요.' : n.act === 'walk' && N.fun < 50 ? ' 바람 좀 쐬려고요.' : n.act === 'commute' && N.energy < 40 ? (h < 12 ? ' 아직 잠이 덜 깼어요.' : ' 오늘 좀 지쳤어요.') : n.act === 'shop' && n.groceries < 3 ? ' 냉장고가 텅 비었거든요.' : '';
-  lines.push((NOW[n.act] || `지금은 ${doing}이에요.`) + why);
+  lines.push((n.occ === 'reporter' && n.act === 'work' ? NOW.reporter : NOW[n.act] || `지금은 ${doing}이에요.`) + why);
+  // 회사 소문 (사람마다 느끼는 정도가 다름: 결과 q + 그 사람·그 계획마다 고정된 착각). 무뚝뚝한 사람은 절반쯤 입을 다묾
+  const feel = (p, k) => p.q + (hash(n.id, p.id, 61) - 0.5) * k;
+  const myCo = S.work.emps[n.emp]?.company;
+  if (n.occ === 'reporter') {
+    rumors.slice().sort((a, b) => a.release - b.release).filter((p, i) => hash(n.id, p.id, 62) < 0.6 || i === 0).slice(0, 2).forEach(p => { const l = reporterLine(p, p.kind === 'rate' ? (hash(n.id, p.id, 63) < 0.75 ? p.q : 0) : feel(p, 0.9), min); if (l) lines.push(l); });
+  } else if (myCo && !kid) {
+    const p = rumors.filter(p => p.co === myCo).sort((a, b) => a.release - b.release)[0];
+    if (p) lines.push(tone === 'blunt' && F(30) < 0.5 ? '회사 일은 함부로 말 못 해요. 보안이라서요.' : insiderLine(p, feel(p, 0.6), min));
+  }
   // 주제 (그 사람에게 맞는 것만, 순서는 사람마다 고정)
   const topics = [];
   if (job) topics.push(() => job.weather?.includes(wx) ? '오늘은 날씨 때문에 일을 공쳤어요. 그만큼 벌이도 줄었고요.' : n.stress > 70 ? '요즘 일이 너무 많아서 좀 지쳤어요.' : today(WORK[n.occ] || ['일은 그럭저럭 할 만해요.'], 3));

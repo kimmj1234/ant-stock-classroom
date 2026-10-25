@@ -4,7 +4,7 @@
 
 // 지역 14곳 (country.js와 같은 이름): 목표 인구, 특산 일터. 열린 곳(open)은 지금 걸어 다닐 수 있는 맵이 있음
 const REGIONS = {
-  한가람: { pop: 320, open: 'city', jobs: ['office', 'office', 'dev', 'dev', 'banker', 'builder', 'vendor'] },
+  한가람: { pop: 320, open: 'city', jobs: ['office', 'office', 'dev', 'dev', 'banker', 'builder', 'vendor', 'reporter'] },
   누리벌: { pop: 110, open: 'nuribeol', jobs: ['farmer', 'farmer', 'farmer'] },
   별하항: { pop: 120, open: 'byeolha', jobs: ['fisher', 'fisher', 'vendor'] },
   단비: { pop: 150, open: 'danbi', jobs: ['factory', 'factory', 'factory', 'trucker'] },
@@ -48,6 +48,7 @@ const OCC = {
   nurse: { name: '간호사', sector: '의료', place: 'hospital', from: 7, to: 19, wage: 130000, weekend: true, gov: true },
   doctor: { name: '의사', sector: '의료', place: 'hospital', from: 9, to: 18, wage: 260000, gov: true },
   driver: { name: '버스 기사', sector: '교통', place: 'street', from: 6, to: 15, wage: 120000, weekend: true, gov: true },
+  reporter: { name: '기자', sector: '미디어', place: 'street', from: 9, to: 19, wage: 145000 },   // 밖을 돌아다니며 취재 (회사 소문을 앎)
   civil: { name: '공무원', sector: '행정', place: 'office', from: 9, to: 18, wage: 130000, gov: true },
 };
 const COMMON_JOBS = ['clerk', 'barista', 'cook', 'teacher', 'nurse', 'doctor', 'driver', 'civil'];

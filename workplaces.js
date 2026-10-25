@@ -12,6 +12,7 @@ const WORKPLACES = [
   { key: '한가람:한울통신', scene: 'city', x: 72, y: 18, where: '도심 골목 한울통신 빌딩' },
   { key: '한가람:하늘항공', scene: 'city', x: 79, y: 18, where: '도심 골목 하늘항공 빌딩' },
   { key: '한가람:한울방송', scene: 'city', x: 86, y: 18, where: '도심 골목 한울방송 빌딩' },
+  { key: '한가람:한울방송 보도국', scene: 'city', x: 86, y: 18, where: '도심 골목 한울방송 빌딩 (보도국)' },
   // 한가람 공공·가게
   { key: '한가람:한가람 시청', scene: 'city', x: 67, y: 27, where: '중앙대로 한가람시청' },
   { key: '한가람:한가람 학교', scene: 'city', x: 29, y: 6, where: '북쪽 한가람 학교' },

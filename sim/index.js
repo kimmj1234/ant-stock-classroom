@@ -10,7 +10,7 @@ const { createEvents } = require('./events.js');
 const { createSociety } = require('./society.js');
 const { REGIONS } = require('./data.js');
 
-function createSim({ file, read, write, toMarket = () => {}, quote = () => null }) {
+function createSim({ file, read, write, toMarket = () => {}, quote = () => null, rumors = () => [] }) {
   const kernel = createKernel({ file, read, write });
   const people = createPeople(), work = createWork(), events = createEvents({ toMarket }), society = createSociety();
   // 사회 모듈 상태를 다른 모듈이 먼저 읽으므로 사회를 먼저 만들어 둠(init 순서), 매일 돌리는 순서는 사람 → 일 → 사건 → 사회
@@ -25,6 +25,7 @@ function createSim({ file, read, write, toMarket = () => {}, quote = () => null 
         const fresh = kernel.state.min == null;
         kernel.init(fresh ? nowMin - 180 : nowMin);
         if (!S().society.stats) society.daily({ ...ctxLite(nowMin), my: S().society });
+        work.ensure(ctxLite(nowMin));
         ready = true;
       }
       kernel.advance(nowMin);
@@ -35,7 +36,7 @@ function createSim({ file, read, write, toMarket = () => {}, quote = () => null 
       const n = S().people.list[id];
       if (!n) return null;
       const near = kernel.state.news.filter(x => x.region === n.region || x.scale !== 'local').slice(0, 4), news = near[id % Math.max(1, near.length)];   // 사람마다 들은 소문이 다름
-      return people.talk(S(), id, nowMin, news?.text, quote, who);
+      return people.talk(S(), id, nowMin, news?.text, quote, who, rumors());
     },
     // 휴대폰 "세상" 탭: 나라 통계 · 지역별 · 사건 소식 · 시스템 건강
     society() {
@@ -47,6 +48,12 @@ function createSim({ file, read, write, toMarket = () => {}, quote = () => null 
         news: kernel.state.news.slice(0, 25),
         health: { checks: kernel.state.health.slice(0, 5), lastMs: kernel.runtime.lastMs, deferred: kernel.runtime.deferred, money: kernel.ledger.total() === kernel.state.total0 },
       };
+    },
+    // 주식 시장에 알려 줄 회사 사정(-1~1: 상장 회사 일터들의 직원 사기 평균)과 경기
+    macro() {
+      const sum = {}, cnt = {};
+      for (const e of Object.values(S().work.emps)) if (e.company) { sum[e.company] = (sum[e.company] || 0) + e.morale; cnt[e.company] = (cnt[e.company] || 0) + 1; }
+      return { health: Object.fromEntries(Object.keys(sum).map(k => [k, Math.max(-1, Math.min(1, (sum[k] / cnt[k] - 60) / 30))])), demand: S().society.demand ?? 1 };
     },
     // ----- 플레이어 일자리 (server jobs.js가 씀) -----
     // 일터 목록: 지금 직원 수(NPC + 플레이어)와 자리 수

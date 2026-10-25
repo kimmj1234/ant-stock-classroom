@@ -299,7 +299,7 @@ function renderStock() {
   if (!d) { scr.innerHTML = '<p class="mk-empty">시세를 불러오는 중…</p>'; return; }
   const st = $hud('mkStatus'), nx = today(d.next);
   st.className = 'phone-status ' + (d.open ? 'open' : '');
-  st.textContent = d.open ? '장 열림 · 15:30에 마감' : `장 마감 · 다음 개장 ${nx.month}월 ${nx.date}일 (${nx.weekday}) 09:00`;
+  st.textContent = (d.index ? `한울종합 ${d.index.toFixed(1)} · ` : '') + (d.open ? '장 열림 · 15:30에 마감' : `장 마감 · 다음 개장 ${nx.month}월 ${nx.date}일 (${nx.weekday}) 09:00`);
   $hud('phoneClock').textContent = today(clock.min).time;
   if (phone.tab === 'detail') return renderDetail();
   if (phone.tab === 'list') {

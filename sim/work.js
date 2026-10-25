@@ -9,7 +9,7 @@ const { REGIONS, OCC, COMMON_JOBS } = require('./data.js');
 // 상장 회사 일터 (economy.js의 회사와 연결) — 주가 뉴스의 근거가 됨
 const COMPANY_EMP = {   // 지역 → [회사 아이디, 일터 이름, 직업]
   한가람: [['hanulbank', '한울금융', 'banker'], ['nuri', '누리소프트', 'dev'], ['daehan', '대한건설', 'builder'], ['garamstore', '가람유통', 'office'],
-    ['hanulgames', '한울게임즈', 'dev'], ['hanultel', '한울통신', 'office'], ['haneul', '하늘항공', 'office'], ['hanulmedia', '한울방송', 'office']],
+    ['hanulgames', '한울게임즈', 'dev'], ['hanultel', '한울통신', 'office'], ['haneul', '하늘항공', 'office'], ['hanulmedia', '한울방송', 'office'], ['hanulmedia', '한울방송 보도국', 'reporter']],
   단비: [['hanbit', '한빛전자 본사·공장', 'factory'], ['saebom', '새봄화학 본사·공장', 'factory']],
   별하항: [['byeolhafish', '별하수산', 'fisher']], 누리벌: [['nurigrain', '누리곡산', 'farmer']], 마루: [['byeolbit', '별빛제약 본사·연구소', 'researcher'], ['nuri', '누리소프트 연구소', 'dev']],
   아라항: [['bada', '바다해운 부두', 'docker'], ['bada', '바다해운 본사', 'office']], 푸른들: [['pureun', '푸른식품', 'farmer']],
@@ -110,7 +110,16 @@ function createWork() {
     }
     return fixed;
   }
-  return { name: 'work', every: 1440, init, daily, check, coarse(ctx, days) { for (let i = 0; i < Math.min(days, 7); i++) daily({ ...ctx, day: ctx.day + i }); } };
+  // 예전에 만든 세계에 새 일터(기자 등)가 없으면 더하고, 그 지역 구직자·회사원 몇 명을 옮겨 앉힘
+  function ensure(ctx) {
+    const W = ctx.S.work;
+    if (Object.values(W.emps).some(e => e.occ === 'reporter')) return;
+    const e = { id: W.next++, key: '한가람:한울방송 보도국', region: '한가람', occ: 'reporter', cap: 8, name: '한울방송 보도국', company: 'hanulmedia', gov: false, morale: 70 };
+    W.emps[e.id] = e; ctx.ledger.open('e:' + e.id, e.cap * OCC.reporter.wage * 20);
+    const P = Object.values(ctx.S.people.list).filter(n => n.region === '한가람');
+    for (const n of [...P.filter(n => n.occ === 'jobless'), ...P.filter(n => n.occ === 'office')].slice(0, 6)) { n.occ = 'reporter'; n.emp = e.id; n.wage = OCC.reporter.wage; n.since = ctx.day; n.joblessSince = null; }
+  }
+  return { name: 'work', every: 1440, init, daily, check, ensure, coarse(ctx, days) { for (let i = 0; i < Math.min(days, 7); i++) daily({ ...ctx, day: ctx.day + i }); } };
 }
 
 module.exports = { createWork };
