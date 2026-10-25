@@ -20,16 +20,6 @@ function sunTimes(day) {
   const c = Math.cos(2 * Math.PI * (doyOf(day) - 172) / 365);
   return { rise: 387 - 76 * c, set: 1117 + 80 * c };
 }
-// 기온(°C): 서울 월평균 기온을 날짜에 맞게 이어 붙이고 + 하루 변화(해 뜰 무렵 가장 춥고 오후 3시 무렵 가장 더움) + 날마다 조금씩 다름 + 날씨(비·눈 오면 서늘하고 하루 변화가 작음)
-const MONTH_TEMP = [-2.4, 0.4, 5.7, 12.5, 17.8, 22.2, 24.9, 25.7, 21.2, 14.8, 7.2, 0.4];   // 1월 ~ 12월 (각 달 15일 무렵)
-function temperature(min) {
-  const day = Math.floor(min / DAY), d = doyOf(day), m = min % DAY, wx = weatherOf(day);
-  const f = (d - 14 + 365) % 365 / 30.42, i = Math.floor(f) % 12, mean = MONTH_TEMP[i] + (MONTH_TEMP[(i + 1) % 12] - MONTH_TEMP[i]) * (f - Math.floor(f));
-  const swing = (d >= 59 && d < 151) || (d >= 243 && d < 334) ? 5 : 4;   // 봄·가을은 일교차가 큼
-  const k = { sun: 1, dust: 0.9, cloud: 0.6, rain: 0.35, storm: 0.3, snow: 0.5 }[wx];
-  const wet = { rain: -1.5, storm: -2, snow: -1 }[wx] || 0;
-  return Math.round(mean + wet + (hash(day, 91) - 0.5) * 4 + swing * k * Math.cos(2 * Math.PI * (m - 900) / DAY));
-}
 const WX_NAME = { sun: '맑음', cloud: '흐림', rain: '비', snow: '눈', storm: '태풍', dust: '황사' };
 const clock = { min: 480, base: 480, baseAt: 0, sent: '', ready: false };   // base: 받은 세계 시각(분), baseAt: 받은 순간, sent: 마지막으로 보낸 자리
 function today(min) {
@@ -409,7 +399,7 @@ async function loadWalkers() {
   for (const id of walkers.keys()) if (!ids.has(id)) walkers.delete(id);   // 집·일터로 들어간 사람은 사라짐
   for (const p of r.people) {
     const w = walkers.get(p.id);
-    if (w) { w.act = p.act; w.job = p.job; continue; }
+    if (w) { w.act = p.act; w.job = p.job; w.umbrella = p.umbrella; w.run = p.run; continue; }
     const [tx, ty] = tileNearMe(2, 14);
     walkers.set(p.id, { ...p, x: (tx + 0.5) * TILE, y: (ty + 0.7) * TILE, tx: null, ty: null, dir: 's', left: false, moving: false, wait: Math.random() * 3 });
   }
@@ -429,7 +419,7 @@ function updateWalkers(dt) {
       }
       if (w.tx == null) { w.wait = 1; continue; }
     }
-    const dx = w.tx - w.x, dy = w.ty - w.y, d = Math.hypot(dx, dy), step = 34 * dt;
+    const dx = w.tx - w.x, dy = w.ty - w.y, d = Math.hypot(dx, dy), step = (w.run ? 75 : 34) * dt;   // 비 맞는 사람은 뛰어감
     if (d < 2) { w.tx = null; w.wait = 1 + Math.random() * 4; w.moving = false; continue; }
     const nx = w.x + dx / d * step, ny = w.y + dy / d * step;
     if (blockedAt(nx, ny)) { w.tx = null; w.wait = 0.5; continue; }   // 막히면 다른 곳으로
@@ -818,6 +808,14 @@ function drawPlayer(p, cam, now, noShadow) {
   ctx.drawImage(img, -SPRITE.w / 2 * k, 0, SPRITE.w * k, SPRITE.h * k);
   ctx.restore();
 }
+// 우산 (비·눈 오는 날 우산을 챙긴 사람): 머리 위 반원 + 손잡이, 사람마다 색이 다름
+const UMB_COLORS = ['#e8454b', '#3d7fd6', '#2f9e5a', '#f2c94c', '#8a5cd6', '#1e1b3a', '#f28cb1'];
+function drawUmbrella(p, cam) {
+  const k = S * SPRITE.scale, f = toScreen(p.x, p.y), x = Math.round(f.x - cam.x), top = Math.round(f.y - cam.y) - SPRITE.foot * k + (p.bob || 0) * k - 3 * k, r = SPRITE.w * 0.55 * k;
+  ctx.fillStyle = '#2f2b38'; ctx.fillRect(x + (p.left ? -1 : 1) * r * 0.3, top, Math.max(2, k * 0.8), r * 1.1);
+  ctx.fillStyle = UMB_COLORS[p.id % UMB_COLORS.length]; ctx.beginPath(); ctx.arc(x, top + 2, r, Math.PI, 0); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = Math.max(1, k * 0.5); ctx.stroke();
+}
 // 머리 위 닉네임: 나무·집에 가려지지 않게 맨 마지막에 그림
 // npc면 이름 위에 작은 파란 "NPC" 꼬리표 → 다른 사람(플레이어)과 구분
 function drawName(p, cam, npc) {
@@ -1067,7 +1065,7 @@ function frame(now) {
   drawShadows(ctx, S, cam);   // 물건 그림자 (바닥 위, 물건 아래)
   // 건물·나무·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
   // 바닥 무늬(맨홀·주차 P)는 맨 먼저 → 무엇에든 가려짐
-  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), ...[...walkers.values()].map(w => ({ y: w.y, draw: () => drawPlayer(w, cam, now) })), ...[...others.values()].map(o => ({ y: o.sit ? o.sit.by + 1 : o.y, draw: () => drawPlayer(o, cam, now) })), { y: me.sit ? me.sit.sp.by + 1 : me.y, draw: () => { if (!me.atWork) drawPlayer(me, cam, now); } }];   // 근무 중이면 일터 안이라 안 보임   // 앉아 있으면 벤치보다 앞에 그림
+  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), ...[...walkers.values()].map(w => ({ y: w.y, draw: () => { drawPlayer(w, cam, now); if (w.umbrella) drawUmbrella(w, cam); } })), ...[...others.values()].map(o => ({ y: o.sit ? o.sit.by + 1 : o.y, draw: () => drawPlayer(o, cam, now) })), { y: me.sit ? me.sit.sp.by + 1 : me.y, draw: () => { if (!me.atWork) drawPlayer(me, cam, now); } }];   // 근무 중이면 일터 안이라 안 보임   // 앉아 있으면 벤치보다 앞에 그림
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
   drawClocks(cam);
   drawSky(cam, W, H, dt, now);

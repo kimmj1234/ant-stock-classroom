@@ -55,4 +55,14 @@ function nextOpen(min) {
   return day * DAY + MARKET_OPEN;
 }
 
-if (typeof module === 'object') module.exports = { hash, DAY, doyOf, monthDay, WEEKDAYS, weekdayOf, weatherOf, JANGMA, MARKET_OPEN, MARKET_CLOSE, marketOpen, nextOpen };
+// 기온(°C): 서울 월평균 기온을 날짜에 맞게 이어 붙이고 + 하루 변화(해 뜰 무렵 가장 춥고 오후 3시 무렵 가장 더움) + 날마다 조금씩 다름 + 날씨(비·눈 오면 서늘하고 하루 변화가 작음)
+const MONTH_TEMP = [-2.4, 0.4, 5.7, 12.5, 17.8, 22.2, 24.9, 25.7, 21.2, 14.8, 7.2, 0.4];   // 1월 ~ 12월 (각 달 15일 무렵)
+function temperature(min) {
+  const day = Math.floor(min / DAY), d = doyOf(day), m = min % DAY, wx = weatherOf(day);
+  const f = (d - 14 + 365) % 365 / 30.42, i = Math.floor(f) % 12, mean = MONTH_TEMP[i] + (MONTH_TEMP[(i + 1) % 12] - MONTH_TEMP[i]) * (f - Math.floor(f));
+  const swing = (d >= 59 && d < 151) || (d >= 243 && d < 334) ? 5 : 4;   // 봄·가을은 일교차가 큼
+  const k = { sun: 1, dust: 0.9, cloud: 0.6, rain: 0.35, storm: 0.3, snow: 0.5 }[wx];
+  const wet = { rain: -1.5, storm: -2, snow: -1 }[wx] || 0;
+  return Math.round(mean + wet + (hash(day, 91) - 0.5) * 4 + swing * k * Math.cos(2 * Math.PI * (m - 900) / DAY));
+}
+if (typeof module === 'object') module.exports = { hash, DAY, doyOf, monthDay, WEEKDAYS, weekdayOf, weatherOf, JANGMA, MARKET_OPEN, MARKET_CLOSE, marketOpen, nextOpen, temperature };

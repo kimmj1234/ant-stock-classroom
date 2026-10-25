@@ -9,9 +9,11 @@
 const { DAY, weatherOf } = require('../world.js');
 const { REGIONS, OCC, SURNAMES, GIVEN1, GIVEN2, MICRO } = require('./data.js');
 const { makeTalk } = require('./talk.js');
+const brain = require('./brain.js');   // 뇌: 먹을 것 고르기·날씨 반응·성향 (모든 판단을 한 구조로)
 
 const OUTDOOR = new Set(['commute', 'walk', 'market', 'jobhunt', 'shop', 'cafe', 'eatOut', 'visit']);   // 맵에 걸어 다니는 모습으로 보이는 행동 (가게·카페·식당·친구 집은 '가는 중'으로)
 // 거리에서 보일 때의 이름 (가게 안이 아니라 가는 길이므로)
+const OUT_WORK = new Set(['street', 'site', 'field', 'sea', 'port', 'market', 'forest']);   // 바깥에서 하는 일 (비 맞음)
 const STREET_NAME = { shop: '장 보러 가는 중', cafe: '카페 가는 중', eatOut: '밥 먹으러 가는 중', visit: '친구 만나러 가는 중', walk: '산책하는 중' };
 const ACT_NAME = {
   sleep: '자는 중', work: '일하는 중', school: '학교에서 공부 중', eatHome: '집에서 밥 먹는 중', eatOut: '식당에서 밥 먹는 중', cafe: '카페에서 쉬는 중',
@@ -20,6 +22,7 @@ const ACT_NAME = {
 };
 const actName = (act, min) => act === 'commute' ? (min % DAY < 720 ? '출근하는 중' : '퇴근하는 중') : ACT_NAME[act];
 const ageOf = (n, day) => Math.floor((day - n.born) / 365);
+const hashOut = (n, min) => (n.id + Math.floor(min / 60)) % 3 === 0;   // 집에서 먹으려는 사람 셋 중 하나는 아직 집에 가는 길 (거리에 보임)
 const acct = id => 'p:' + id;
 // 받침에 맞는 조사
 const jong = s => { const c = s.charCodeAt(s.length - 1) - 0xac00; return c >= 0 && c <= 11171 ? c % 28 : 0; };
@@ -39,7 +42,7 @@ function createPeople() {
     const id = P.next++, r = k => ctx.rnd(id, 11, k);
     const n = {
       id, name: makeName(ctx, id), born: ctx.day - ageDays, region, occ: 'child', emp: null, wage: 0, since: ctx.day, skill: r(1) * 0.6,
-      tr: { o: r(2), c: r(3), e: r(4), a: r(5), n: r(6) }, need: { food: 70, energy: 70, social: 60, fun: 60 },
+      tr: { o: r(2), c: r(3), e: r(4), a: r(5), n: r(6) }, need: { food: 70, energy: 70, social: 60, fun: 60, sweet: 70, caffeine: 70 },
       mood: 10, health: 90, stress: 20, act: 'home', spouse: null, kids: [], parents: [], friends: {}, mem: [], groceries: 6, joblessSince: null, worked: 0,
       look: { color: COLORS[id % COLORS.length] }, ...extra,
     };
@@ -62,8 +65,13 @@ function createPeople() {
   function hourOf(ctx, n) {
     const h = Math.floor(ctx.t / 60), wd = ((ctx.day % 7) + 7) % 7, weekend = wd >= 5, wx = weatherOf(ctx.day), wet = ['rain', 'storm', 'snow'].includes(wx);
     const job = OCC[n.occ], N = n.need, T = n.tr, asleep = n.act === 'sleep';
-    // 욕구가 시간이 지나며 줄어듦
-    N.food -= asleep ? 2 : 5; N.energy += asleep ? 13 : -4.5; N.social -= 2.5; N.fun -= 2.5;
+    const se = brain.senseOf(ctx), me = brain.selfOf(n);   // 감각(날씨·기온·시각) · 개성
+    brain.packUmbrella(ctx, n, se);
+    N.sweet ??= 70; N.caffeine ??= 70;
+    // 욕구가 시간이 지나며 줄어듦 (사람마다 빠르기가 다름: 먹는 양·단것·커피)
+    N.food -= (asleep ? 2 : 7.5) * me.appetite; N.energy += asleep ? 13 : -4.5; N.social -= 2.5; N.fun -= 2.5;
+    N.sweet -= asleep ? 0.5 : 1 + me.sweet * 2.2 + n.stress * 0.02;   // 스트레스 받으면 단 게 당김
+    N.caffeine -= asleep ? 1 : me.coffee * (h < 11 ? 11 : 6);       // 커피 좋아하는 사람은 아침에 특히
     const R = (k, s = 8) => ctx.rnd(ctx.min, n.id, k) * s;   // 사람마다·시간마다 다른 작은 차이
     const age = ageOf(n, ctx.day);
     const dawn = h >= 5 && h < 7 && (n.occ === 'retired' || T.c > 0.7);              // 새벽 산책·운동: 어르신과 부지런한 사람
@@ -71,28 +79,34 @@ function createPeople() {
     const workday = job && (!weekend || job.weekend && (n.id + ctx.day) % 7 < 5);   // 오늘 일하는 날인지
     const shift = job && (!weekend || job.weekend && (n.id + ctx.day) % 7 < 5) && h >= job.from && h < job.to;
     const blocked = job?.weather?.includes(wx);                                           // 날씨 때문에 일 못 하는 날 (어부·건설 등)
+    const out = brain.outdoorCost(n, se), food = brain.chooseFood(ctx, n, se, age);       // 바깥 나가는 부담 · 먹을 것 (뇌가 따져 봄)
     const score = {
       sleep: (h >= 23 || h < 5 ? 95 : h < 6 ? 55 : h < 7 ? 38 : h < 8 ? 20 : 0) + (100 - N.energy) * 0.7 - (N.energy > 92 ? 40 : 0) + R(1),   // 밤엔 잠이 끈질김 → 보통 6~7시에 일어남
-      work: shift && !blocked && n.health > 35 ? 92 + T.c * 20 + R(2) : -1,
+      work: shift && !blocked && n.health > 35 ? 92 + T.c * 20 + R(2) - (h === 12 && job.to - job.from >= 7 ? 70 : 0) : -1,   // 12시는 점심시간
       school: n.occ === 'student' && !weekend && h >= 8 && h < 16 ? 95 : -1,
-      eatHome: (100 - N.food) * 1.1 + ([7, 12, 19].includes(h) ? 25 : 0) - (n.groceries > 0 ? 0 : 200) + R(3),
-      eatOut: (100 - N.food) * 1.0 + ([12, 19].includes(h) ? 22 : 0) + T.e * 8 + R(4) - (weekend ? 0 : 6) - (h >= 7 && h < 21 || night ? 0 : 200),   // 식당은 아침 7시~밤 9시 (밤 손님은 11시까지)
-      cafe: (100 - N.social) * 0.55 + T.e * 22 + (h >= 10 && h < 21 ? 10 : night ? 0 : -80) + R(5),
-      walk: (100 - N.fun) * 0.55 + T.o * 14 + (h >= 7 && h < 21 ? 12 : dawn ? 22 : night ? 4 : -80) + (weekend ? 12 : 0) - (wet ? 45 : 0) + R(6),
-      visit: (100 - N.social) * 0.6 + T.a * 15 + (h >= 18 && h < 22 || weekend && h >= 11 && h < 22 ? 10 : -60) - (Object.keys(n.friends).length ? 0 : 200) + R(7),
-      shop: n.groceries < 3 && h >= 10 && h < 21 ? 55 + R(8) : -1,
-      market: h >= 8 && h < 18 && ctx.rnd(ctx.day, n.id, 9) < 0.15 ? 40 + (100 - N.fun) * 0.3 + R(9) : -1,
+      eat: food ? food.u : -1,   // 먹고 마시기: 뇌가 고른 가장 나은 선택지의 점수 (집밥·라면·배달·국밥·떡볶이·고기·편의점·디저트·커피)
+      cafe: (100 - N.social) * 0.55 + T.e * 22 + (h >= 10 && h < 21 ? 10 : night ? 0 : -80) - out + R(5),
+      walk: (100 - N.fun) * 0.55 + T.o * 14 + (h >= 7 && h < 21 ? 12 : dawn ? 22 : night ? 4 : -80) + (weekend ? 12 : 0) - out * 1.6 + R(6),   // 산책은 날씨를 가장 많이 탐
+      visit: (100 - N.social) * 0.6 + T.a * 15 + (h >= 18 && h < 22 || weekend && h >= 11 && h < 22 ? 10 : -60) - (Object.keys(n.friends).length ? 0 : 200) - out * 0.7 + R(7),
+      shop: n.groceries < 3 && h >= 10 && h < 21 ? 55 - out * 0.4 + R(8) : -1,
+      market: h >= 8 && h < 18 && ctx.rnd(ctx.day, n.id, 9) < 0.15 ? 40 + (100 - N.fun) * 0.3 - out + R(9) : -1,
       hospital: n.health < 40 && h >= 9 && h < 18 ? 120 : -1,
       commute: workday && !blocked && n.health > 35 && job.place !== 'street' && (h === (job.from + 23) % 24 ? 96 : h === job.to ? 62 + T.c * 10 : -1),
       jobhunt: n.occ === 'jobless' && !weekend && h >= 9 && h < 17 ? 50 + n.stress * 0.3 + T.c * 10 + R(10) : -1,
       home: 30 + (100 - N.fun) * 0.2 + T.n * 8 + R(11),
     };
-    if (n.occ === 'child') { score.work = score.jobhunt = score.school = -1; score.cafe -= 60; score.eatOut -= 30; }
+    if (n.occ === 'child') { score.work = score.jobhunt = score.school = -1; score.cafe -= 60; }
     let act = 'home', best = -Infinity;
     for (const [k, v] of Object.entries(score)) if (v > best) { best = v; act = k; }
-    // 출근·퇴근: 집에서 바로 일터로 가는 첫 시간은 길 위(맵에 보임)
+    // 먹기: 고른 것을 실제로 함(돈 내고 먹음) + 왜 그랬는지 생각을 남김 (말 걸면 그대로 말함)
+    n.dish = null;
+    if (act === 'eat') {
+      if (brain.consume(ctx, n, food.o)) { act = food.o.act; n.dish = food.o.id; n.thought = { min: ctx.min, act, id: food.o.id, dish: brain.dishName(food.o, se.temp), why: brain.reasonOf(n, food, se) }; }
+      else act = 'home';
+    }
     n.act = act;
     applyAct(ctx, n, act, job, h);
+    brain.weatherBody(ctx, n, se, OUTDOOR.has(act) || act === 'work' && OUT_WORK.has(job?.place), remember);   // 비·눈·추위에 몸이 반응
     // 일 끝나는 시각: 하루 품삯 (그날 반 넘게 일했으면)
     if (job && h === job.to - 1 && n.worked >= (job.to - job.from) / 2) payday(ctx, n, job);
     if (h === 0) n.worked = 0;
@@ -108,9 +122,8 @@ function createPeople() {
     if (act === 'commute') { N.energy -= 1; }
     if (act === 'work') { n.worked++; n.stress += job.to - job.from > 9 ? 2 : 1; N.fun -= 1.5; N.energy -= 1.5; }
     if (act === 'school') { N.social += 6; N.fun -= 1; }
-    if (act === 'eatHome') { if (n.groceries > 0) { N.food += 55; n.groceries--; } }
-    if (act === 'eatOut') { if (pay(9000, ctx.S.work.local?.[n.region]?.restaurant || 'ext')) N.food += 60; else { act = n.act = 'home'; } }
-    if (act === 'cafe') { if (pay(5000, ctx.S.work.local?.[n.region]?.cafe || 'ext')) { N.social += 22; N.fun += 10; meetSomeone(ctx, n); } }
+    if (act === 'cafe' && n.dish) meetSomeone(ctx, n);   // 디저트·커피 (돈·욕구는 뇌의 consume에서)
+    if (act === 'cafe' && !n.dish) { if (pay(5000, ctx.S.work.local?.[n.region]?.cafe || 'ext')) { N.social += 22; N.fun += 10; N.caffeine += 40; meetSomeone(ctx, n); } }   // 사람 만나러 카페
     if (act === 'walk') { N.fun += 22; n.stress -= 3; if (ctx.rnd(ctx.min, n.id, 21) < 0.3) meetSomeone(ctx, n); }
     if (act === 'visit') { N.social += 30; N.fun += 10; n.stress -= 2; meetSomeone(ctx, n, true); }
     if (act === 'market') { N.fun += 12; if (pay(8000, ctx.S.work.local?.[n.region]?.market || 'ext')) n.groceries += 2; }
@@ -259,9 +272,16 @@ function createPeople() {
     coarse(ctx, days) { for (let i = 0; i < days; i++) dayOf({ ...ctx, day: ctx.day + i }); },
     // ----- 밖에서 보이는 사람들 (그 지역 맵에 걸어 다님) -----
     visible(S, region, min) {
-      const day = Math.floor(min / DAY);
-      return Object.values(S.people.list).filter(n => n.region === region && (OUTDOOR.has(n.act) || n.act === 'work' && (OCC[n.occ]?.place === 'market' || n.occ === 'reporter'))).slice(0, 60).map(n => ({
-        id: n.id, name: n.name, age: ageOf(n, day), job: OCC[n.occ]?.name || { child: '어린이', student: '학생', retired: '은퇴', jobless: '구직 중' }[n.occ], act: n.occ === 'reporter' && n.act === 'work' ? '취재 중' : STREET_NAME[n.act] || actName(n.act, min), look: { body: 'blob', face: 'dot', suit: null, ...n.look },
+      const day = Math.floor(min / DAY), wx = weatherOf(day), rainy = ['rain', 'storm', 'snow'].includes(wx);
+      const label = n => {
+        if (n.occ === 'reporter' && n.act === 'work') return '취재 중';
+        if (rainy && n.wet > 45 && !n.umbToday) return '비 피해 뛰어가는 중';
+        const th = n.thought;
+        if (n.dish && th?.act === n.act) return th.id === 'cvs' ? '편의점 가는 중' : n.act === 'eatHome' ? (th.id === 'delivery' ? '배달 시키러 집에 가는 중' : '집에 밥 먹으러 가는 중') : `${th.dish} ${th.id === 'coffee' ? '마시러' : '먹으러'} 가는 중`;
+        return STREET_NAME[n.act] || actName(n.act, min);
+      };
+      return Object.values(S.people.list).filter(n => n.region === region && (OUTDOOR.has(n.act) || n.act === 'work' && (OCC[n.occ]?.place === 'market' || n.occ === 'reporter') || n.act === 'eatHome' && n.dish && hashOut(n, min))).slice(0, 60).map(n => ({
+        id: n.id, name: n.name, age: ageOf(n, day), job: OCC[n.occ]?.name || { child: '어린이', student: '학생', retired: '은퇴', jobless: '구직 중' }[n.occ], act: label(n), umbrella: rainy && !!n.umbToday, run: rainy && n.wet > 45 && !n.umbToday, look: { body: 'blob', face: 'dot', suit: null, ...n.look },
       }));
     },
     // ----- 말 걸기: 지금 상태로 대사를 만듦 -----
