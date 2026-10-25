@@ -62,7 +62,7 @@ const CITY_ROADS = [
   { dir: 'h', at: 10, n: 2, sw: 1 }, { dir: 'h', at: 36, n: 2, sw: 1 },
   { dir: 'v', at: 16, n: 2, sw: 1 }, { dir: 'v', at: 62, n: 2, sw: 1 },
 ];
-const LOT_NAMES = ['주택가', '아파트', '상가', '카페거리', '학교', '회사', '병원', '은행', '마트', '시장', '주차장', '경찰서', '도서관', '체육관', '소방서', '공원'];
+const LOT_NAMES = ['주택가', '아파트', '상가', '카페거리', '학교', '회사', '병원', '은행', '마트', '시장', '주차장', '회사', '회사', '체육관', '회사', '공원'];
 function cityPlan(W, H, roads) {
   const g = Array.from({ length: H }, () => Array(W).fill('e'));
   const inBand = (r, x, y, pad) => { const p = r.dir === 'h' ? y : x; return p >= r.at - pad && p < r.at + r.n + pad; };
@@ -104,14 +104,14 @@ const CITY = cityPlan(80, 48, CITY_ROADS);
 const CITY_PARK = 7;   // 공원이 될 블록 번호 (오른쪽 가운데 위, 도시 입구 옆)
 const CITY_HOMES = 0;  // 주택가 블록 번호 (왼쪽 위)
 // 블록 바닥: g 잔디 · . 보도(광장) · e 흙 운동장 · p 주차장 (블록 번호 → 바닥)
-const BLOCK_GROUND = { 1: 'g', 2: '.', 3: '.', 4: 'e', 5: '.', 6: '.', 8: '.', 9: '.', 10: '.', 11: 'p', 12: '.', 13: 'g', 14: '.', 15: '.' };
+const BLOCK_GROUND = { 1: 'g', 2: '.', 3: '.', 4: 'e', 5: '.', 6: '.', 8: '.', 9: '.', 10: '.', 11: 'p', 12: '.', 13: '.', 14: '.', 15: '.' };
 const inBlock = (b, x, y) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
 CITY.ground = CITY.ground.map((row, y) => [...row].map((k, x) => {
   if (inBlock(CITY.blocks[CITY_PARK], x, y)) return 'g';
   const hb = CITY.blocks[CITY_HOMES];
   if (inBlock(hb, x, y)) return y === hb.y0 + 4 ? '.' : 'g';   // 주택가: 잔디 마당 + 윗줄 집 앞 골목길(옆 보도와 이어짐)
   const i = CITY.blocks.findIndex(b => inBlock(b, x, y)), bg = BLOCK_GROUND[i];
-  if (bg) return i === 13 && y >= CITY.blocks[i].y0 + 5 ? '.' : bg;   // 도서관은 잔디 + 앞 광장
+  if (bg) return bg;
   return k;
 }).join(''));
 
@@ -186,7 +186,7 @@ const SCENES = {
       2: b => { for (let k = 0; k < 8; k++) { place('shop', k, b.x0 + k * 2, b.y1 - 1, 2, 2); place('shop', k + 3, b.x0 + k * 2, b.y0 + 2, 2, 2); } for (const k of [1, 4, 6]) deco('aboard', b.x0 + k * 2, b.y0 + 4); },   // 상가 두 줄 (가운데 골목)
       3: b => { [0, 5, 10].forEach((dx, k) => place('cafe', k, b.x0 + dx, b.y0 + 3, 3, 2)); [1, 3, 6, 8, 11, 13].forEach((dx, k) => place('patio', k, b.x0 + dx, b.y0 + 6)); },   // 카페거리: 카페 셋 + 야외 파라솔 자리
       4: b => { place('school', 0, b.x0, b.y1 - 2, 10, 3); place('goal', 0, b.x0 + 11, b.y0 + 1, 3, 1); place('flagpole', 0, b.x0 + 10, b.y1); },   // 학교 + 운동장 골대 + 국기 게양대
-      5: b => { place('office', 0, b.x0 + 1, b.y1 - 2, 6, 3); place('office', 1, b.x0 + 9, b.y1 - 2, 6, 3); place('bench', 0, b.x0 + 7, b.y1, 2, 1); },   // 회사 두 동
+      5: b => { place('office', 0, b.x0 + 1, b.y1 - 2, 6, 3); place('office', 1, b.x0 + 9, b.y1 - 2, 6, 3); place('bench', 0, b.x0 + 7, b.y1, 2, 1); },   // 회사 두 동 (한빛전자·누리소프트)
       6: b => { place('hospital', 0, b.x0, b.y1 - 2, 9, 3); place('bench', 0, b.x0 + 13, b.y1, 2, 1); },   // 병원 + 벤치
       8: b => { place('bank', 0, b.x0 + 1, b.y1 - 2, 8, 3); place('atm', 0, b.x0 + 11, b.y1); },   // 은행 + ATM
       9: b => {   // 마트 + 카트, 가운데 유리문 앞에서 E → 마트 안
@@ -199,10 +199,10 @@ const SCENES = {
         place('marketgate', 0, b.x0 + 6, b.y1, 6, 1, false);
       },
       11: b => { for (let dx = 1; dx < 15; dx += 2) { if (hash(dx, 1, 7) < 0.75) place('car', Math.floor(hash(dx, 2, 7) * 4), b.x0 + dx, b.y0 + 1, 1, 2); if (hash(dx, 3, 7) < 0.6) place('car', Math.floor(hash(dx, 4, 7) * 4), b.x0 + dx, b.y0 + 4, 1, 2); } place('psign', 0, b.x0, b.y1); },   // 주차장: 차가 듬성듬성
-      12: b => { place('police', 0, b.x0 + 1, b.y0 + 2, 8, 3); place('policecar', 0, b.x0 + 11, b.y0 + 3, 1, 2); },   // 경찰서 + 경찰차
-      13: b => { place('library', 0, b.x0 + 4, b.y0 + 2, 9, 3); place('maple', 5, b.x0 + 1, b.y0 + 3); place('ginkgo', 6, b.x1 - 1, b.y0 + 3); place('bench', 0, b.x0 + 2, b.y0 + 6, 2, 1); place('bench', 0, b.x1 - 3, b.y0 + 6, 2, 1); },   // 도서관 + 나무·벤치
+      12: b => { place('office', 2, b.x0 + 1, b.y0 + 4, 6, 3); place('office', 3, b.x0 + 8, b.y0 + 4, 6, 3); place('bench', 0, b.x0 + 6, b.y0 + 7, 2, 1); },   // 회사 두 동 (대한건설·푸른식품)
+      13: b => { place('office', 4, b.x0 + 2, b.y0 + 4, 6, 3); place('office', 5, b.x0 + 10, b.y0 + 4, 6, 3); place('bench', 0, b.x0 + 8, b.y0 + 7, 2, 1); },   // 회사 두 동 (별빛제약·바다해운)
       14: b => { place('gym', 0, b.x0 + 3, b.y0 + 2, 10, 3); place('hoop', 0, b.x1 - 1, b.y0 + 6); },   // 체육관 + 농구대
-      15: b => { place('firestation', 0, b.x0 + 1, b.y0 + 2, 9, 3); place('firetruck', 0, b.x0 + 12, b.y0 + 3, 1, 3); },   // 소방서 + 소방차
+      15: b => { place('office', 6, b.x0 + 1, b.y0 + 4, 6, 3); place('office', 7, b.x0 + 8, b.y0 + 4, 6, 3); place('bench', 0, b.x0 + 6, b.y0 + 7, 2, 1); },   // 회사 두 동 (하늘항공·새봄화학)
     };
     // 블록마다 가운데에 들어설 곳 이름표 (공원 블록은 "공원" + 나무·벤치)
     let n = 0;
@@ -457,7 +457,7 @@ function tileImage(tx, ty) {
 
 // ----- 그림자: 바닥을 다 그린 뒤, 물건보다 먼저 그림 (빛은 왼쪽 위) -----
 const SHADE = 'rgba(32, 26, 52, 0.22)';
-const BIG = new Set(['cafe', 'shop', 'villa', 'house', 'home', 'apt', 'office', 'school', 'hospital', 'bank', 'mart', 'police', 'library', 'gym', 'firestation']);
+const BIG = new Set(['cafe', 'shop', 'villa', 'house', 'home', 'apt', 'office', 'school', 'hospital', 'bank', 'mart', 'gym']);
 // 밤에 불이 켜지는 곳: 물건 그림 안의 [x, y, 가로, 세로] (그림 칸 단위). 창문은 창살 사이 유리 네 칸씩
 // 바깥 하늘이 보이는 유리: 물건 그림 안의 [x, y, 가로, 세로] (집 안 창문은 창살 사이 네 칸) → 시간·날씨에 맞춰 색이 바뀜
 const SKY_GLASS = { wwin: [[6, 4, 9, 9], [17, 4, 9, 9], [6, 15, 9, 9], [17, 15, 9, 9]] };
@@ -542,6 +542,13 @@ function bTools(W, H) {
   const base = (y, col = '#b9b2a4') => { box(0, y, W, H - y, INK); box(1, y, W - 2, H - y - 1, col); box(1, y, W - 2, 1, shadeHex(col, 1.15)); };
   return { ...p, wall, glass, sign, base };
 }
+// 도시 회사 8곳 (나중에 회사마다 주식): [이름, 외벽 틀, 유리, 로고 색]. office 그림 색번호 = 이 목록 번호
+const COMPANIES = [
+  ['한빛전자', '#2f4a6b', '#6fa8dc', '#f2c94c'], ['누리소프트', '#2f5d55', '#7fd1b9', '#7fd1b9'],
+  ['대한건설', '#5a5a62', '#a9b4c2', '#f2a03d'], ['푸른식품', '#3f6b35', '#9fd88a', '#f2c94c'],
+  ['별빛제약', '#4a3a6b', '#b9a6e8', '#f5a3b5'], ['바다해운', '#1f3f5a', '#5fb0d6', '#ffffff'],
+  ['하늘항공', '#2f5a8a', '#a8d8f0', '#e8454b'], ['새봄화학', '#6b2f2f', '#e8a6a0', '#f2c94c'],
+];
 const SIGNS = [['약국', '#2f9e5a'], ['치킨', '#e8454b'], ['분식', '#f2a03d'], ['빵집', '#b5653f'], ['꽃집', '#d4537e'], ['PC방', '#3d7fd6'], ['안경', '#4bb3a0'], ['떡집', '#7b5bd6']];
 const WALLS = ['#f1e6d0', '#e9c46a', '#cfe0d6', '#f0d0c0', '#dcd3ef', '#d8e4f0', '#f3dfb4', '#e8d0d8'];
 // ===== 계절 나무 그리기 =====
@@ -994,11 +1001,15 @@ const ARTS = {
     t.base(138);
     return t.c;
   },
-  office(v) {   // 회사(가로 6칸, 키 8칸): 파란(또는 초록) 유리 커튼월 격자 · 꼭대기 회사 간판과 로고 · 1층 높은 유리 로비와 회전문
-    const W = 96, H = 128, t = bTools(W, H), { box } = t, glassC = v ? '#7fd1b9' : '#6fa8dc', frame = v ? '#2f5d55' : '#2f4a6b';
+  office(v) {   // 회사(가로 6칸, 키 8칸): 유리 커튼월 격자 · 꼭대기 회사 이름 간판과 로고 · 1층 높은 유리 로비와 회전문 (색·이름·로고는 COMPANIES[v])
+    const W = 96, H = 128, t = bTools(W, H), { box } = t, [name, frame, glassC, logo] = COMPANIES[v % COMPANIES.length];
     t.wall(2, 4, W - 4, 120, frame);
-    box(3, 5, W - 6, 18, '#22303f'); t.center(v ? 'IT 센터' : '회사', 48, 9, '#ffffff');
-    box(8, 9, 10, 10, v ? '#7fd1b9' : '#f2c94c'); box(10, 11, 6, 6, '#22303f'); box(12, 13, 2, 2, v ? '#7fd1b9' : '#f2c94c');   // 로고
+    box(3, 5, W - 6, 18, '#22303f'); t.center(name, 54, 9, '#ffffff');
+    const shape = v % 4;   // 로고: 네모 · 동그라미 · 세모 · 마름모
+    for (let r = 0; r < 10; r++) {
+      const half = shape === 0 ? 5 : shape === 1 ? Math.round(Math.sqrt(25 - (r - 4.5) ** 2)) : shape === 2 ? Math.ceil((r + 1) / 2) : Math.ceil(5 - Math.abs(r - 4.5));
+      box(13 - half, 9 + r, half * 2, 1, logo);
+    }
     for (let y = 27; y < 90; y += 10) for (let x = 6; x < 88; x += 12) t.glass(x, y, 10, 8, glassC, hash(x, y, v + 4) < 0.55);   // 유리 칸 (밤엔 절반쯤 불 켜진 사무실)
     t.glass(8, 102, 80, 21, '#bfe3f5', true); for (let x = 18; x < 88; x += 10) box(x, 102, 1, 21, frame);
     box(40, 104, 16, 19, '#9fb6c8'); box(47, 104, 2, 19, frame);                                                  // 회전문
@@ -1053,31 +1064,6 @@ const ARTS = {
     t.base(72);
     return t.c;
   },
-  police() {   // 경찰서(가로 8칸, 키 5칸): 흰 벽에 남색 띠 · 옥상 빨강·파랑 경광등 · 금색 별 배지 · 남색 "경찰서" 간판 · 유리문
-    const W = 128, H = 80, t = bTools(W, H), { box } = t;
-    box(54, 0, 20, 6, INK); box(55, 1, 9, 4, '#e8454b'); box(64, 1, 9, 4, '#3d7fd6');                              // 경광등
-    t.wall(2, 6, W - 4, 70, '#f7f8fa'); box(3, 7, W - 6, 3, '#2f3b6b'); box(3, 36, W - 6, 6, '#2f3b6b');
-    t.sign(40, 13, 48, '경찰서', '#2f3b6b', '#ffffff');
-    for (const x of [8, 24, 92, 108]) t.glass(x, 14, 12, 14, '#bfe3f5', true);
-    for (const x of [8, 24, 92, 108]) t.glass(x, 48, 12, 14, '#bfe3f5', true);
-    box(56, 40, 16, 12, INK); box(57, 41, 14, 10, '#f2c94c'); box(62, 43, 4, 6, '#c9951c'); box(60, 45, 8, 2, '#c9951c');   // 별 배지
-    t.glass(48, 54, 32, 18, '#bfe3f5'); box(63, 54, 2, 18, '#2f3b6b');
-    t.base(72);
-    return t.c;
-  },
-  library() {   // 도서관(가로 9칸, 키 5칸): 빨간 벽돌 · 위가 둥근 높은 창 · 흰 처마 · 펼친 책 상징 · "도서관" 간판
-    const W = 144, H = 80, t = bTools(W, H), { box } = t;
-    t.wall(2, 4, W - 4, 72, '#b5583f');
-    for (let y = 10; y < 70; y += 5) for (let x = 3 + ((y / 5) % 2) * 5; x < W - 4; x += 10) box(x, y, 1, 4, '#9a4632');   // 벽돌 줄눈
-    box(1, 4, W - 2, 5, '#f4efe4'); box(1, 9, W - 2, 1, INK);
-    for (const x of [10, 32, 96, 118]) { box(x - 1, 18, 18, 38, INK); box(x, 22, 16, 33, '#8fc3e6'); box(x + 3, 17, 10, 4, INK); box(x + 2, 19, 12, 4, '#8fc3e6'); box(x + 7, 19, 2, 36, '#f4efe4'); t.lit(x, 19, 16, 36); }
-    box(56, 12, 32, 18, INK); box(57, 13, 14, 16, '#ffffff'); box(73, 13, 14, 16, '#ffffff'); box(71, 13, 2, 16, '#9a4632');   // 펼친 책
-    for (let y = 16; y < 28; y += 3) { box(59, y, 10, 1, '#9aa3ad'); box(75, y, 10, 1, '#9aa3ad'); }
-    t.sign(50, 34, 44, '도서관', '#f4efe4', '#7a3a28');
-    box(58, 52, 28, 24, INK); box(59, 53, 26, 23, '#6b4a32'); box(71, 53, 2, 23, INK); box(62, 56, 7, 8, '#cfe9f8'); box(75, 56, 7, 8, '#cfe9f8');
-    t.base(74);
-    return t.c;
-  },
   gym() {   // 체육관(가로 10칸, 키 5칸): 둥근 은빛 지붕 · 회색 벽에 주황 띠 · 농구공 상징 · "체육관" · 넓은 입구
     const W = 160, H = 80, t = bTools(W, H), { box } = t;
     for (let y = 0; y < 26; y++) { const r = 1 - ((26 - y) / 26) ** 2, w = Math.round((W - 4) * Math.sqrt(Math.max(0, r))), x = (W - w) >> 1; box(x, y, w, 1, INK); if (w > 2) box(x + 1, y, w - 2, 1, y % 4 === 0 ? '#9aa3ad' : y % 4 === 1 ? '#e6e9ec' : '#c9cfd6'); }
@@ -1086,20 +1072,6 @@ const ARTS = {
     t.sign(16, 36, 48, '체육관', '#ffffff', '#c0561c'); t.sign(96, 36, 48, '체육관', '#ffffff', '#c0561c');
     for (const x of [12, 26, 40, 110, 124, 138]) t.glass(x, 56, 10, 8, '#bfe3f5', true);   // 입구 좌우 셋씩
     t.glass(60, 56, 40, 17, '#bfe3f5'); box(79, 56, 2, 17, '#9aa3ad');                                           // 입구(바닥까지)
-    t.base(74);
-    return t.c;
-  },
-  firestation() {   // 소방서(가로 9칸, 키 5칸): 빨간 벽 · 옆에 높은 호스 건조탑 · 큰 차고문 셋(하나는 열려 소방차가 보임) · "소방서"
-    const W = 144, H = 80, t = bTools(W, H), { box } = t;
-    box(118, 0, 22, 76, INK); box(119, 1, 20, 75, '#c0392b'); box(119, 1, 20, 3, '#e05a48'); for (let y = 8; y < 60; y += 12) t.glass(124, y, 10, 6, '#bfe3f5', true);   // 건조탑
-    t.wall(2, 10, 118, 66, '#d8443f'); box(3, 11, 116, 3, '#f07a6a');
-    t.sign(20, 16, 80, '소방서', '#ffffff', '#c0392b');
-    box(8, 36, 104, 4, INK);
-    for (const [i, x] of [[0, 8], [1, 44], [2, 80]]) {
-      box(x, 40, 32, 36, INK);
-      if (i === 1) { box(x + 1, 41, 30, 35, '#2f2b38'); box(x + 4, 50, 24, 26, '#d8443f'); box(x + 6, 54, 20, 8, '#bfe3f5'); box(x + 6, 66, 4, 3, '#fff6cf'); box(x + 22, 66, 4, 3, '#fff6cf'); }   // 열린 차고: 소방차 앞모습
-      else { box(x + 1, 41, 30, 35, '#e6e9ec'); for (let y = 45; y < 76; y += 4) box(x + 1, y, 30, 1, '#b8bec6'); t.glass(x + 4, 44, 24, 5, '#bfe3f5', true); }
-    }
     t.base(74);
     return t.c;
   },
@@ -1161,20 +1133,6 @@ const ARTS = {
     for (const [x, y] of [[1, 6], [13, 6], [1, 22], [13, 22]]) box(x, y, 2, 5, '#1f1f24');
     box(2, 2, 12, 29, INK); box(3, 3, 10, 27, '#f7f8fa'); box(3, 15, 10, 2, '#e8454b');
     box(4, 8, 8, 4, '#2f3b55'); box(6, 19, 4, 8, '#e8454b'); box(4, 21, 8, 4, '#e8454b'); box(5, 13, 3, 1, '#e8454b'); box(8, 13, 3, 1, '#3d7fd6');
-    return c;
-  },
-  policecar() {   // 경찰차 (위에서 본 모습, 흰·남색 + 빨강·파랑 경광등)
-    const { c, box } = painter(16, 32);
-    for (const [x, y] of [[1, 6], [13, 6], [1, 22], [13, 22]]) box(x, y, 2, 5, '#1f1f24');
-    box(2, 2, 12, 29, INK); box(3, 3, 10, 27, '#f7f8fa'); box(3, 3, 10, 6, '#2f3b6b'); box(3, 24, 10, 6, '#2f3b6b');
-    box(4, 9, 8, 4, '#2f3b55'); box(4, 15, 4, 2, '#e8454b'); box(8, 15, 4, 2, '#3d7fd6'); box(4, 21, 8, 3, '#2f3b55');
-    return c;
-  },
-  firetruck() {   // 소방차 (위에서 본 모습, 빨간 긴 몸통 + 사다리 + 경광등, 세로 3칸)
-    const { c, box } = painter(16, 48);
-    for (const [x, y] of [[0, 6], [14, 6], [0, 30], [14, 30], [0, 38], [14, 38]]) box(x, y, 2, 6, '#1f1f24');
-    box(1, 2, 14, 45, INK); box(2, 3, 12, 43, '#d8443f'); box(3, 8, 10, 4, '#2f3b55'); box(4, 4, 3, 2, '#3d7fd6'); box(9, 4, 3, 2, '#e8454b');
-    box(5, 14, 6, 30, '#c9cfd6'); for (let y = 16; y < 44; y += 4) box(5, y, 6, 1, '#7c7f96');                   // 사다리
     return c;
   },
   fridgecase() {   // 음료 냉장고(가로 3칸): 은색 틀 + 유리문 셋 + 칸마다 색색 병
