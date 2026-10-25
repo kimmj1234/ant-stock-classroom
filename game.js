@@ -9,24 +9,64 @@ const me = { name: '', x: START.x, y: START.y, look: DEFAULT_LOOK, dir: 'se', le
 let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). 매 프레임 화면이 맵으로 꽉 차게 정함
 
 // ===== 게임 시간: 현실 1초 = 게임 1분 (하루 = 24분). 계절마다 28일, 봄 → 여름 → 가을 → 겨울 → 다음 해 =====
-// 창(메뉴·안내·가방 등)이 떠 있는 동안은 멈춤. 서버에 20초마다·페이지를 떠날 때 저장
+// 창(메뉴·안내·가방 등)이 떠 있는 동안은 멈춤. 서버에 저장되어 이어짐
 const DAY = 1440, SEASON_DAYS = 28;
 const SEASONS = [['봄', '#f5a3b5'], ['여름', '#7ed36a'], ['가을', '#f2a03d'], ['겨울', '#bfe3f5']];
-// 날씨: 날마다 정해짐(같은 날은 늘 같음). 계절마다 [날씨, 확률] — 겨울엔 비 대신 눈
-const WEATHER = [
-  [['sun', 0.5], ['cloud', 0.25], ['rain', 0.25]],
-  [['sun', 0.55], ['cloud', 0.15], ['rain', 0.3]],
-  [['sun', 0.6], ['cloud', 0.25], ['rain', 0.15]],
-  [['sun', 0.4], ['cloud', 0.25], ['snow', 0.35]],
-];
-const WX_NAME = { sun: '맑음', cloud: '흐림', rain: '비', snow: '눈' };
+// ===== 한국(서울) 같은 계절: 해 뜨고 지는 시각, 날씨, 기온 =====
+// 게임 계절 28일 = 실제 석 달(봄 3~5월, 여름 6~8월, 가을 9~11월, 겨울 12~2월).
+// 게임 날짜마다 "실제 1년 중 며칠째"(1월 1일 = 0)를 구해서, 그날의 서울 해·날씨·기온을 씀
+const SEASON_START = [59, 151, 243, 334];   // 3월 1일, 6월 1일, 9월 1일, 12월 1일
+const doyOf = day => (SEASON_START[Math.floor(day / SEASON_DAYS) % 4] + Math.floor((day % SEASON_DAYS) * 92 / SEASON_DAYS)) % 365;
+// 해 뜨고 지는 시각(분): 하지(6월 21일) 5:11·19:57 → 낮이 가장 김 / 동지(12월 22일) 7:43·17:17 → 낮이 가장 짧음 / 춘분·추분 무렵 6:27·18:37
+function sunTimes(day) {
+  const c = Math.cos(2 * Math.PI * (doyOf(day) - 172) / 365);
+  return { rise: 387 - 76 * c, set: 1117 + 80 * c };
+}
+// 날씨 확률표 [날씨, 확률] (나머지는 맑음)
+//   3~4월 황사가 잦음 / 6월 하순~7월 하순 장마(비가 거의 매일) / 한여름 소나기 / 8~9월 태풍 / 가을은 맑고 건조 / 겨울은 눈
+function weatherTable(d) {
+  if (d >= 59 && d < 121) return [['dust', 0.2], ['cloud', 0.2], ['rain', 0.15]];        // 3~4월
+  if (d >= 121 && d < 151) return [['cloud', 0.2], ['rain', 0.2], ['dust', 0.05]];        // 5월
+  if (d >= 151 && d < 172) return [['cloud', 0.25], ['rain', 0.25]];                      // 6월 초·중순
+  if (d >= 172 && d <= 208) return [['rain', 0.6], ['cloud', 0.25]];                      // 장마 (6월 21일 ~ 7월 27일)
+  if (d > 208 && d < 243) return [['rain', 0.3], ['cloud', 0.15], ['storm', 0.1]];       // 한여름: 소나기·태풍
+  if (d >= 243 && d < 273) return [['cloud', 0.2], ['rain', 0.12], ['storm', 0.08]];     // 9월: 늦은 태풍
+  if (d >= 273 && d < 334) return [['cloud', 0.2], ['rain', 0.12]];                       // 10~11월: 맑고 건조
+  return [['snow', 0.3], ['cloud', 0.2]];                                                  // 겨울
+}
+const JANGMA = d => d >= 172 && d <= 208;
+// 그날의 날씨: 날짜로 정해져서 같은 날은 늘 같음. 35%는 어제 날씨가 이어짐(그 철에 있는 날씨일 때) → 비 오는 날·맑은 날이 며칠씩 이어지기도 함
+const wxCache = new Map();
+function weatherOf(day) {
+  if (day <= 0) return 'sun';   // 첫날은 늘 맑음
+  if (wxCache.has(day)) return wxCache.get(day);
+  const table = weatherTable(doyOf(day));
+  let wx = null;
+  if (hash(day, 78) < 0.35) { const y = weatherOf(day - 1); if (y === 'sun' || table.some(([w]) => w === y)) wx = y; }
+  if (!wx) { let r = hash(day, 77); wx = 'sun'; for (const [w, p] of table) { if (r < p) { wx = w; break; } r -= p; } }
+  wxCache.set(day, wx);
+  return wx;
+}
+// 기온(°C): 서울 월평균 기온을 날짜에 맞게 이어 붙이고 + 하루 변화(해 뜰 무렵 가장 춥고 오후 3시 무렵 가장 더움) + 날마다 조금씩 다름 + 날씨(비·눈 오면 서늘하고 하루 변화가 작음)
+const MONTH_TEMP = [-2.4, 0.4, 5.7, 12.5, 17.8, 22.2, 24.9, 25.7, 21.2, 14.8, 7.2, 0.4];   // 1월 ~ 12월 (각 달 15일 무렵)
+function temperature(min) {
+  const day = Math.floor(min / DAY), d = doyOf(day), m = min % DAY, wx = weatherOf(day);
+  const f = (d - 14 + 365) % 365 / 30.42, i = Math.floor(f) % 12, mean = MONTH_TEMP[i] + (MONTH_TEMP[(i + 1) % 12] - MONTH_TEMP[i]) * (f - Math.floor(f));
+  const swing = (d >= 59 && d < 151) || (d >= 243 && d < 334) ? 5 : 4;   // 봄·가을은 일교차가 큼
+  const k = { sun: 1, dust: 0.9, cloud: 0.6, rain: 0.35, storm: 0.3, snow: 0.5 }[wx];
+  const wet = { rain: -1.5, storm: -2, snow: -1 }[wx] || 0;
+  return Math.round(mean + wet + (hash(day, 91) - 0.5) * 4 + swing * k * Math.cos(2 * Math.PI * (m - 900) / DAY));
+}
+const WX_NAME = { sun: '맑음', cloud: '흐림', rain: '비', snow: '눈', storm: '태풍', dust: '황사' };
 const clock = { min: 480, sent: '', ready: false };   // sent: 마지막으로 서버에 보낸 시간·자리
 function today(min) {
   const day = Math.floor(min / DAY), season = Math.floor(day / SEASON_DAYS) % 4, year = Math.floor(day / (SEASON_DAYS * 4)) + 1;
-  let r = day === 0 ? 1 : hash(day, 77), wx = 'sun';   // 첫날은 늘 맑음
-  for (const [w, p] of WEATHER[season]) { if (r < p) { wx = w; break; } r -= p; }
-  const m = Math.floor(min % DAY / 10) * 10, h = Math.floor(m / 60);
-  return { year, season, date: day % SEASON_DAYS + 1, wx, time: `${h < 12 ? '오전' : '오후'} ${(h + 11) % 12 + 1}:${String(m % 60).padStart(2, '0')}` };
+  const wx = weatherOf(day), m = Math.floor(min % DAY / 10) * 10, h = Math.floor(m / 60);
+  return {
+    year, season, date: day % SEASON_DAYS + 1, wx, ...sunTimes(day),
+    wxName: wx === 'rain' && JANGMA(doyOf(day)) ? '장마' : WX_NAME[wx],
+    time: `${h < 12 ? '오전' : '오후'} ${(h + 11) % 12 + 1}:${String(m % 60).padStart(2, '0')}`,
+  };
 }
 // 진행 저장: 게임 시간 + 서 있던 자리(장면·위치). 바뀐 게 있을 때만 보냄 → 새로고침(F5)해도 그 자리에서 이어서 시작
 // 보내는 때: 걷다가 멈춘 순간, 문으로 장면을 바꾼 순간, 5초마다, 페이지를 떠나거나 탭을 가릴 때
@@ -45,6 +85,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveP
 
 // ===== 기본 UI 그림: 픽셀 아이콘 (글자 한 칸 = 픽셀 한 칸) =====
 const ICON_PAL = {
+  d: '#4a4d60', h: '#d9b56a',   // 태풍 먹구름, 황사 먼지
   y: '#f2c94c', o: '#e0902a', w: '#ffffff', g: '#7c7f96', u: '#3d7fd6', c: '#8fc3e6', k: '#2f2b38',
   // 가방(파란 배낭)
   K: '#1e1b3a', B: '#5b8cf0', D: '#4459d6', C: '#5fcfe6', L: '#8fe3f2', W: '#ffffff', Y: '#f6d32b', O: '#e88a1c', P: '#f2a6cf', R: '#c8323a',
@@ -54,6 +95,8 @@ const ICONS = {
   cloud: ['..........', '..........', '...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', 'gwwwwwwwwg', '.gggggggg.', '..........', '..........'],
   rain: ['...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', '.gggggggg.', '..........', '.u..u..u..', 'u..u..u...', '..........', '.u..u..u..'],
   moon: ['...yyyy...', '..yyy.....', '.yyy......', '.yyy......', 'yyyy......', 'yyyy......', '.yyy......', '.yyyy.....', '..yyyyyy..', '...yyyy...'],
+  storm: ['...ddd....', '..dkkkd...', '.dkkkkkdd.', 'dkkkkkkkkd', '.dddddddd.', '...y......', '..yy.u..u.', '...y..u...', '..y.u...u.', '.u...u....'],
+  dust: ['h...h...h.', '..h.hhh.h.', '.h.hyyyh..', '..hyyyyyh.', 'h.hyyyyyh.', '..hyyyyyh.', '.h.hyyyh.h', '..h.hhh...', 'h.h...h..h', '...h...h..'],
   snow: ['...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', '.gggggggg.', '..........', '.c...c...c', 'ccc.ccc...', '.c...c...c', '..........'],
   coin: ['...oooo...', '..oyyyyo..', '.oyywwyyo.', 'oyywyyyyyo', 'oyyyyyyyyo', 'oyyyyyyyyo', 'oyyyyyyyyo', '.oyyyyyyo.', '..oyyyyo..', '...oooo...'],
   bag: [   // 파란 배낭: 손잡이, 별·고양이·웃는 얼굴 스티커, 하늘색 띠, 앞주머니 자물쇠, 하트 장식, 양옆 주머니
@@ -90,14 +133,16 @@ const hudEl = document.getElementById('hud'), $hud = id => document.getElementBy
 let hudLast = '';
 function showHud() { hudEl.hidden = !me.basicUI; }
 function updateHud() {   // 글자가 바뀔 때만 고침
-  const t = today(clock.min), m = clock.min % DAY, icon = t.wx === 'sun' && (m < 330 || m >= 1140) ? 'moon' : t.wx;   // 맑은 밤(오후 7시~새벽 5시 반)엔 달
-  const key = [t.year, t.season, t.date, icon, t.time, me.cash].join('|');
+  const t = today(clock.min), m = clock.min % DAY, icon = t.wx === 'sun' && (m < t.rise || m >= t.set) ? 'moon' : t.wx;   // 맑은 밤(해 진 뒤 ~ 해 뜨기 전)엔 달
+  const temp = temperature(clock.min);
+  const key = [t.year, t.season, t.date, icon, t.time, temp, me.cash].join('|');
   if (key === hudLast) return;
   hudLast = key;
   const [name, color] = SEASONS[t.season];
   $hud('hudSeason').textContent = name; $hud('hudSeason').style.background = color;
   $hud('hudDay').textContent = (t.year > 1 ? t.year + '년 ' : '') + t.date + '일';
-  $hud('hudWxText').textContent = WX_NAME[t.wx]; drawIcon('hudWx', icon);
+  $hud('hudWxText').textContent = t.wxName; drawIcon('hudWx', icon);
+  $hud('hudTemp').textContent = temp + '°C';
   $hud('hudClock').textContent = t.time;
   $hud('hudCash').textContent = (me.cash || 0).toLocaleString('ko-KR');
 }
@@ -361,8 +406,10 @@ let skyCam = null;
 function drawSky(cam, W, H, dt, now) {
   const t = today(clock.min), m = clock.min % DAY, out = SCENE.name !== 'home';
   const ramp = (a, b) => Math.min(1, Math.max(0, (m - a) / (b - a)));
-  const dark = m < 240 ? 1 : m < 420 ? 1 - ramp(240, 420) : m < 1020 ? 0 : ramp(1020, 1200);   // 밤 정도 0(낮) ~ 1(한밤)
-  const evening = Math.max(0, 1 - Math.abs(m - 1080) / 90);                                     // 해 질 녘 정도 (오후 6시가 가장 큼)
+  // 밤 정도 0(낮) ~ 1(한밤): 해 뜨기 40분 전부터 밝아져 해 뜬 30분 뒤 완전히 낮, 해 지기 30분 전부터 어두워져 해 진 50분 뒤 완전히 밤
+  const { rise, set } = t;
+  const dark = m < rise - 40 ? 1 : m < rise + 30 ? 1 - ramp(rise - 40, rise + 30) : m < set - 30 ? 0 : m < set + 50 ? ramp(set - 30, set + 50) : 1;
+  const evening = Math.max(0, 1 - Math.abs(m - set) / 80, (1 - Math.abs(m - rise) / 60) * 0.6);   // 노을: 해 질 녘(가장 큼)·해 뜰 녘(조금)
   const night = dark * (out ? 0.55 : 0.2);
   const dusk = out ? evening * 0.14 : 0;
   // 집 안 창문: 바깥과 같은 하늘 — 밤엔 남색과 별, 해 질 녘엔 주황, 흐리면 회색, 비·눈이 내림
@@ -375,7 +422,8 @@ function drawSky(cam, W, H, dt, now) {
       for (const [x, y, w, h] of G) {
         const px = Math.round(ox + x * k), py = Math.round(oy + y * k), pw = w * k, ph = h * k;
         const pane = color => { ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph); };
-        if (t.wx !== 'sun') pane(`rgba(130, 140, 160, ${t.wx === 'cloud' ? 0.45 : 0.6})`);
+        if (t.wx === 'dust') pane('rgba(205, 165, 90, 0.5)');
+        else if (t.wx !== 'sun') pane(`rgba(130, 140, 160, ${{ cloud: 0.45, storm: 0.75 }[t.wx] || 0.6})`);
         if (evening) pane(`rgba(255, 140, 70, ${evening * 0.55})`);
         if (dark) pane(`rgba(18, 24, 66, ${dark * 0.92})`);
         ctx.save(); ctx.beginPath(); ctx.rect(px, py, pw, ph); ctx.clip();
@@ -383,8 +431,8 @@ function drawSky(cam, W, H, dt, now) {
           ctx.fillStyle = `rgba(255, 250, 210, ${dark})`;
           for (let i = 0; i < 3; i++) ctx.fillRect(px + Math.floor(hash(x, y, i) * w) * k, py + Math.floor(hash(x, y, i + 9) * h) * k, k, k);
         }
-        if (t.wx === 'rain' || t.wx === 'snow') {   // 창밖에 내리는 비·눈
-          const rain = t.wx === 'rain';
+        if (t.wx === 'rain' || t.wx === 'storm' || t.wx === 'snow') {   // 창밖에 내리는 비·눈
+          const rain = t.wx !== 'snow';
           ctx.fillStyle = rain ? 'rgba(210, 228, 255, 0.8)' : 'rgba(255, 255, 255, 0.95)';
           for (let i = 0; i < 4; i++) {
             const fx = (hash(x, i, 3) * w + (rain ? -now / 120 : Math.sin(now / 600 + i) * 0.6)) % w, fy = (hash(y, i, 4) * h + now / (rain ? 40 : 300)) % h;
@@ -396,9 +444,10 @@ function drawSky(cam, W, H, dt, now) {
       }
     }
   }
-  const gloom = out ? { cloud: 0.08, rain: 0.16, snow: 0.06 }[t.wx] || 0 : 0;
+  const gloom = out ? { cloud: 0.08, rain: 0.16, storm: 0.3, snow: 0.06 }[t.wx] || 0 : 0;
   const fill = color => { ctx.fillStyle = color; ctx.fillRect(0, 0, W, H); };
   if (gloom) fill(`rgba(70, 78, 100, ${gloom})`);
+  if (out && t.wx === 'dust') fill('rgba(205, 160, 80, 0.24)');   // 황사: 누렇고 뿌연 하늘
   if (dusk) fill(`rgba(255, 130, 50, ${dusk})`);
   if (night) fill(`rgba(16, 20, 56, ${night})`);
   // 불빛: 어두운 만큼 창문·등이 노랗게 켜지고 둘레가 은은하게 밝음 (어둠 위에 그려서 밤에 또렷함)
@@ -419,22 +468,27 @@ function drawSky(cam, W, H, dt, now) {
       }
     }
   }
-  // 비·눈 알갱이 (화면 넓이에 맞춰 개수를 정함)
-  const kind = out && (t.wx === 'rain' || t.wx === 'snow') ? t.wx : null;
-  const want = kind ? Math.round(W * H / (kind === 'rain' ? 5000 : 8000)) : 0;
+  // 비·눈·황사 알갱이 (화면 넓이에 맞춰 개수를 정함). 태풍은 빗줄기가 두 배 넘게 많고 세게 기울어짐 + 가끔 번개
+  const kind = out && { rain: 'rain', storm: 'rain', snow: 'snow', dust: 'dust' }[t.wx] || null, storm = t.wx === 'storm';
+  const want = kind ? Math.round(W * H / { rain: storm ? 2000 : 5000, snow: 8000, dust: 9000 }[kind]) : 0;
   while (drops.length < want) drops.push({ x: Math.random() * W, y: Math.random() * H, v: 0.7 + Math.random() * 0.6 });
   drops.length = want;
   const mx = skyCam ? cam.x - skyCam.x : 0, my = skyCam ? cam.y - skyCam.y : 0;
   skyCam = { x: cam.x, y: cam.y };
   const wrap = (v, size) => ((v % size) + size) % size;
   for (const d of drops) {
-    if (kind === 'rain') { d.x -= 160 * d.v * dt + mx; d.y += 760 * d.v * dt - my; }
+    if (kind === 'rain') { d.x -= (storm ? 420 : 160) * d.v * dt + mx; d.y += (storm ? 980 : 760) * d.v * dt - my; }
+    else if (kind === 'dust') { d.x += 70 * d.v * dt - mx; d.y += Math.sin(now / 900 + d.v * 7) * 10 * dt - my; }   // 황사: 옆으로 흘러가는 먼지
     else { d.x += Math.sin(now / 700 + d.v * 9) * 24 * dt - mx; d.y += 50 * d.v * dt - my; }
     d.x = wrap(d.x, W); d.y = wrap(d.y, H);
   }
   if (kind === 'rain') {   // 빗줄기: 비스듬한 2픽셀 굵기 선
     ctx.fillStyle = 'rgba(200, 220, 255, 0.55)';
     for (const d of drops) for (let i = 0; i < 5; i++) ctx.fillRect(Math.round(d.x - i), Math.round(d.y + i * 3), 2, 3);
+    if (storm && hash(Math.floor(now / 3000), 5) < 0.25 && now % 3000 < 140) fill('rgba(235, 240, 255, 0.55)');   // 번개: 가끔 화면이 번쩍
+  } else if (kind === 'dust') {   // 황사 먼지: 작은 누런 점
+    ctx.fillStyle = 'rgba(190, 150, 80, 0.55)';
+    for (const d of drops) ctx.fillRect(Math.round(d.x), Math.round(d.y), 2, 2);
   } else if (kind === 'snow') {   // 눈송이: 작은 흰 네모(가까운 것일수록 크게)
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     for (const d of drops) { const z = d.v > 1 ? 4 : 3; ctx.fillRect(Math.round(d.x), Math.round(d.y), z, z); }
