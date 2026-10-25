@@ -188,11 +188,11 @@ http.createServer(async (req, res) => {
     const key = sessions.get(tokenHash(tokenOf(req)));
     if (name === 'me') {
       // 로그인 전은 정상 상황이라 200 + auth:false (브라우저 콘솔에 빨간 오류가 남지 않게)
-      // guideSeen: 게임 조작 안내 창을 이미 봤는지 (처음 한 번만 띄움) / tutorialDone: 튜토리얼 공간을 떠났는지 (떠나면 다시 못 돌아감)
-      return json(res, 200, key && accounts[key] ? { ok: true, me: { name: accounts[key].name, guideSeen: !!accounts[key].guideSeen, tutorialDone: !!accounts[key].tutorialDone } } : { ok: false, auth: false, msg: '로그인이 필요해요.' });
+      // guideSeen: 게임 조작 안내 창을 이미 봤는지 (처음 한 번만 띄움) / tutorialDone: 튜토리얼 공간을 떠났는지 (떠나면 다시 못 돌아감) / basicUI: 안내원에게 기본 UI를 받았는지
+      return json(res, 200, key && accounts[key] ? { ok: true, me: { name: accounts[key].name, guideSeen: !!accounts[key].guideSeen, tutorialDone: !!accounts[key].tutorialDone, basicUI: !!accounts[key].basicUI } } : { ok: false, auth: false, msg: '로그인이 필요해요.' });
     }
-    // guideSeen: 조작 안내 창을 닫았음 → 다음부터 안 띄움 / tutorialDone: 튜토리얼을 떠났음 → 다음부터 도시에서 시작
-    if (name === 'guideSeen' || name === 'tutorialDone') {
+    // guideSeen: 조작 안내 창을 닫았음 → 다음부터 안 띄움 / tutorialDone: 튜토리얼을 떠났음 → 다음부터 도시에서 시작 / basicUI: 기본 UI를 받았음
+    if (name === 'guideSeen' || name === 'tutorialDone' || name === 'basicUI') {
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
       if (!accounts[key][name]) { accounts[key][name] = true; writeJSONFile(ACCOUNTS_FILE, accounts); }
       return json(res, 200, { ok: true });

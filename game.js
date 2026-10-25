@@ -12,6 +12,7 @@ let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). �
 const onAuth = who => {
   if (!who) return location.replace('/#login');
   me.name = who.name;
+  me.basicUI = !!who.basicUI;   // 안내원에게 기본 UI를 받았는지 (기본 UI 화면은 디자인 후 이 값으로 띄울 자리)
   if (who.tutorialDone && SCENE.name !== 'city') { useScene('city'); me.x = START.x; me.y = START.y; }   // 튜토리얼을 이미 떠났으면 다시 못 들어감
 };
 document.addEventListener('auth', e => onAuth(e.detail));
@@ -58,15 +59,28 @@ const talkBox = document.getElementById('talkWrap');
 let talk = { npc: null, i: 0 };
 let fade = null;   // 장면을 바꾸는 중: { t0: 시작 시각, sp: 들어간 문, done: 바꿨는지 }
 const FADE = 220;  // 어두워지는 데(그리고 밝아지는 데) 걸리는 시간(ms)
+// NPC가 줄 것(gives)이 있고 아직 안 받았으면 처음 대사(lines), 받았으면 다음 대사(after)
+const linesOf = npc => (npc.gives && me[npc.gives] && npc.after) || npc.lines;
+const GIFTS = { basicUI: '기본 UI' };
 function say() {
-  const { npc, i } = talk;
+  const { npc, i } = talk, lines = linesOf(npc);
   document.getElementById('talkName').textContent = npc.name;
-  document.getElementById('talkText').textContent = npc.lines[i];
-  document.getElementById('talkMore').textContent = i < npc.lines.length - 1 ? '▼' : '닫기';
+  document.getElementById('talkText').textContent = lines[i];
+  document.getElementById('talkMore').textContent = i < lines.length - 1 ? '▼' : '닫기';
 }
-talkBox.addEventListener('click', () => {   // 대화창 누르기(또는 E·Enter·Space) = 다음 말, 마지막 말이면 닫기
-  if (++talk.i < talk.npc.lines.length) say();
-  else { talkBox.hidden = true; cv.focus(); }
+// 받은 것 알림: 화면 위쪽 노란 띠가 2.5초 동안 뜸
+const got = document.getElementById('got');
+let gotTimer = 0;
+function notify(text) { got.textContent = text; got.hidden = false; clearTimeout(gotTimer); gotTimer = setTimeout(() => (got.hidden = true), 2500); }
+talkBox.addEventListener('click', () => {   // 대화창 누르기(또는 E·Enter·Space) = 다음 말, 마지막 말이면 닫기 (줄 것이 있으면 이때 받음)
+  if (++talk.i < linesOf(talk.npc).length) return say();
+  talkBox.hidden = true; cv.focus();
+  const gift = talk.npc.gives;
+  if (gift && !me[gift]) {
+    me[gift] = true;
+    fetch('/api/' + gift, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {});
+    notify(GIFTS[gift] + '를 받았어요!');
+  }
 });
 function interact() {
   if (!talkBox.hidden) return talkBox.click();   // 휴대폰 E 버튼

@@ -81,6 +81,13 @@
   .talk-more { position: absolute; right: 16px; bottom: 8px; font-size: 12px; color: #555; animation: blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { .talk-more { animation: none; } }
+  /* 받은 것 알림: 화면 위쪽 가운데 노란 띠, 잠깐 떴다 사라짐 */
+  .got {
+    position: absolute; left: 50%; top: 22px; transform: translateX(-50%); z-index: 5; padding: 8px 20px; white-space: nowrap;
+    background: #f2c94c; color: #000; font: 15px/1.5 Galmuri14, "Malgun Gothic", monospace; -webkit-font-smoothing: none;
+    box-shadow: 4px 0 #000, -4px 0 #000, 0 4px #000, 0 -4px #000, inset -4px -4px #c9a12c;
+  }
+  .got[hidden] { display: none; }
   .menu-btn { display: none; }
   .menu-btn {
     position: absolute; right: 18px; bottom: 18px; width: 36px; height: 36px; border: 0; background: #fff; color: #000; cursor: pointer;
@@ -105,6 +112,7 @@
   <div class="stick" id="stick" aria-hidden="true"><div class="knob" id="knob"></div></div>
   <button class="ebtn" id="ebtn" type="button" aria-label="상호작용">E</button>
   <div class="talk" id="talkWrap" role="dialog" aria-live="polite" hidden><div class="talk-name" id="talkName"></div><p id="talkText"></p><span class="talk-more" id="talkMore"></span></div>
+  <div class="got" id="got" role="status" hidden></div>
   <button class="menu-btn" id="menuBtn" type="button" aria-label="메뉴 열기">☰</button>
   <!-- 창 모드 안내 띠: 전체화면이 아니면 Ctrl+W를 막을 수 없다고 알림 -->
   <div class="ctrl-warn" id="ctrlWarn" role="status" hidden><span id="ctrlWarnText">창 모드에서는 Ctrl + W를 막을 수 없어요</span><button type="button" id="fsBack">전체화면으로</button></div>

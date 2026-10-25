@@ -74,12 +74,15 @@ const SCENES = {
     place('counter', 0, 15, 3, 3, 1); place('fridge', 0, 18, 3); place('dtable', 0, 14, 7, 4, 1);
     // 화분
     place('plant', 0, 1, 9); place('plant', 1, 18, 9);
-    // 안내원 NPC
-    npc({ name: '안내원 봄', look: { ...DEFAULT_LOOK, color: '#fff4dc', hat: { shape: 'sprout' } }, lines: [
+    // 안내원 NPC: 처음 말을 걸면 기본 UI를 줌(gives, 마지막 말을 닫을 때 받음). 받은 뒤에는 after 대사
+    npc({ name: '안내원 봄', look: { ...DEFAULT_LOOK, color: '#fff4dc', hat: { shape: 'sprout' } }, gives: 'basicUI', lines: [
       '어서 와! 여기는 너의 첫 번째 집이야.',
-      '이곳 "나의 두번째 인생"에서는 공부하고, 일하고, 취미를 즐기며 살아갈 수 있어.',
-      '방향키나 WASD로 움직이고, E로 사람에게 말을 걸거나 문을 열 수 있어.',
-      'ESC를 누르면 메뉴가 열려. 궁금한 게 생기면 언제든 나한테 다시 말 걸어!',
+      '이곳 "나의 두번째 인생"에서 살아가려면 꼭 필요한 게 하나 있어.',
+      '자, 기본 UI를 줄게! 앞으로 살아가는 데 필요한 정보를 한눈에 볼 수 있을 거야.',
+      '준비가 되면 집을 나가서 왼쪽 길 끝 표지판으로 가 봐. 도시로 떠날 수 있어!',
+    ], after: [
+      '기본 UI는 잘 받았지?',
+      '준비가 되면 집을 나가서 왼쪽 길 끝 표지판으로 가 봐. 한 번 떠나면 다시 못 돌아오니까 천천히 둘러보고 가!',
     ] }, 6, 7);
     // 현관 매트: E → 밖으로 (집 문 앞)
     spot({ type: 'door', x: 10 * TILE, y: 11 * TILE + 16, px: 10 * TILE, py: 11 * TILE - 40, to: 'field', at: { x: 20 * TILE, y: 12 * TILE + 40 } });
