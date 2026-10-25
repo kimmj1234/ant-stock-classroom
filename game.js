@@ -261,19 +261,23 @@ function drawPlayer(p, cam, now) {
 }
 // 머리 위 닉네임: 나무·집에 가려지지 않게 맨 마지막에 그림
 function drawName(p, cam) {
-  const x = Math.round(p.x * S - cam.x), y = Math.round(p.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8;
+  const y = Math.round(p.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8;
   ctx.font = 'bold 14px "Malgun Gothic", sans-serif'; ctx.textAlign = 'center';
+  const half = ctx.measureText(p.name).width / 2 + 4, viewW = cv.width / (devicePixelRatio || 1);
+  const x = Math.max(half, Math.min(viewW - half, Math.round(p.x * S - cam.x)));   // 화면 끝에서도 잘리지 않게
   ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.strokeText(p.name, x, y);
   ctx.fillStyle = '#000'; ctx.fillText(p.name, x, y);
 }
 // E 표시: 가까운 문·NPC 위에 자판 모양 "E" + 할 일 (들어가기·나가기·대화)
 function drawPrompt(sp, cam) {
-  // NPC: 이름표(drawName과 같은 높이) 바로 위 / 문·표지판: 정해 둔 자리(px, py)
-  const x = Math.round(sp.px * S - cam.x);
-  const y = sp.type === 'npc' ? Math.round(sp.npc.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8 - 32 : Math.round(sp.py * S - cam.y);
+  // NPC: 그 NPC 이름표 바로 위 / 도시로 떠나기: 내 캐릭터 이름표 바로 위 / 문: 정해 둔 자리(px, py)
+  const who = sp.type === 'npc' ? sp.npc : sp.type === 'exit' ? me : null;
+  const x = Math.round((who ? who.x : sp.px) * S - cam.x);
+  const y = who ? Math.round(who.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8 - 32 : Math.round(sp.py * S - cam.y);
   const label = sp.type === 'npc' ? '대화' : sp.type === 'exit' ? '도시로 떠나기' : sp.to === 'field' ? '나가기' : '들어가기';
   ctx.font = '14px Galmuri14, "Malgun Gothic", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  const w = 26 + 6 + ctx.measureText(label).width + 10, left = x - Math.round(w / 2);
+  const w = 26 + 6 + ctx.measureText(label).width + 10, viewW = cv.width / (devicePixelRatio || 1);
+  const left = Math.max(8, Math.min(viewW - w - 8, x - Math.round(w / 2)));   // 화면 끝에서도 잘리지 않게
   ctx.fillStyle = '#000'; ctx.fillRect(left - 3, y - 16, w + 6, 32);
   ctx.fillStyle = '#fff'; ctx.fillRect(left, y - 13, w, 26);
   ctx.fillStyle = '#000'; ctx.fillRect(left + 3, y - 10, 22, 20);
