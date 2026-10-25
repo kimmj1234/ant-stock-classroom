@@ -837,8 +837,8 @@ const ARTS = {
     box(0, 0, W, H, INK);
     box(1, 1, W - 2, 4, '#9a96a2'); box(1, 1, W - 2, 1, '#c4c0cc'); box(1, 5, W - 2, 1, INK);                  // 옥상 난간
     box(1, 6, W - 2, 23, wall); box(W - 4, 6, 3, 23, shadeHex(wall, 0.9)); box(1, 6, 1, 23, shadeHex(wall, 1.08)); // 2층 벽 (오른쪽 그늘)
-    win(5, 11, 10, 10, true); win(W - 15, 11, 10, 10, v % 2 === 0);
-    if (v % 2) ac(W - 15, 22);
+    win(5, 11, 10, 10, true); win(W - 15, 11, 10, v % 2 ? 8 : 10, v % 2 === 0);
+    if (v % 2) ac(W - 15, 22);   // 실외기 자리만큼 오른쪽 창을 조금 낮춤 (창턱과 안 겹치게)
     box(1, 29, W - 2, 2, shadeHex(wall, 0.75));                                                                   // 층 사이 띠
     box(2, 31, W - 4, 13, INK); box(3, 32, W - 6, 11, col); box(3, 32, W - 6, 1, shadeHex(col, 1.3));            // 간판 (글씨 높이 11에 맞춤)
     center(name, W / 2, 32, '#ffffff');
@@ -985,8 +985,8 @@ const ARTS = {
     t.wall(2, 12, W - 4, 128, wallC); box(3, 13, W - 6, 4, shadeHex(wallC, 0.78));
     box(52, 17, 8, 103, acc); for (let y = 22; y < 118; y += 12) box(54, y, 4, 6, shadeHex(acc, 1.3));   // 계단 창
     t.sign(6, 19, 40, (101 + v) + '동', '#ffffff', acc);
-    for (let f = 0; f < 7; f++) {
-      const y = 38 + f * 12;
+    for (let f = 0; f < 6; f++) {   // 6층 (맨 아래 난간이 현관 차양과 안 겹치게)
+      const y = 40 + f * 13;
       for (const x of [8, 28, 66, 86]) { t.glass(x, y, 16, 7, '#8fc3e6', hash(x, y, v) < 0.75); box(x - 1, y + 8, 18, 2, '#ffffff'); box(x - 1, y + 8, 1, 2, '#9aa3ad'); }
     }
     box(38, 118, 36, 4, INK); box(39, 118, 34, 3, '#6b7080');                                                   // 현관 차양
@@ -999,9 +999,9 @@ const ARTS = {
     t.wall(2, 4, W - 4, 120, frame);
     box(3, 5, W - 6, 18, '#22303f'); t.center(v ? 'IT 센터' : '회사', 48, 9, '#ffffff');
     box(8, 9, 10, 10, v ? '#7fd1b9' : '#f2c94c'); box(10, 11, 6, 6, '#22303f'); box(12, 13, 2, 2, v ? '#7fd1b9' : '#f2c94c');   // 로고
-    for (let y = 27; y < 98; y += 10) for (let x = 6; x < 88; x += 12) t.glass(x, y, 10, 8, glassC, hash(x, y, v + 4) < 0.55);   // 유리 칸 (밤엔 절반쯤 불 켜진 사무실)
-    t.glass(8, 102, 80, 20, '#bfe3f5', true); for (let x = 18; x < 88; x += 10) box(x, 102, 1, 20, frame);
-    box(40, 104, 16, 18, '#9fb6c8'); box(47, 104, 2, 18, frame);                                                  // 회전문
+    for (let y = 27; y < 90; y += 10) for (let x = 6; x < 88; x += 12) t.glass(x, y, 10, 8, glassC, hash(x, y, v + 4) < 0.55);   // 유리 칸 (밤엔 절반쯤 불 켜진 사무실)
+    t.glass(8, 102, 80, 21, '#bfe3f5', true); for (let x = 18; x < 88; x += 10) box(x, 102, 1, 21, frame);
+    box(40, 104, 16, 19, '#9fb6c8'); box(47, 104, 2, 19, frame);                                                  // 회전문
     t.base(124);
     return t.c;
   },
@@ -1020,9 +1020,9 @@ const ARTS = {
     const W = 144, H = 112, t = bTools(W, H), { box } = t;
     box(58, 0, 28, 24, INK); box(59, 1, 26, 22, '#ffffff'); box(68, 4, 8, 18, '#e8454b'); box(62, 9, 20, 8, '#e8454b');   // 십자
     t.wall(2, 22, W - 4, 86, '#f7f8fa'); box(3, 23, W - 6, 3, '#9fd0ee');
-    for (const y of [32, 54]) for (let x = 11; x < W - 20; x += 14) t.glass(x, y, 10, 12, '#bfe3f5', hash(x, y, 2) < 0.6);   // 9칸씩 (벽 안에 꼭 들어가게)
+    for (const y of [32, 54]) for (let x = 11; x < W - 18; x += 14) t.glass(x, y, 10, 12, '#bfe3f5', hash(x, y, 2) < 0.6);   // 9칸씩 (벽 안에 꼭 들어가게)
     box(3, 72, W - 6, 2, '#9fd0ee');
-    t.sign(40, 76, 64, '병원', '#ffffff', '#d8443f', '#d8443f');
+    t.sign(44, 76, 52, '병원', '#ffffff', '#d8443f', '#d8443f');
     box(98, 76, 40, 13, INK); box(99, 77, 38, 11, '#d8443f'); t.center('응급', 118, 77, '#ffffff');                // 응급실 차양(흰 글씨)
     t.glass(52, 92, 40, 14, '#bfe3f5', true); box(71, 92, 2, 14, '#9aa3ad');
     t.glass(104, 90, 28, 16, '#bfe3f5', true);
@@ -1049,7 +1049,7 @@ const ARTS = {
     box(118, 10, 14, 9, '#ffffff'); box(120, 12, 10, 4, '#e8454b'); box(120, 18, 2, 2, '#ffffff'); box(128, 18, 2, 2, '#ffffff');   // 카트 로고
     t.glass(10, 34, 66, 36, '#cfe9f8'); t.glass(116, 34, 66, 36, '#cfe9f8');
     for (const [x, c] of [[16, '#f2c94c'], [40, '#5dbb4a'], [126, '#f2a03d'], [150, '#3d7fd6']]) { box(x, 40, 18, 14, c); box(x + 2, 44, 14, 2, '#ffffff'); box(x + 2, 48, 10, 2, '#ffffff'); }   // 세일 포스터
-    t.glass(80, 36, 32, 34, '#bfe3f5'); box(95, 36, 2, 34, '#9aa3ad');
+    t.glass(80, 36, 32, 35, '#bfe3f5'); box(95, 36, 2, 35, '#9aa3ad');
     t.base(72);
     return t.c;
   },
@@ -1057,7 +1057,7 @@ const ARTS = {
     const W = 128, H = 80, t = bTools(W, H), { box } = t;
     box(54, 0, 20, 6, INK); box(55, 1, 9, 4, '#e8454b'); box(64, 1, 9, 4, '#3d7fd6');                              // 경광등
     t.wall(2, 6, W - 4, 70, '#f7f8fa'); box(3, 7, W - 6, 3, '#2f3b6b'); box(3, 36, W - 6, 6, '#2f3b6b');
-    t.sign(30, 13, 68, '경찰서', '#2f3b6b', '#ffffff');
+    t.sign(40, 13, 48, '경찰서', '#2f3b6b', '#ffffff');
     for (const x of [8, 24, 92, 108]) t.glass(x, 14, 12, 14, '#bfe3f5', true);
     for (const x of [8, 24, 92, 108]) t.glass(x, 48, 12, 14, '#bfe3f5', true);
     box(56, 40, 16, 12, INK); box(57, 41, 14, 10, '#f2c94c'); box(62, 43, 4, 6, '#c9951c'); box(60, 45, 8, 2, '#c9951c');   // 별 배지
@@ -1084,8 +1084,8 @@ const ARTS = {
     t.wall(2, 24, W - 4, 52, '#dcdde2'); box(3, 25, W - 6, 5, '#f2a03d');
     box(70, 32, 20, 20, INK); box(71, 33, 18, 18, '#e0702a'); box(79, 33, 2, 18, INK); box(71, 41, 18, 2, INK);   // 농구공
     t.sign(16, 36, 48, '체육관', '#ffffff', '#c0561c'); t.sign(96, 36, 48, '체육관', '#ffffff', '#c0561c');
-    for (let x = 10; x < W - 10; x += 14) if (x < 58 || x > 96) t.glass(x, 56, 10, 8, '#bfe3f5', true);
-    t.glass(60, 56, 40, 16, '#bfe3f5'); box(79, 56, 2, 16, '#9aa3ad');
+    for (const x of [12, 26, 40, 110, 124, 138]) t.glass(x, 56, 10, 8, '#bfe3f5', true);   // 입구 좌우 셋씩
+    t.glass(60, 56, 40, 17, '#bfe3f5'); box(79, 56, 2, 17, '#9aa3ad');                                           // 입구(바닥까지)
     t.base(74);
     return t.c;
   },
