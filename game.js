@@ -33,7 +33,8 @@ function today(min) {
 // keepalive: 새로고침·창 닫기로 페이지가 사라지는 중에도 요청이 끝까지 감
 const saveProgress = () => {
   if (!clock.ready) return;
-  const body = JSON.stringify({ minutes: Math.floor(clock.min), place: { scene: SCENE.name, x: Math.round(me.x), y: Math.round(me.y) } });
+  const at = me.sit ? me.sit.sp : me;   // 벤치에 앉아 있으면 벤치 앞(일어날 자리)을 저장
+  const body = JSON.stringify({ minutes: Math.floor(clock.min), place: { scene: SCENE.name, x: Math.round(at.x), y: Math.round(at.y) } });
   if (body === clock.sent) return;
   clock.sent = body;
   fetch('/api/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
@@ -187,15 +188,48 @@ talkBox.addEventListener('click', () => {   // 대화창 누르기(또는 E·Ent
 function interact() {
   if (!talkBox.hidden) return talkBox.click();   // 휴대폰 E 버튼
   if (fade) return;
+  if (me.sit) { if (me.sit.phase === 'on') standUp(performance.now()); return; }   // 앉아 있으면 E = 일어나기
   const sp = nearSpot(me.x, me.y);
   if (!sp) return;
   held.clear();
+  if (sp.type === 'seat') return sitDown(sp);
   if (sp.type === 'door') return void (fade = { t0: performance.now(), sp, done: false });
   if (sp.type === 'exit' && !me.basicUI) return notify('안내소에서 기본 UI를 받아야 도시로 갈 수 있어요!');   // 기본 UI 없이는 못 떠남
   if (sp.type === 'exit') return window.askLeave(() => { fade = { t0: performance.now(), sp, done: false }; });   // 튜토리얼 떠나기: 확인 창에서 "떠나기"를 골라야 감
   face(sp.npc, me.x - sp.npc.x, me.y - sp.npc.y);   // NPC가 나를 봄
   talk = { npc: sp.npc, i: 0 };
   say(); talkBox.hidden = false;
+}
+
+// ===== 벤치에 앉기 =====
+// 앉기(in): 벤치 앞에서 자리로 폴짝 뛰어 올라앉음 / 앉아 있기(on): 숨 쉬듯 들썩이고 발을 흔듦 / 일어나기(out): 벤치 앞으로 폴짝 내려옴
+// 앉은 자리는 다른 사람이 못 앉음(sp.taken). 일어나기: E 또는 방향키
+const SIT_TIME = 280;   // 폴짝 뛰는 시간(ms)
+function sitDown(sp) {
+  sp.taken = me;
+  me.sit = { sp, phase: 'in', t0: performance.now(), from: { x: me.x, y: me.y }, to: { x: sp.x, y: sp.sitY } };
+  me.moving = false;
+}
+function standUp(now) {
+  const st = me.sit;
+  Object.assign(st, { phase: 'out', t0: now, from: { x: me.x, y: me.y }, to: { x: st.sp.x, y: st.sp.y } });
+}
+function updateSit(now) {
+  me.pose = null; me.swing = 0; me.bob = 0;
+  const st = me.sit;
+  if (!st) return;
+  if (st.phase === 'on') {   // 앉아 있는 동안: 발을 번갈아 흔들고(0.45초), 몸이 1칸씩 들썩임(0.9초)
+    me.pose = 'sit'; me.swing = Math.floor(now / 450) % 2 + 1; me.bob = Math.floor(now / 900) % 2;
+    return;
+  }
+  const p = Math.min(1, (now - st.t0) / SIT_TIME), e = p * p * (3 - 2 * p);   // 부드럽게 시작·끝
+  me.x = st.from.x + (st.to.x - st.from.x) * e;
+  me.y = st.from.y + (st.to.y - st.from.y) * e - Math.sin(p * Math.PI) * 10;   // 폴짝: 가운데서 10픽셀 위로
+  me.dir = 's'; me.left = false;   // 앉을 때는 정면을 봄
+  if (st.phase === 'in' ? p > 0.6 : p < 0.4) me.pose = 'sit';   // 뛰는 중간에 앉은 모양으로 바뀜
+  if (p < 1) return;
+  if (st.phase === 'in') st.phase = 'on';
+  else { st.sp.taken = null; me.sit = null; me.pose = null; saveProgress(); }
 }
 
 // ===== 화면 크기: 캔버스 해상도를 실제 픽셀에 맞춰 흐리지 않게 =====
@@ -210,8 +244,8 @@ const pixelCanvas = (w, h) => Object.assign(document.createElement('canvas'), { 
 
 // 캐릭터 한 장: 부위를 차례로 겹침. 차림·방향·걸음이 같으면 다시 만들지 않고 저장해 둔 것을 씀
 const spriteCache = new Map();
-function sprite(look, dir, step) {   // step: 0 = 서 있음, 1·2 = 걸음 (왼다리·오른다리 올림)
-  const key = JSON.stringify(look) + dir + step;
+function sprite(look, dir, step, pose) {   // step: 0 = 서 있음, 1·2 = 걸음 (왼다리·오른다리 올림) / pose 'sit' = 앉은 모양
+  const key = JSON.stringify(look) + dir + step + pose;
   if (spriteCache.has(key)) return spriteCache.get(key);
   const c = pixelCanvas(SPRITE.w, SPRITE.h), g = c.getContext('2d');
   const pal = {
@@ -229,7 +263,11 @@ function sprite(look, dir, step) {   // step: 0 = 서 있음, 1·2 = 걸음 (왼
     art.rows.forEach((row, i) => [...row].forEach((ch, x) => {
       if (!pal[ch]) return;
       let y = art.at + i;
-      if (y >= SPRITE.legsFrom && step && (x < SPRITE.w / 2) === (step === 1)) y -= 1;   // 걸음: 한쪽 다리 1칸 올림
+      if (pose === 'sit') {   // 앉음: 몸은 1칸 내려앉고, 다리 윗줄은 몸에 묻혀 발만 보임
+        if (y < SPRITE.legsFrom) y += 1;
+        else if (y === SPRITE.legsFrom) return;
+      }
+      if (y >= SPRITE.legsFrom && step && (x < SPRITE.w / 2) === (step === 1)) y -= 1;   // 걸음(앉으면 발 흔들기): 한쪽 다리 1칸 올림
       g.fillStyle = pal[ch];
       g.fillRect(x, y, 1, 1);
     }));
@@ -259,13 +297,15 @@ function drawThing(t, cam) {
 }
 function drawPlayer(p, cam, now) {
   const k = S * SPRITE.scale;   // 캐릭터 픽셀 1칸 = k px
-  const step = p.moving ? 1 + (Math.floor(now / 160) % 2) : 0;
-  const img = sprite(p.look, p.dir, step);
+  const step = p.moving ? 1 + (Math.floor(now / 160) % 2) : p.swing || 0;
+  const img = sprite(p.look, p.dir, step, p.pose);
   const f = toScreen(p.x, p.y), x = Math.round(f.x - cam.x), y = Math.round(f.y - cam.y);   // 발밑 자리
-  ctx.fillStyle = 'rgba(0, 0, 0, .22)';   // 그림자
-  ctx.beginPath(); ctx.ellipse(x, y, SPRITE.w / 3 * k, SPRITE.w / 9 * k, 0, 0, Math.PI * 2); ctx.fill();
+  if (!p.sit) {   // 그림자 (벤치에 앉아 있으면 벤치 그림자로 충분)
+    ctx.fillStyle = 'rgba(0, 0, 0, .22)';
+    ctx.beginPath(); ctx.ellipse(x, y, SPRITE.w / 3 * k, SPRITE.w / 9 * k, 0, 0, Math.PI * 2); ctx.fill();
+  }
   ctx.save();
-  ctx.translate(x, y - SPRITE.foot * k);   // 발바닥 줄이 발밑 자리에 오게
+  ctx.translate(x, y - SPRITE.foot * k + (p.bob || 0) * k);   // 발바닥 줄이 발밑 자리에 오게 (앉아서 들썩이면 1칸 아래)
   if (p.left) ctx.scale(-1, 1);           // 왼쪽을 볼 때는 좌우 뒤집기
   ctx.drawImage(img, -SPRITE.w / 2 * k, 0, SPRITE.w * k, SPRITE.h * k);
   ctx.restore();
@@ -282,10 +322,10 @@ function drawName(p, cam) {
 // E 표시: 가까운 문·NPC 위에 자판 모양 "E" + 할 일 (들어가기·나가기·대화)
 function drawPrompt(sp, cam) {
   // NPC: 그 NPC 이름표 바로 위 / 도시로 떠나기: 내 캐릭터 이름표 바로 위 / 문: 정해 둔 자리(px, py)
-  const who = sp.type === 'npc' ? sp.npc : sp.type === 'exit' ? me : null;
+  const who = sp.type === 'npc' ? sp.npc : sp.type === 'exit' || sp.type === 'stand' ? me : null;
   const x = Math.round((who ? who.x : sp.px) * S - cam.x);
   const y = who ? Math.round(who.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8 - 32 : Math.round(sp.py * S - cam.y);
-  const label = sp.type === 'npc' ? '대화' : sp.type === 'exit' ? '도시로 떠나기' : sp.to === 'field' ? '나가기' : '들어가기';
+  const label = { npc: '대화', exit: '도시로 떠나기', seat: '앉기', stand: '일어나기' }[sp.type] || (sp.to === 'field' ? '나가기' : '들어가기');
   ctx.font = '14px Galmuri14, "Malgun Gothic", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   const w = 26 + 6 + ctx.measureText(label).width + 10, viewW = cv.width / (devicePixelRatio || 1);
   const left = Math.max(8, Math.min(viewW - w - 8, x - Math.round(w / 2)));   // 화면 끝에서도 잘리지 않게
@@ -428,6 +468,11 @@ function frame(now) {
   if (fade && now - fade.t0 >= FADE * 2) fade = null;
   const busy = fade || !talkBox.hidden || !document.getElementById('leaveWrap').hidden;   // 장면을 바꾸거나 대화하는 동안은 못 걸음
   let vx = busy ? 0 : stick.x + held.has('R') - held.has('L'), vy = busy ? 0 : stick.y + held.has('D') - held.has('U');
+  if (me.sit) {   // 벤치: 앉아 있을 때 방향키를 누르면 일어남. 앉는 중·일어나는 중·앉아 있는 동안은 못 걸음
+    if (me.sit.phase === 'on' && Math.hypot(vx, vy) > 0.1) standUp(now);
+    vx = vy = 0;
+  }
+  updateSit(now);
   const len = Math.hypot(vx, vy);
   if (len > 1) { vx /= len; vy /= len; }   // 대각선도 같은 빠르기
   if (me.moving && len <= 0.1) saveProgress();   // 걷다가 멈추면 바로 저장
@@ -453,12 +498,12 @@ function frame(now) {
   drawShadows(ctx, S, cam);   // 물건 그림자 (바닥 위, 물건 아래)
   // 건물·나무·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
   // 바닥 무늬(맨홀·주차 P)는 맨 먼저 → 무엇에든 가려짐
-  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), { y: me.y, draw: () => drawPlayer(me, cam, now) }];
+  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), { y: me.sit ? me.sit.sp.by + 1 : me.y, draw: () => drawPlayer(me, cam, now) }];   // 앉아 있으면 벤치보다 앞에 그림
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
   drawClocks(cam);
   drawSky(cam, W, H, dt, now);
   NPCS.forEach(n => drawName(n, cam)); drawName(me, cam);
-  const sp = !busy && nearSpot(me.x, me.y);
+  const sp = !busy && (me.sit ? me.sit.phase === 'on' && { type: 'stand' } : nearSpot(me.x, me.y));
   if (sp) drawPrompt(sp, cam);
   if (fade) {   // 검은 화면으로 어두워졌다 밝아짐
     const t = (now - fade.t0) / FADE;

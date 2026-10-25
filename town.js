@@ -42,8 +42,13 @@ const SCENES = {
   field: makeScene('field', Array.from({ length: 24 }, (_, y) => [...'g'.repeat(40)].map((k, x) => ((y === 14 || y === 15) && x <= 20) || ((y === 12 || y === 13) && (x === 19 || x === 20)) ? 'l' : k).join('')),
     { x: 20 * TILE, y: 15 * TILE }, ({ place, spot }) => {
     place('house', 0, 17, 9, 6, 3);
-    // 길가 벤치 두 개 (2칸)
-    place('bench', 0, 9, 12, 2, 1); place('bench', 0, 25, 12, 2, 1);
+    // 길가 벤치 두 개 (2칸). 벤치마다 왼쪽·오른쪽 두 자리 → 앞에서 E로 앉음
+    const bench = (x, y) => {
+      place('bench', 0, x, y, 2, 1);
+      const cx = (x + 1) * TILE, by = (y + 1) * TILE;   // 벤치 가운데, 발밑(앞쪽 끝)
+      for (const side of [-1, 1]) spot({ type: 'seat', x: cx + side * 16, y: by + 12, px: cx + side * 16, py: by - 62, r: 26, sitY: by - 14, by });
+    };
+    bench(9, 12); bench(25, 12);
     // 원뿔 나무: 맵 가장자리와 빈 풀밭에 흩어 둠 (길·집·처음 서는 곳은 비움)
     [[3, 3], [7, 1], [11, 5], [14, 2], [27, 2], [31, 5], [35, 2], [38, 7], [33, 10], [37, 13], [29, 17], [34, 20], [38, 22],
       [24, 21], [18, 20], [12, 19], [6, 21], [2, 18], [8, 17], [15, 22], [4, 8]]
@@ -106,7 +111,7 @@ const thingsAround = () => THINGS;
 // (x, y) 픽셀 근처(보통 30픽셀, NPC는 42픽셀 안)에 E로 할 수 있는 곳이 있으면 그중 가장 가까운 것
 function nearSpot(x, y) {
   let best = null, bd = Infinity;
-  for (const sp of SPOTS) { const d = Math.hypot(sp.x - x, sp.y - y); if (d < (sp.r || 30) && d < bd) { bd = d; best = sp; } }
+  for (const sp of SPOTS) { if (sp.taken) continue; const d = Math.hypot(sp.x - x, sp.y - y); if (d < (sp.r || 30) && d < bd) { bd = d; best = sp; } }   // 누가 앉은 자리는 빼고
   return best;
 }
 
