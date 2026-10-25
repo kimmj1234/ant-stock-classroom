@@ -21,6 +21,10 @@ function makeScene(name, ground, start, build) {
   const place = (type, v, x, y, w = 1, d = 1, block = true) => {
     if (block) for (let yy = y; yy < y + d; yy++) for (let xx = x; xx < x + w; xx++) sc.solid.add(xx + ',' + yy);
     sc.things.push({ type, v, w, d, x: (x + w / 2) * TILE, y: (y + d) * TILE });
+    if (type === 'bench') {   // 벤치(2칸)는 왼쪽·오른쪽 두 자리 → 앞에서 E로 앉음
+      const cx = (x + 1) * TILE, by = (y + 1) * TILE;   // 벤치 가운데, 발밑(앞쪽 끝)
+      for (const side of [-1, 1]) sc.spots.push({ type: 'seat', x: cx + side * 16, y: by + 12, px: cx + side * 16, py: by - 62, r: 26, sitY: by - 14, by });
+    }
   };
   const decal = (type, x, y, v = 0) => sc.things.push({ type, v, w: 1, d: 1, x: (x + 0.5) * TILE, y: (y + 1) * TILE, ground: true });   // 바닥 무늬(지나갈 수 있음)
   const deco = (type, x, y, v = 0, dy = 0) => sc.things.push({ type, v, w: 1, d: 1, x: (x + 0.5) * TILE, y: (y + 1) * TILE + dy });     // 작은 장식(지나갈 수 있음)
@@ -164,13 +168,7 @@ const SCENES = {
   field: makeScene('field', Array.from({ length: 24 }, (_, y) => [...'g'.repeat(40)].map((k, x) => ((y === 14 || y === 15) && x <= 20) || ((y === 12 || y === 13) && (x === 19 || x === 20)) ? 'l' : k).join('')),
     { x: 20 * TILE, y: 15 * TILE }, ({ place, spot }) => {
     place('house', 0, 17, 9, 6, 3);
-    // 길가 벤치 두 개 (2칸). 벤치마다 왼쪽·오른쪽 두 자리 → 앞에서 E로 앉음
-    const bench = (x, y) => {
-      place('bench', 0, x, y, 2, 1);
-      const cx = (x + 1) * TILE, by = (y + 1) * TILE;   // 벤치 가운데, 발밑(앞쪽 끝)
-      for (const side of [-1, 1]) spot({ type: 'seat', x: cx + side * 16, y: by + 12, px: cx + side * 16, py: by - 62, r: 26, sitY: by - 14, by });
-    };
-    bench(9, 12); bench(25, 12);
+    place('bench', 0, 9, 12, 2, 1); place('bench', 0, 25, 12, 2, 1);   // 길가 벤치 두 개
     // 나무: 맵 가장자리와 빈 풀밭에 네 종류(벚·은행·단풍·소나무)를 섞어 심음 (길·집·처음 서는 곳은 비움). 색 번호 = 나무마다 크기·얼룩
     const KINDS = ['cherry', 'pine', 'ginkgo', 'maple', 'cherry', 'ginkgo', 'pine', 'maple'];
     [[3, 3], [7, 1], [11, 5], [14, 2], [27, 2], [31, 5], [35, 2], [38, 7], [33, 10], [37, 13], [29, 17], [34, 20], [38, 22],
@@ -231,7 +229,7 @@ const SCENES = {
       place('bench', 0, cx - 1, cy + 2, 2, 1);
     });
     // 대로 보도에 가로등: 6칸마다 (교차로·횡단보도·골목 근처는 비움)
-    for (let x = 2; x < 80; x += 6) if ((x < 33 || x > 46) && !(x >= 14 && x <= 19) && !(x >= 60 && x <= 65)) { place('lamp', 0, x, 20); place('lamp', 0, x, 27); }
+    for (let x = 2; x < 80; x += 6) if ((x < 33 || x > 46) && !(x >= 14 && x <= 19) && !(x >= 60 && x <= 65)) { if (x !== 26) place('lamp', 0, x, 20); place('lamp', 0, x, 27); }   // (26, 20)은 회사 앞 벤치 자리라 비움
     for (let y = 2; y < 48; y += 6) if (y < 17 || y > 30) { place('lamp', 0, 36, y); place('lamp', 0, 43, y); }
   }), { marks: CITY.marks, zdir: CITY.zdir }),
   ...Object.fromEntries(HOME_LOTS.map((_, k) => ['h' + k, houseScene(k)])),   // 주택가 집 안 h0 ~ h5
