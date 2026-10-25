@@ -152,7 +152,14 @@ function googleName(b) {
 }
 const nameCheck = b => { const bad = nameProblem(b.name); return bad ? { ok: false, msg: bad } : { ok: true, msg: '사용할 수 있는 닉네임이에요.' }; };   // 입력하는 동안 화면이 물어봄
 const AUTH = { login, google: googleLogin, googleName, nameCheck };   // 로그인 전에 부르는 API
-// 생활 정보: 게임 시간(분, 처음은 3월 1일 오전 8시), 현금(원), 가방(물건 목록), 서 있던 자리(장면·픽셀 위치, 없으면 처음 자리), 능력치
+// ===== 세계 시간: 모든 사람이 같은 게임 시간을 씀 (서버가 정함) =====
+// 세계가 처음 열린 순간(epoch, 현실 시각)과 그때의 게임 시각(start = 3월 1일 08:00)을 data/world.json에 저장해 두고,
+// 지금 게임 시각 = start + 지난 현실 시간 × 3 (현실 20초 = 게임 1분). 서버가 꺼져 있어도 현실 시간을 따라 계속 흐름
+const WORLD_FILE = path.join(DATA_DIR, 'world.json');
+const world = readJSONFile(WORLD_FILE) || { epoch: Date.now(), start: 480 };
+if (!fs.existsSync(WORLD_FILE)) writeJSONFile(WORLD_FILE, world);
+const worldMinutes = (t = Date.now()) => world.start + (t - world.epoch) * 3 / 60000;
+// 생활 정보: 현금(원), 가방(물건 목록), 서 있던 자리(장면·픽셀 위치, 없으면 처음 자리), 능력치 (게임 시간은 세계 시간 하나라 계정마다 두지 않음)
 // 능력치: 체력·배고픔·기분은 게이지 0~100 (100이 가장 좋음) / 지능·근력은 레벨(1부터, 돈으로 강화 — 나중엔 공부·운동 같은 행동으로도)
 //         매력은 인기도(0부터, 메이플스토리 인기도처럼 다른 사람이 +1/-1을 줌, 마이너스도 됨)
 const STATS_START = { health: 100, hunger: 100, mood: 80, smarts: 1, strength: 1, charm: 0 };
@@ -169,7 +176,7 @@ function fameProblem(giver, giverKey, toKey, today) {
   if (last && daysBetween(last, today) < 30) return '같은 사람에게는 30일에 한 번만 줄 수 있어요.';
   return null;
 }
-const lifeOf = a => ({ minutes: a.minutes ?? 480, cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null, stats: { ...STATS_START, ...a.stats } });
+const lifeOf = a => ({ cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null, stats: { ...STATS_START, ...a.stats } });
 const SCENE_NAMES = ['field', 'home', 'city'];
 // ===== 함께 돌아다니기(멀티플레이) =====
 // 접속한 사람마다(로그인 세션마다) 마지막 자리를 메모리에 두고, 같은 장면에 있는 다른 사람들 목록을 0.1초마다 실시간 연결로 보냄.
@@ -243,7 +250,7 @@ http.createServer(async (req, res) => {
     if (name === 'me') {
       // 로그인 전은 정상 상황이라 200 + auth:false (브라우저 콘솔에 빨간 오류가 남지 않게)
       // guideSeen: 게임 조작 안내 창을 이미 봤는지 (처음 한 번만 띄움) / tutorialDone: 튜토리얼 공간을 떠났는지 (떠나면 다시 못 돌아감) / basicUI: 안내원에게 기본 UI를 받았는지
-      return json(res, 200, key && accounts[key] ? { ok: true, me: { name: accounts[key].name, guideSeen: !!accounts[key].guideSeen, tutorialDone: !!accounts[key].tutorialDone, basicUI: !!accounts[key].basicUI, life: lifeOf(accounts[key]) } } : { ok: false, auth: false, msg: '로그인이 필요해요.' });
+      return json(res, 200, key && accounts[key] ? { ok: true, me: { name: accounts[key].name, guideSeen: !!accounts[key].guideSeen, tutorialDone: !!accounts[key].tutorialDone, basicUI: !!accounts[key].basicUI, life: lifeOf(accounts[key]), world: worldMinutes() } } : { ok: false, auth: false, msg: '로그인이 필요해요.' });
     }
     // guideSeen: 조작 안내 창을 닫았음 → 다음부터 안 띄움 / tutorialDone: 튜토리얼을 떠났음 → 다음부터 도시에서 시작 / basicUI: 기본 UI를 받았음
     if (name === 'guideSeen' || name === 'tutorialDone' || name === 'basicUI') {
@@ -286,15 +293,13 @@ http.createServer(async (req, res) => {
       writeJSONFile(ACCOUNTS_FILE, accounts);
       return json(res, 200, { ok: true, charm: target.stats.charm });
     }
-    if (name === 'progress') {   // 게임 시간·서 있던 자리 저장 (화면이 20초마다·장면을 바꿀 때·페이지를 떠날 때 보냄)
+    if (name === 'progress') {   // 서 있던 자리 저장 (화면이 멈출 때·장면을 바꿀 때·5초마다·페이지를 떠날 때 보냄)
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
-      const a = accounts[key], m = b.minutes, p = b.place;
-      if (!Number.isInteger(m) || m < 0 || m > 1e9) return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });
-      if (m > lifeOf(a).minutes) a.minutes = m;   // 시간은 앞으로만 감
+      const a = accounts[key], p = b.place;
       // 자리: 아는 장면 + 0~5000 사이 숫자만. 튜토리얼을 떠난 계정은 도시 쪽 자리만 받음(다시 못 돌아가게)
       const inRange = v => Number.isFinite(v) && v >= 0 && v <= 5000;
-      if (p && SCENE_NAMES.includes(p.scene) && inRange(p.x) && inRange(p.y) && !(a.tutorialDone && p.scene !== 'city')) a.place = { scene: p.scene, x: Math.round(p.x), y: Math.round(p.y) };
-      writeJSONFile(ACCOUNTS_FILE, accounts);
+      if (!p || !SCENE_NAMES.includes(p.scene) || !inRange(p.x) || !inRange(p.y)) return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });
+      if (!(a.tutorialDone && p.scene !== 'city')) { a.place = { scene: p.scene, x: Math.round(p.x), y: Math.round(p.y) }; writeJSONFile(ACCOUNTS_FILE, accounts); }
       return json(res, 200, { ok: true });
     }
     return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });

@@ -8,9 +8,9 @@ const SPEED = 240;                      // 화면에서 1초에 걷는 거리(px
 const me = { name: '', x: START.x, y: START.y, look: DEFAULT_LOOK, dir: 'se', left: false, moving: false };   // dir: 보는 방향(sprites.js의 s·se·e·ne·n), left: 좌우 뒤집기
 let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). 매 프레임 화면이 맵으로 꽉 차게 정함
 
-// ===== 게임 시간: 현실 1시간 = 게임 3시간 (현실 20초 = 게임 1분, 게임 하루 = 현실 8시간) =====
+// ===== 게임 시간: 현실 1시간 = 게임 3시간 (현실 20초 = 게임 1분, 게임 하루 = 현실 8시간) — 모든 사람이 같은 세계 시간 =====
+// 서버가 정한 세계 시각을 접속할 때 받아서(/api/me의 world), 그 뒤로는 이 컴퓨터의 시계로 흘려 보냄 → 모두 같은 시각·날씨. 창을 열어도 멈추지 않음
 // 달력은 실제와 같음: 게임 하루 = 달력 하루, 1년 365일, 처음은 3월 1일 오전 8시. 계절은 달로 정함(봄 3~5월, 여름 6~8월, 가을 9~11월, 겨울 12~2월)
-// 창(메뉴·안내·가방 등)이 떠 있는 동안은 멈춤. 서버에 저장되어 이어짐
 const DAY = 1440, TIME_SPEED = 3;   // 현실 1초에 게임 3초
 const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 const SEASONS = [['봄', '#f5a3b5'], ['여름', '#7ed36a'], ['가을', '#f2a03d'], ['겨울', '#bfe3f5']];
@@ -63,7 +63,7 @@ function temperature(min) {
   return Math.round(mean + wet + (hash(day, 91) - 0.5) * 4 + swing * k * Math.cos(2 * Math.PI * (m - 900) / DAY));
 }
 const WX_NAME = { sun: '맑음', cloud: '흐림', rain: '비', snow: '눈', storm: '태풍', dust: '황사' };
-const clock = { min: 480, sent: '', ready: false };   // sent: 마지막으로 서버에 보낸 시간·자리
+const clock = { min: 480, base: 480, baseAt: 0, sent: '', ready: false };   // base: 받은 세계 시각(분), baseAt: 받은 순간, sent: 마지막으로 보낸 자리
 function today(min) {
   const day = Math.floor(min / DAY), year = Math.floor(day / 365) + 1, [month, date] = monthDay(doyOf(day));
   const season = [3, 3, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3][month - 1];   // 1·2월 겨울, 3~5월 봄, 6~8월 여름, 9~11월 가을, 12월 겨울
@@ -80,7 +80,7 @@ function today(min) {
 const saveProgress = () => {
   if (!clock.ready) return;
   const at = me.sit ? me.sit.sp : me;   // 벤치에 앉아 있으면 벤치 앞(일어날 자리)을 저장
-  const body = JSON.stringify({ minutes: Math.floor(clock.min), place: { scene: SCENE.name, x: Math.round(at.x), y: Math.round(at.y) } });
+  const body = JSON.stringify({ place: { scene: SCENE.name, x: Math.round(at.x), y: Math.round(at.y) } });
   if (body === clock.sent) return;
   clock.sent = body;
   fetch('/api/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
@@ -198,7 +198,8 @@ const onAuth = who => {
   if (!who) return location.replace('/#login');
   me.name = who.name;
   me.basicUI = !!who.basicUI;   // 안내원에게 기본 UI를 받았는지 → 받았으면 화면 테두리에 기본 UI
-  if (who.life) { clock.min = who.life.minutes; me.cash = who.life.cash; me.bag = who.life.bag; me.stats = who.life.stats; clock.ready = true; }
+  if (who.world != null) { clock.base = clock.min = who.world; clock.baseAt = performance.now(); }
+  if (who.life) { me.cash = who.life.cash; me.bag = who.life.bag; me.stats = who.life.stats; clock.ready = true; }
   showHud();
   startLive();
   // 서 있던 자리에서 이어서 시작. 튜토리얼을 이미 떠났으면 튜토리얼 쪽 자리는 무시하고 도시 입구로(다시 못 들어감)
@@ -607,7 +608,7 @@ function face(p, vx, vy) {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (clock.ready && !document.querySelector('.guide-wrap:not([hidden])')) clock.min += dt * TIME_SPEED / 60;   // 게임 시간: 현실 1초에 게임 3초 (창이 떠 있으면 멈춤)
+  if (clock.ready) clock.min = clock.base + (now - clock.baseAt) / 1000 * TIME_SPEED / 60;   // 세계 시간: 받은 시각 + 지난 현실 시간 × 3
   updateHud();
   // 계절마다 바뀌는 그림 (town.js): 나무, 잔디·흙길(눈 오는 날은 눈이 쌓이고, 다음 날까지 녹다 남은 눈)
   const td = today(clock.min), tday = Math.floor(clock.min / DAY);
