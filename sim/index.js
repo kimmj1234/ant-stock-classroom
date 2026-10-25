@@ -31,11 +31,11 @@ function createSim({ file, read, write, toMarket = () => {}, quote = () => null 
     },
     // 그 장면(지역)에서 밖을 걸어 다니는 사람들
     visible(scene, nowMin) { const r = regionOfScene[scene]; return r ? people.visible(S(), r, Math.floor(nowMin)) : []; },
-    talk(id, nowMin) {
+    talk(id, nowMin, who = 'guest') {
       const n = S().people.list[id];
       if (!n) return null;
       const near = kernel.state.news.filter(x => x.region === n.region || x.scale !== 'local').slice(0, 4), news = near[id % Math.max(1, near.length)];   // 사람마다 들은 소문이 다름
-      return people.talk(S(), id, nowMin, news?.text, quote);
+      return people.talk(S(), id, nowMin, news?.text, quote, who);
     },
     // 휴대폰 "세상" 탭: 나라 통계 · 지역별 · 사건 소식 · 시스템 건강
     society() {

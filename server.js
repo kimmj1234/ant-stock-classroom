@@ -295,7 +295,8 @@ http.createServer(async (req, res) => {
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
       const now = worldMinutes();
       if (name === 'people') return json(res, 200, { ok: true, people: SCENE_NAMES.includes(b.scene) ? sim.visible(b.scene, now) : [] });
-      if (name === 'person') { const t = Number.isInteger(b.id) && sim.talk(b.id, now); return t ? json(res, 200, { ok: true, ...t }) : json(res, 404, { ok: false, msg: '그 사람은 지금 없어요.' }); }
+      // person: 누가 말을 걸었는지(key)도 넘겨 NPC가 그 사람을 기억함
+      if (name === 'person') { const t = Number.isInteger(b.id) && sim.talk(b.id, now, key); return t ? json(res, 200, { ok: true, ...t }) : json(res, 404, { ok: false, msg: '그 사람은 지금 없어요.' }); }
       return json(res, 200, { ok: true, ...sim.society() });
     }
     if (name === 'market') {   // 시세판: 장 열림 여부 · 다음 개장 · 회사별 시세 · 뉴스 · 내 돈과 가진 주식

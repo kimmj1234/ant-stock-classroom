@@ -348,7 +348,7 @@ const SCENES = {
     place('mart', 0, MART_AT[0], MART_AT[1], 12, 3); deco('cart', 53, 25); deco('cart', 53, 26);
     spot({ type: 'door', x: MART_DOOR.x, y: MART_DOOR.y + 10, px: MART_DOOR.x, py: MART_DOOR.y - 64, to: 'mart', at: { x: 10 * TILE, y: 10 * TILE } });
     // --- 동쪽 도심: 회사 빌딩 8동 · 시청 · 은행 · 분수 광장 ---
-    [62, 69, 76, 83].forEach((x, k) => { place('office', k, x, 4, 6, 3); place('office', k + 4, x, 15, 6, 3); });
+    [62, 69, 76, 83].forEach((x, k) => { place('office', 100 + k, x, 4, 6, 3); place('office', k + 4, x, 15, 6, 3); });   // 맨 위 줄은 낮은 빌딩(간판이 맵 위로 안 잘리게)
     place('cityhall', 0, 62, 24, 10, 3); place('bank', 0, 74, 24, 8, 3); place('atm', 0, 83, 26);
     place('fountain', 0, 86, 23, 3, 2); place('bench', 0, 89, 26, 2, 1);
     trees([[68, 11], [75, 11], [82, 11], [89, 11]], ['ginkgo'], 90);
@@ -1204,18 +1204,20 @@ const ARTS = {
     return t.c;
   },
   office(v) {   // 회사(가로 6칸, 키 8칸): 유리 커튼월 격자 · 꼭대기 회사 이름 간판과 로고 · 1층 높은 유리 로비와 회전문 (색·이름·로고는 COMPANIES[v])
-    const W = 96, H = 128, t = bTools(W, H), { box } = t, [name, frame, glassC, logo] = COMPANIES[v % COMPANIES.length];
-    t.wall(2, 4, W - 4, 120, frame);
+    // v가 100 이상이면 한 층 낮은 빌딩(키 7칸) — 맵 맨 위 줄처럼 위가 좁은 자리에서 간판이 잘리지 않게
+    const low = v >= 100 ? 16 : 0; v %= 100;
+    const W = 96, H = 128 - low, t = bTools(W, H), { box } = t, [name, frame, glassC, logo] = COMPANIES[v % COMPANIES.length];
+    t.wall(2, 4, W - 4, 120 - low, frame);
     box(3, 5, W - 6, 18, '#22303f'); t.center(name, 54, 9, '#ffffff');
     const shape = v % 4;   // 로고: 네모 · 동그라미 · 세모 · 마름모
     for (let r = 0; r < 10; r++) {
       const half = shape === 0 ? 5 : shape === 1 ? Math.round(Math.sqrt(25 - (r - 4.5) ** 2)) : shape === 2 ? Math.ceil((r + 1) / 2) : Math.ceil(5 - Math.abs(r - 4.5));
       box(13 - half, 9 + r, half * 2, 1, logo);
     }
-    for (let y = 27; y < 90; y += 10) for (let x = 6; x < 88; x += 12) t.glass(x, y, 10, 8, glassC, hash(x, y, v + 4) < 0.55);   // 유리 칸 (밤엔 절반쯤 불 켜진 사무실)
-    t.glass(8, 102, 80, 21, '#bfe3f5', true); for (let x = 18; x < 88; x += 10) box(x, 102, 1, 21, frame);
-    box(40, 104, 16, 19, '#9fb6c8'); box(47, 104, 2, 19, frame);                                                  // 회전문
-    t.base(124);
+    for (let y = 27; y < 90 - low; y += 10) for (let x = 6; x < 88; x += 12) t.glass(x, y, 10, 8, glassC, hash(x, y, v + 4) < 0.55);   // 유리 칸 (밤엔 절반쯤 불 켜진 사무실)
+    t.glass(8, 102 - low, 80, 21, '#bfe3f5', true); for (let x = 18; x < 88; x += 10) box(x, 102 - low, 1, 21, frame);
+    box(40, 104 - low, 16, 19, '#9fb6c8'); box(47, 104 - low, 2, 19, frame);                                      // 회전문
+    t.base(124 - low);
     return t.c;
   },
   school() {   // 학교(가로 10칸, 키 7칸): 가운데 시계탑 · 크림 벽에 초록 띠 · 3층 창문 줄 · 현관 위 "학교" 현판

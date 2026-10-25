@@ -697,20 +697,28 @@ function drawPlayer(p, cam, now, noShadow) {
   ctx.restore();
 }
 // 머리 위 닉네임: 나무·집에 가려지지 않게 맨 마지막에 그림
-function drawName(p, cam) {
+// npc면 이름 위에 작은 파란 "NPC" 꼬리표 → 다른 사람(플레이어)과 구분
+function drawName(p, cam, npc) {
   const y = Math.round(p.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8;
   ctx.font = 'bold 14px "Malgun Gothic", sans-serif'; ctx.textAlign = 'center';
   const half = ctx.measureText(p.name).width / 2 + 4, viewW = cv.width / (devicePixelRatio || 1);
   const x = Math.max(half, Math.min(viewW - half, Math.round(p.x * S - cam.x)));   // 화면 끝에서도 잘리지 않게
   ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.strokeText(p.name, x, y);
   ctx.fillStyle = '#000'; ctx.fillText(p.name, x, y);
+  if (npc) {
+    ctx.font = 'bold 10px "Malgun Gothic", sans-serif';
+    const w = ctx.measureText('NPC').width + 8, ty = y - 26;
+    ctx.fillStyle = '#1e1b3a'; ctx.fillRect(Math.round(x - w / 2) - 1, ty - 1, w + 2, 14);
+    ctx.fillStyle = '#3d7fd6'; ctx.fillRect(Math.round(x - w / 2), ty, w, 12);
+    ctx.fillStyle = '#ffffff'; ctx.fillText('NPC', x, ty + 10);
+  }
 }
 // E 표시: 가까운 문·NPC 위에 자판 모양 "E" + 할 일 (들어가기·나가기·대화)
 function drawPrompt(sp, cam) {
   // NPC: 그 NPC 이름표 바로 위 / 도시로 떠나기: 내 캐릭터 이름표 바로 위 / 문: 정해 둔 자리(px, py)
   const who = sp.type === 'npc' || sp.type === 'shop' ? sp.npc : sp.type === 'exit' || sp.type === 'stand' ? me : null;
   const x = Math.round((who ? who.x : sp.px) * S - cam.x);
-  const y = who ? Math.round(who.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8 - 32 : Math.round(sp.py * S - cam.y);
+  const y = who ? Math.round(who.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8 - 32 - (who !== me ? 14 : 0) : Math.round(sp.py * S - cam.y);   // NPC는 꼬리표 위로
   const label = { npc: '대화', shop: '물건 사기', terminal: '표 사기', exit: '한가람으로 떠나기', seat: '앉기', stand: '일어나기' }[sp.type] || (sp.out ? '나가기' : '들어가기');
   ctx.font = '14px Galmuri14, "Malgun Gothic", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   const w = 26 + 6 + ctx.measureText(label).width + 10, viewW = cv.width / (devicePixelRatio || 1);
@@ -762,14 +770,16 @@ function drawOverSky(cam, now) {
     const x = p.x * S - cam.x, y = p.y * S - cam.y, r = [x - 8 * k, y - 17 * k, x + 8 * k, y + k];
     if (litRects.some(l => l[4] < footY(p) && r[0] < l[2] && r[2] > l[0] && r[1] < l[3] && r[3] > l[1])) again(p, 1);
   }
-  // 내 몸 가운데·머리 자리가 내 발밑보다 앞(아래)에 서 있는 물건 그림에 덮였는지
-  const kk = S * ART, mx = me.x * S - cam.x, my = me.y * S - cam.y, pts = [[mx, my - 8 * k], [mx, my - 13 * k]];
-  const hidden = THINGS.some(t => {
-    if (t.ground || t.y <= footY(me) + 2) return false;
+  if (occluded(me, cam)) again(me, 0.55);
+}
+// 그 사람의 몸 가운데·머리 자리가 발밑보다 앞(아래)에 서 있는 물건 그림(건물·나무)에 덮였는지
+function occluded(p, cam) {
+  const k = S * SPRITE.scale, kk = S * ART, px0 = p.x * S - cam.x, py0 = p.y * S - cam.y, pts = [[px0, py0 - 8 * k], [px0, py0 - 13 * k]], foot = p.sit ? p.sit.by + 1 : p.y;
+  return THINGS.some(t => {
+    if (t.ground || t.y <= foot + 2) return false;
     const img = thingArt(t), ox = t.x * S - cam.x - img.width * kk / 2, oy = t.y * S - cam.y - img.height * kk;
-    return pts.some(([px, py]) => opaqueAt(img, Math.floor((px - ox) / kk), Math.floor((py - oy) / kk)));
+    return pts.some(([x, y]) => opaqueAt(img, Math.floor((x - ox) / kk), Math.floor((y - oy) / kk)));
   });
-  if (hidden) again(me, 0.55);
 }
 function drawSky(cam, W, H, dt, now) {
   const t = today(clock.min), m = clock.min % DAY, out = !SCENE.indoor;
@@ -840,7 +850,7 @@ function drawSky(cam, W, H, dt, now) {
         const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
         g.addColorStop(0, `rgba(255, 200, 110, ${0.28 * lit})`); g.addColorStop(1, 'rgba(255, 200, 110, 0)');
         ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
-        litRects.push([cx - r, cy - r, cx + r, cy + r, t.y]);
+        litRects.push([ox + x * k, oy + y * k, ox + (x + w) * k, oy + (y + h) * k, t.y]);   // 판정은 창문 자리만 (넓게 번지는 빛 둘레로 하면 뒤쪽 사람까지 앞에 그려짐)
         ctx.fillStyle = `rgba(255, 214, 120, ${0.9 * lit})`; ctx.fillRect(Math.round(ox + x * k), Math.round(oy + y * k), w * k, h * k);
         ctx.fillStyle = `rgba(255, 240, 190, ${0.9 * lit})`; ctx.fillRect(Math.round(ox + x * k), Math.round(oy + y * k), w * k, k);   // 위쪽 한 줄은 더 밝게
       }
@@ -940,7 +950,8 @@ function frame(now) {
   drawClocks(cam);
   drawSky(cam, W, H, dt, now);
   drawOverSky(cam, now);
-  NPCS.forEach(n => drawName(n, cam)); walkers.forEach(w => drawName(w, cam)); others.forEach(o => drawName(o, cam)); drawName(me, cam);
+  // 이름표: 건물 뒤에 완전히 가려진 걷는 NPC는 이름표도 숨김 (다른 플레이어·나는 늘 보임)
+  NPCS.forEach(n => drawName(n, cam, true)); walkers.forEach(w => { if (!occluded(w, cam)) drawName(w, cam, true); }); others.forEach(o => drawName(o, cam)); drawName(me, cam);
   const sp = !busy && (me.sit ? me.sit.phase === 'on' && { type: 'stand' } : nearSpot(me.x, me.y)), wk = !busy && !me.sit && nearWalker();
   if (wk && (!sp || Math.hypot(wk.x - me.x, wk.y - me.y) < Math.hypot(sp.x - me.x, sp.y - me.y))) drawPrompt({ type: 'npc', npc: wk }, cam);
   else if (sp) drawPrompt(sp, cam);
