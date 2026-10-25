@@ -252,6 +252,44 @@ function drawPrompt(sp, cam) {
   ctx.textBaseline = 'alphabetic';
 }
 
+// ===== 하늘: 게임 시간·날씨에 따라 맵 위에 덧그림 (이름표·E 표시·기본 UI는 그 위라 늘 잘 보임) =====
+//   밤: 오후 5시부터 어두워져 8시~새벽 4시 가장 어둡고 오전 7시까지 밝아짐. 해 질 녘(오후 6시 무렵)엔 주황빛
+//   흐림·비·눈: 바깥이 조금 흐려짐. 비·눈은 화면에 알갱이가 내림(걸으면 맵과 같이 밀려 땅에 내리는 것처럼 보임)
+//   집 안: 비·눈은 안 보이고, 밤에도 불이 켜져 있어 조금만 어두움
+const drops = [];
+let skyCam = null;
+function drawSky(cam, W, H, dt, now) {
+  const t = today(clock.min), m = clock.min % DAY, out = SCENE.name !== 'home';
+  const ramp = (a, b) => Math.min(1, Math.max(0, (m - a) / (b - a)));
+  const night = (m < 240 ? 1 : m < 420 ? 1 - ramp(240, 420) : m < 1020 ? 0 : ramp(1020, 1200)) * (out ? 0.55 : 0.2);
+  const dusk = out ? Math.max(0, 1 - Math.abs(m - 1080) / 90) * 0.14 : 0;
+  const gloom = out ? { cloud: 0.08, rain: 0.16, snow: 0.06 }[t.wx] || 0 : 0;
+  const fill = color => { ctx.fillStyle = color; ctx.fillRect(0, 0, W, H); };
+  if (gloom) fill(`rgba(70, 78, 100, ${gloom})`);
+  if (dusk) fill(`rgba(255, 130, 50, ${dusk})`);
+  if (night) fill(`rgba(16, 20, 56, ${night})`);
+  // 비·눈 알갱이 (화면 넓이에 맞춰 개수를 정함)
+  const kind = out && (t.wx === 'rain' || t.wx === 'snow') ? t.wx : null;
+  const want = kind ? Math.round(W * H / (kind === 'rain' ? 5000 : 8000)) : 0;
+  while (drops.length < want) drops.push({ x: Math.random() * W, y: Math.random() * H, v: 0.7 + Math.random() * 0.6 });
+  drops.length = want;
+  const mx = skyCam ? cam.x - skyCam.x : 0, my = skyCam ? cam.y - skyCam.y : 0;
+  skyCam = { x: cam.x, y: cam.y };
+  const wrap = (v, size) => ((v % size) + size) % size;
+  for (const d of drops) {
+    if (kind === 'rain') { d.x -= 160 * d.v * dt + mx; d.y += 760 * d.v * dt - my; }
+    else { d.x += Math.sin(now / 700 + d.v * 9) * 24 * dt - mx; d.y += 50 * d.v * dt - my; }
+    d.x = wrap(d.x, W); d.y = wrap(d.y, H);
+  }
+  if (kind === 'rain') {   // 빗줄기: 비스듬한 2픽셀 굵기 선
+    ctx.fillStyle = 'rgba(200, 220, 255, 0.55)';
+    for (const d of drops) for (let i = 0; i < 5; i++) ctx.fillRect(Math.round(d.x - i), Math.round(d.y + i * 3), 2, 3);
+  } else if (kind === 'snow') {   // 눈송이: 작은 흰 네모(가까운 것일수록 크게)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    for (const d of drops) { const z = d.v > 1 ? 4 : 3; ctx.fillRect(Math.round(d.x), Math.round(d.y), z, z); }
+  }
+}
+
 // 발밑 네모(가로 ±6, 세로 -4~0 픽셀)가 지나갈 수 없는 칸(나무·집)에 걸리는지
 function blockedAt(x, y) {
   for (const px of [x - 6, x + 6]) for (const py of [y - 4, y]) if (blockedTile(Math.floor(px / TILE), Math.floor(py / TILE))) return true;
@@ -304,6 +342,7 @@ function frame(now) {
   // 바닥 무늬(맨홀·주차 P)는 맨 먼저 → 무엇에든 가려짐
   const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), { y: me.y, draw: () => drawPlayer(me, cam, now) }];
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
+  drawSky(cam, W, H, dt, now);
   NPCS.forEach(n => drawName(n, cam)); drawName(me, cam);
   const sp = !busy && nearSpot(me.x, me.y);
   if (sp) drawPrompt(sp, cam);
