@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>나의 두번째 인생 — 도시</title>
+<title>나의 두번째 인생 — 대전</title>
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/site.css">
 <style>
@@ -108,6 +108,16 @@
   .hud-bag { left: 22px; bottom: 22px; padding: 8px; border: 0; cursor: pointer; display: grid; place-items: center; }
   .hud-bag:hover { background: #f1f0ec; }
   .hud-bag:focus-visible { outline: 3px dashed #f2c94c; outline-offset: 5px; }
+  /* 오른쪽 아래 작은 지도: 나라 전체 + 지금 있는 곳(빨간 점). 누르거나 M → 큰 지도 */
+  .hud-map { right: 22px; bottom: 22px; padding: 8px 8px 4px; border: 0; cursor: pointer; display: grid; justify-items: center; gap: 2px; }
+  .hud-map:hover { background: #f1f0ec; }
+  .hud-map:focus-visible { outline: 3px dashed #f2c94c; outline-offset: 5px; }
+  .hud-map canvas { display: block; }
+  .hud-map span { font-size: 16px; }
+  .hud-map kbd { position: absolute; right: -10px; bottom: -10px; min-width: 24px; height: 24px; font-size: 13px; }
+  .map-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: center; margin-top: 10px; font-size: 14px; }
+  .map-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 2px solid #1e1b3a; vertical-align: -1px; }
+  #mapBig { display: block; margin: 0 auto; box-shadow: 0 0 0 3px #3b2416; }
   .hud-bag kbd { position: absolute; right: -10px; bottom: -10px; min-width: 24px; height: 24px; font-size: 13px; }
   /* 가방 창: 베이지 양피지 느낌 — 진한 갈색 계단 테두리 + 밝은 안쪽 띠, 위에 걸친 제목 판, 오른쪽 위 X
      왼쪽부터 캐릭터(장비 칸 4개) | 자금 | 능력치 | 가방(쓸 수 있는 칸 + 잠긴 칸). 좁은 화면에서는 줄을 바꿔 쌓임 */
@@ -196,7 +206,8 @@
   @media (pointer: coarse) {
     .hud-cash { right: 84px; }             /* 오른쪽 위 ☰ 버튼 옆 */
     .hud-bag { bottom: 176px; left: 28px; } /* 조이스틱 위 */
-    .hud-bag kbd { display: none; }        /* 자판이 없으니 B 표시도 숨김 */
+    .hud-bag kbd, .hud-map kbd { display: none; }   /* 자판이 없으니 B·M 표시도 숨김 */
+    .hud-map { right: 28px; bottom: 140px; }   /* E 버튼 위 */
     .guide .keyboard { display: none; } .guide .touch { display: grid; }   /* 안내 창: 키보드 대신 조이스틱·E 버튼 설명 */
     .menu-btn { display: block; right: 28px; bottom: auto; top: 18px; }
     .stick { display: block; position: absolute; left: 24px; bottom: 24px; width: 120px; height: 120px; border-radius: 50%; background: rgba(0, 0, 0, .12); border: 3px solid #000; touch-action: none; }
@@ -221,6 +232,7 @@
     </div>
     <div class="hud-box hud-cash" aria-label="가진 현금"><canvas class="ico" id="hudCoin"></canvas><b id="hudCash">0</b><span>원</span></div>
     <button class="hud-box hud-bag" id="bagBtn" type="button" aria-label="가방 열기 (B)"><canvas class="ico big" id="hudBag"></canvas><kbd>B</kbd></button>
+    <button class="hud-box hud-map" id="mapBtn" type="button" aria-label="전국 지도 열기 (M)"><canvas id="mapMini"></canvas><span id="mapHere">대전</span><kbd>M</kbd></button>
   </div>
   <button class="menu-btn" id="menuBtn" type="button" aria-label="메뉴 열기">☰</button>
   <!-- 창 모드 안내 띠: 전체화면이 아니면 Ctrl+W를 막을 수 없다고 알림 -->
@@ -244,9 +256,18 @@
   <!-- 튜토리얼 떠나기 확인 창: 떠나면 다시 못 돌아옴 -->
   <div class="guide-wrap" id="leaveWrap" hidden>
     <section class="guide menu wide" role="alertdialog" aria-modal="true" aria-labelledby="leaveTitle" aria-describedby="leaveText">
-      <h2 id="leaveTitle">도시로 떠날까요?</h2>
+      <h2 id="leaveTitle">대전으로 떠날까요?</h2>
       <p class="start-text" id="leaveText">이곳은 튜토리얼 공간이에요.<br>한 번 떠나면 다시 돌아올 수 없어요!</p>
       <div class="menu-list yesno"><button type="button" class="primary" data-close="yes">떠나기</button><button type="button" data-close="no">아직 안 떠나기</button></div>
+    </section>
+  </div>
+  <!-- 전국 지도 창: 오른쪽 아래 지도나 M으로 열고, M·ESC·닫기로 닫음 -->
+  <div class="guide-wrap" id="mapWrap" hidden>
+    <section class="inv" role="dialog" aria-modal="true" aria-labelledby="mapTitle">
+      <h2 id="mapTitle">전국 지도</h2>
+      <button type="button" class="crate-x" id="mapClose" aria-label="지도 닫기">×</button>
+      <canvas id="mapBig" role="img" aria-label="한국 지도. 지금 있는 곳은 대전, 나머지 지역은 준비 중"></canvas>
+      <p class="map-legend"><span><i style="background:#e8454b"></i>지금 있는 곳 (대전)</span><span><i style="background:#ffffff"></i>갈 수 있는 곳</span><span><i style="background:#a9a6b8"></i>준비 중</span></p>
     </section>
   </div>
   <!-- 마트 창: 마트 점원 앞에서 E로 열고, ESC·닫기로 닫음 -->
@@ -335,6 +356,7 @@
 <script src="/site.js"></script>
 <script src="/sprites.js"></script>
 <script src="/town.js"></script>
+<script src="/korea.js"></script>
 <script src="/game.js"></script>
 <script>
 'use strict';
@@ -406,6 +428,18 @@
   document.addEventListener('shopready', () => { fitWin(shop); (shop.querySelector('.shop-list button:not(:disabled)') || $('shopClose')).focus(); });
   $('shopClose').addEventListener('click', closeShop);
   const closeBag = () => { bag.hidden = true; game.focus(); };
+  // 전국 지도: 작은 지도(오른쪽 아래)는 늘 보이고, 큰 지도는 화면 높이에 맞춰 키움 (korea.js)
+  const mapWrap = $('mapWrap');
+  const mapLoop = () => {
+    if (!$('hud').hidden) KOREA.draw($('mapMini'), { k: 1.1 });
+    if (!mapWrap.hidden) KOREA.draw($('mapBig'), { k: Math.max(2, Math.min((innerWidth * 0.9 - 80) / KOREA.W, (innerHeight * 0.88 - 150) / KOREA.H)), labels: true });
+    requestAnimationFrame(mapLoop);
+  };
+  requestAnimationFrame(mapLoop);
+  const openMap = () => { mapWrap.hidden = false; $('mapClose').focus(); };
+  const closeMap = () => { mapWrap.hidden = true; game.focus(); };
+  $('mapBtn').addEventListener('click', openMap);
+  $('mapClose').addEventListener('click', closeMap);
   bagBtn.addEventListener('click', openBag);
   $('bagClose').addEventListener('click', closeBag);
   // 튜토리얼 떠나기 확인 창 (game.js가 표지판 앞에서 E를 누르면 엶): 떠나기 → onYes, 아직 안 떠나기 → 게임으로
@@ -495,12 +529,18 @@
       else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); document.activeElement?.click(); }
       return;
     }
+    if (!mapWrap.hidden) {   // 지도 창: M·ESC로 닫음
+      e.stopPropagation();
+      if (['Escape', 'm', 'M'].includes(e.key)) { e.preventDefault(); closeMap(); }
+      return;
+    }
     if (!bag.hidden) {   // 가방 창: B·ESC로 닫음, 열려 있는 동안 게임에 키를 안 넘김
       e.stopPropagation();
       if (['Escape', 'b', 'B'].includes(e.key)) { e.preventDefault(); closeBag(); }
       return;
     }
     if ((e.key === 'b' || e.key === 'B') && !$('hud').hidden && menu.hidden && guide.hidden && $('talkWrap').hidden) { e.preventDefault(); e.stopPropagation(); return openBag(); }
+    if ((e.key === 'm' || e.key === 'M') && !$('hud').hidden && menu.hidden && guide.hidden && $('talkWrap').hidden) { e.preventDefault(); e.stopPropagation(); return openMap(); }
     if (!guide.hidden) {
       if (['Enter', 'Escape', ' ', 'e', 'E'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); closeGuide(); }
       return;

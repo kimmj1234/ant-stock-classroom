@@ -369,7 +369,7 @@ function interact() {
   if (sp.type === 'seat') return sitDown(sp);
   if (sp.type === 'shop') return window.openShop();   // 마트 점원 앞: 물건 사기 창
   if (sp.type === 'door') return void (fade = { t0: performance.now(), sp, done: false });
-  if (sp.type === 'exit' && !me.basicUI) return notify('안내소에서 기본 UI를 받아야 도시로 갈 수 있어요!');   // 기본 UI 없이는 못 떠남
+  if (sp.type === 'exit' && !me.basicUI) return notify('안내소에서 기본 UI를 받아야 대전으로 갈 수 있어요!');   // 기본 UI 없이는 못 떠남
   if (sp.type === 'exit') return window.askLeave(() => { fade = { t0: performance.now(), sp, done: false }; });   // 튜토리얼 떠나기: 확인 창에서 "떠나기"를 골라야 감
   face(sp.npc, me.x - sp.npc.x, me.y - sp.npc.y);   // NPC가 나를 봄
   talk = { npc: sp.npc, i: 0 };
@@ -516,7 +516,7 @@ function drawPrompt(sp, cam) {
   const who = sp.type === 'npc' || sp.type === 'shop' ? sp.npc : sp.type === 'exit' || sp.type === 'stand' ? me : null;
   const x = Math.round((who ? who.x : sp.px) * S - cam.x);
   const y = who ? Math.round(who.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8 - 32 : Math.round(sp.py * S - cam.y);
-  const label = { npc: '대화', shop: '물건 사기', exit: '도시로 떠나기', seat: '앉기', stand: '일어나기' }[sp.type] || (sp.out ? '나가기' : '들어가기');
+  const label = { npc: '대화', shop: '물건 사기', exit: '대전으로 떠나기', seat: '앉기', stand: '일어나기' }[sp.type] || (sp.out ? '나가기' : '들어가기');
   ctx.font = '14px Galmuri14, "Malgun Gothic", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   const w = 26 + 6 + ctx.measureText(label).width + 10, viewW = cv.width / (devicePixelRatio || 1);
   const left = Math.max(8, Math.min(viewW - w - 8, x - Math.round(w / 2)));   // 화면 끝에서도 잘리지 않게
