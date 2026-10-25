@@ -5,7 +5,6 @@
 // 물건은 캐릭터와 같은 굵기의 픽셀(그림 1칸 = 바닥 2픽셀)로 그림. 빛은 왼쪽 위에서 와서 그림자는 오른쪽 아래로 짐.
 const TILE = 32;                        // 바닥 한 칸(사각형)의 픽셀 크기
 const ART = 2;                          // 물건 그림 1칸 = 바닥 2픽셀 → 바닥 한 칸 = 그림 16칸
-const MAIN = [-1, -1], SIDE = [-1, -1]; // 도로를 다시 놓을 때 쓰는 대로 줄·골목 칸 범위 (지금은 도로 없음)
 // 지금 장면의 값들 (useScene이 채움)
 let SCENE, COLS, ROWS, MAP_W, MAP_H, GROUND, THINGS, SOLID, SPOTS, NPCS, START;
 const inMap = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
@@ -36,6 +35,57 @@ function makeScene(name, ground, start, build) {
   return sc;
 }
 
+// ===== 도시 맵 틀 =====
+// 가로 80칸 × 세로 48칸. 도로 목록만 적으면 보도·차도·횡단보도·차선·정지선을 저절로 깔아 줌
+//   대로(4차선, 보도 2칸): 가운데 가로(22~25줄)·세로(38~41칸) / 골목(2차선, 보도 1칸): 가로 10·36줄, 세로 16·62칸
+//   도로로 나뉜 블록 16개는 빈 부지(e) + 들어설 곳 이름표, 오른쪽 가운데 블록은 공원(도시 입구 옆)
+const CITY_ROADS = [
+  { dir: 'h', at: 22, n: 4, sw: 2 }, { dir: 'v', at: 38, n: 4, sw: 2 },
+  { dir: 'h', at: 10, n: 2, sw: 1 }, { dir: 'h', at: 36, n: 2, sw: 1 },
+  { dir: 'v', at: 16, n: 2, sw: 1 }, { dir: 'v', at: 62, n: 2, sw: 1 },
+];
+const LOT_NAMES = ['주택가', '아파트', '상가', '카페거리', '학교', '회사', '병원', '은행', '마트', '시장', '주차장', '경찰서', '도서관', '체육관', '소방서', '공원'];
+function cityPlan(W, H, roads) {
+  const g = Array.from({ length: H }, () => Array(W).fill('e'));
+  const inBand = (r, x, y, pad) => { const p = r.dir === 'h' ? y : x; return p >= r.at - pad && p < r.at + r.n + pad; };
+  const each = fn => { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) fn(x, y); };
+  each((x, y) => { if (roads.some(r => inBand(r, x, y, r.sw))) g[y][x] = '.'; });   // 보도
+  each((x, y) => { if (roads.some(r => inBand(r, x, y, 0))) g[y][x] = 'R'; });      // 차도
+  const marks = new Map(), zdir = new Map(), only = (x, y) => { const on = roads.filter(r => inBand(r, x, y, 0)); return on.length === 1 ? on[0] : null; };
+  // 횡단보도: 차도 칸이 직각으로 만나는 도로의 보도 줄 위에 있으면 (교차로 바로 옆, 보도와 보도를 이음)
+  each((x, y) => {
+    const r = g[y][x] === 'R' && only(x, y);
+    if (r && roads.some(o => o.dir !== r.dir && inBand(o, x, y, o.sw) && !inBand(o, x, y, 0))) { g[y][x] = 'Z'; zdir.set(x + ',' + y, r.dir); }
+  });
+  // 차선: 4차선 = 흰 점선·노란 중앙선(겹선)·흰 점선, 2차선 = 노란 중앙선 / 정지선: 횡단보도 바로 앞(오른쪽 통행)
+  const LANES = { h4: [['dashB'], ['yelB'], ['yelT', 'dashB'], []], h2: [['yelB'], ['yelT']], v4: [['dashR'], ['yelR'], ['yelL', 'dashR'], []], v2: [['yelR'], ['yelL']] };
+  each((x, y) => {
+    const r = g[y][x] === 'R' && only(x, y);
+    if (!r) return;
+    const lane = r.dir === 'h' ? y - r.at : x - r.at, half = lane >= r.n / 2, m = [...LANES[r.dir + r.n][lane]];
+    if (r.dir === 'h' && half && g[y][x + 1] === 'Z') m.push('stopR');       // 동쪽으로 가는 차선(아래쪽)
+    if (r.dir === 'h' && !half && g[y][x - 1] === 'Z') m.push('stopL');      // 서쪽으로 가는 차선(위쪽)
+    if (r.dir === 'v' && !half && g[y + 1]?.[x] === 'Z') m.push('stopB');    // 남쪽으로 가는 차선(왼쪽)
+    if (r.dir === 'v' && half && g[y - 1]?.[x] === 'Z') m.push('stopT');     // 북쪽으로 가는 차선(오른쪽)
+    if (m.length) marks.set(x + ',' + y, m);
+  });
+  // 블록: 도로·보도에 안 걸린 가로 칸 구간 × 세로 줄 구간
+  const spans = (len, dir) => {
+    const out = []; let start = null;
+    for (let i = 0; i <= len; i++) {
+      const free = i < len && !roads.some(r => r.dir === dir && i >= r.at - r.sw && i < r.at + r.n + r.sw);
+      if (free && start === null) start = i;
+      if (!free && start !== null) { out.push([start, i - 1]); start = null; }
+    }
+    return out;
+  };
+  const blocks = spans(H, 'h').flatMap(([y0, y1]) => spans(W, 'v').map(([x0, x1]) => ({ x0, x1, y0, y1 })));
+  return { ground: g.map(row => row.join('')), marks, zdir, blocks };
+}
+const CITY = cityPlan(80, 48, CITY_ROADS);
+const CITY_PARK = 7;   // 공원이 될 블록 번호 (오른쪽 가운데 위, 도시 입구 옆)
+CITY.ground = CITY.ground.map((row, y) => [...row].map((k, x) => { const b = CITY.blocks[CITY_PARK]; return x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1 ? 'g' : k; }).join(''));
+
 const SCENES = {
   // 튜토리얼 공간(처음 서는 곳): 가로 40칸 × 세로 24칸 잔디밭 + 가운데 주택(가로 6칸 × 세로 3줄). 문 앞에서 E → 집 안
   // l 흙길: 현관에서 내려와 처음 서는 곳을 지나 왼쪽 끝까지. 왼쪽 끝 표지판 앞에서 E → 떠날지 묻고, 떠나면 다시 못 돌아옴
@@ -56,10 +106,25 @@ const SCENES = {
       .forEach(([x, y], i) => place(KINDS[i % KINDS.length], i, x, y));
     spot({ type: 'door', x: 20 * TILE, y: 12 * TILE + 10, px: 20 * TILE, py: 12 * TILE - 98, to: 'home', at: { x: 10 * TILE, y: 10 * TILE } });
     place('signpost', 0, 2, 13);
-    spot({ type: 'exit', x: 0.5 * TILE, y: 15 * TILE, px: 2.5 * TILE, py: 11 * TILE - 40, to: 'city', at: { x: 37 * TILE, y: 15 * TILE } });
+    spot({ type: 'exit', x: 0.5 * TILE, y: 15 * TILE, px: 2.5 * TILE, py: 11 * TILE - 40, to: 'city', at: { x: 78.5 * TILE, y: 21 * TILE + 20 } });   // 도시 오른쪽 끝, 대로 위쪽 보도
   }),
   // 도시 입구: 튜토리얼을 떠나면 오는 곳(다음부터는 여기서 시작). 오른쪽 끝에서 흙길이 들어옴. 도시는 앞으로 하나씩 지음
-  city: makeScene('city', Array.from({ length: 24 }, (_, y) => (y === 14 || y === 15 ? 'g'.repeat(20) + 'l'.repeat(20) : 'g'.repeat(40))), { x: 37 * TILE, y: 15 * TILE }, () => {}),
+  city: Object.assign(makeScene('city', CITY.ground, { x: 78.5 * TILE, y: 21 * TILE + 20 }, ({ place }) => {
+    // 블록마다 가운데에 들어설 곳 이름표 (공원 블록은 "공원" + 나무·벤치)
+    let n = 0;
+    CITY.blocks.forEach((b, i) => {
+      const cx = Math.floor((b.x0 + b.x1) / 2), cy = Math.floor((b.y0 + b.y1) / 2);
+      place('lotsign', i === CITY_PARK ? LOT_NAMES.length - 1 : n++, cx - 1, cy, 3, 1);
+      if (i !== CITY_PARK) return;
+      const KINDS = ['cherry', 'maple', 'ginkgo', 'pine'];
+      [[b.x0 + 1, b.y0 + 1], [b.x0 + 4, b.y0 + 4], [b.x1 - 1, b.y0 + 1], [b.x1 - 4, b.y1 - 1], [b.x0 + 1, b.y1 - 1], [b.x1 - 1, b.y1 - 2], [b.x0 + 9, b.y0 + 1]]
+        .forEach(([x, y], k) => place(KINDS[k % 4], k + 30, x, y));
+      place('bench', 0, cx - 1, cy + 2, 2, 1);
+    });
+    // 대로 보도에 가로등: 6칸마다 (교차로·횡단보도·골목 근처는 비움)
+    for (let x = 2; x < 80; x += 6) if ((x < 33 || x > 46) && !(x >= 14 && x <= 19) && !(x >= 60 && x <= 65)) { place('lamp', 0, x, 20); place('lamp', 0, x, 27); }
+    for (let y = 2; y < 48; y += 6) if (y < 17 || y > 30) { place('lamp', 0, 36, y); place('lamp', 0, 43, y); }
+  }), { marks: CITY.marks, zdir: CITY.zdir }),
   // 집 안: 가로 20칸 × 세로 12칸. w 벽지 벽(위 3줄), b 벽 윗면(테두리), f 나무 마루, r 러그, d 현관 매트(여기서 E → 밖으로)
   home: makeScene('home', [
     'wwwwwwwwwwwwwwwwwwww',
@@ -121,24 +186,6 @@ const makeCanvas = (w, h) => Object.assign(document.createElement('canvas'), { w
 const INK = '#2f2b38';   // 물건 테두리 색 (캐릭터 테두리처럼 아주 검지 않게)
 const hash = (x, y, s = 0) => { let h = Math.imul(x + 1013, 374761393) ^ Math.imul(y + 7, 668265263) ^ Math.imul(s + 3, 2246822519); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 
-// 차도 칸 무늬: 위치로 정함 (차선 점선·중앙선·정지선)
-function roadMarks(x, y) {
-  const m = [];
-  const onMain = y >= MAIN[0] && y <= MAIN[1], onSide = x >= SIDE[0] && x <= SIDE[1];
-  if (onMain && !onSide) {   // 가로 대로: 7|8 흰 점선, 8|9 노란 중앙선, 9|10 흰 점선
-    if (y === 7 || y === 9) m.push('dashB');
-    if (y === 8) m.push('yelB');
-    if (y === 9) m.push('yelT');
-    if (x === 7 && y >= 9) m.push('stopR');    // 동쪽으로 가는 차(아래 두 차선) 정지선
-    if (x === 14 && y <= 8) m.push('stopL');   // 서쪽으로 가는 차(위 두 차선) 정지선
-  } else if (onSide && !onMain) {               // 세로 골목: 10|11 노란 중앙선
-    m.push(x === 10 ? 'yelR' : 'yelL');
-    if (x === 10 && y === 4) m.push('stopB');  // 남쪽으로 가는 차 정지선
-    if (x === 11 && y === 13) m.push('stopT'); // 북쪽으로 가는 차 정지선
-  }
-  return m;
-}
-
 // 바닥 한 칸 그림: 칸 종류·무늬·이웃 차도·변화(금·얼룩 등)마다 한 번만 그려 저장
 const tileCache = new Map();
 // 잔디·흙길의 계절 모습 (game.js가 정함): spring 연두 + 꽃 많음 / summer 초록 / autumn 누런 풀 + 떨어진 잎 / winter 마른 풀
@@ -159,8 +206,8 @@ function tileImage(tx, ty) {
   const v = Math.floor(hash(tx, ty) * 6);   // 칸마다 조금씩 다른 모습 (0~5)
   const side = (dx, dy) => { const n = tileAt(tx + dx, ty + dy); return n === 'Z' ? 2 : n === 'R' ? 1 : 0; };   // 0 없음, 1 차도(연석), 2 횡단보도(경사로)
   const curb = isRoad(k) ? '' : [side(0, -1), side(0, 1), side(-1, 0), side(1, 0)].join('');
-  const marks = k === 'R' ? roadMarks(tx, ty) : [];
-  const zdir = k === 'Z' ? (ty >= MAIN[0] && ty <= MAIN[1] ? 'h' : 'v') : '';
+  const marks = (k === 'R' && SCENE.marks?.get(tx + ',' + ty)) || [];   // 차선 무늬·횡단보도 방향은 장면이 정함(도시 틀 cityPlan)
+  const zdir = (k === 'Z' && SCENE.zdir?.get(tx + ',' + ty)) || '';
   // 집 안: 벽지는 맨 위·맨 아래 줄(몰딩·걸레받이), 러그는 가장자리, 벽 윗면은 안쪽 방향이 그림에 들어감
   const nb = ch => [tileAt(tx, ty - 1) !== ch, tileAt(tx, ty + 1) !== ch, tileAt(tx - 1, ty) !== ch, tileAt(tx + 1, ty) !== ch].map(Number).join('');
   const grassy = (dx, dy) => +(tileAt(tx + dx, ty + dy) === 'g');   // 흙길: 잔디와 닿는 쪽만 가장자리(맵 끝으로는 그대로 이어짐)
@@ -181,7 +228,8 @@ function tileImage(tx, ty) {
     if (v === 3) { box(18, 16, 7, 4, '#3d3d45'); box(19, 15, 5, 6, '#3d3d45'); }                                 // 기름 얼룩
     const dash = y => { box(4, y, 12, 2, WHITE); box(20, y, 8, 2, WHITE); };
     for (const m of marks) {
-      if (m === 'dashB') dash(TILE - 1);
+      if (m === 'dashB') dash(TILE - 2);
+      if (m === 'dashR') { box(TILE - 2, 4, 2, 12, WHITE); box(TILE - 2, 20, 2, 8, WHITE); }   // 세로 도로 흰 점선
       if (m === 'yelB') { box(0, TILE - 4, TILE, 2, YEL); }
       if (m === 'yelT') { box(0, 1, TILE, 2, YEL); }
       if (m === 'yelR') box(TILE - 3, 0, 2, TILE, YEL);
@@ -193,6 +241,11 @@ function tileImage(tx, ty) {
     }
     if (zdir === 'h') for (let y = 2; y < TILE; y += 8) { box(1, y, TILE - 2, 5, WHITE); box(1, y + 4, TILE - 2, 1, '#cfcfc8'); }   // 가로 대로 건너는 횡단보도: 가로 막대
     if (zdir === 'v') for (let x = 2; x < TILE; x += 8) { box(x, 1, 5, TILE - 2, WHITE); box(x + 4, 1, 1, TILE - 2, '#cfcfc8'); }
+  } else if (k === 'e') {   // 빈 부지: 다진 흙 + 자갈, 가끔 풀 한 포기 (건물이 들어설 자리)
+    box(0, 0, TILE, TILE, '#c4b592');
+    for (let i = 0; i < 10; i++) { const px = Math.floor(hash(tx, ty, i + 30) * 30), py = Math.floor(hash(tx, ty, i + 31) * 30); box(px, py, 2, 1, i % 3 ? '#ad9e7b' : '#d8cba9'); }
+    if (v === 2) { box(10, 14, 3, 2, '#9a9488'); box(10, 14, 3, 1, '#c9c3b6'); }
+    if (v === 5) { box(20, 9, 1, 3, '#7aa45a'); box(22, 10, 1, 2, '#7aa45a'); box(21, 8, 1, 4, '#8cb86a'); }
   } else if (k === 'g') {   // 잔디: 짧은 풀결 + 가끔 풀 무더기·작은 꽃 (계절마다 색이 바뀜, 눈 오면 하얗게 덮임)
     const [base, dk, lt, tuft] = GRASS[look];
     box(0, 0, TILE, TILE, base);
@@ -733,6 +786,14 @@ const ARTS = {
   bollard() {
     const { c, box } = painter(16, 14);
     box(5, 2, 6, 12, INK); box(6, 3, 4, 10, '#c4c4cc'); box(6, 3, 1, 10, '#e2e2e8'); box(6, 5, 4, 2, '#f2c94c');
+    return c;
+  },
+  lotsign(v) {   // 부지 이름표: 노란 안내판(위에 검정 줄무늬 띠) + 나무 다리 두 개, 가운데 큰 글씨로 들어설 곳 이름
+    const W = 56, H = 30, { c, box, center } = painter(W, H);
+    for (const x of [10, 43]) { box(x, 16, 3, 14, INK); box(x + 1, 16, 1, 14, '#8a5a3b'); }
+    box(0, 0, W, 19, INK); box(1, 1, W - 2, 17, '#f6d32b'); box(1, 17, W - 2, 1, '#d9a91c');
+    for (let x = 1; x < W - 1; x += 6) box(x, 1, 3, 3, INK);
+    center(LOT_NAMES[v] || '', W / 2, 6, '#2f2b38');
     return c;
   },
   bench() {   // 공원 벤치(2칸): 회색 쇠기둥 두 개에 나무 등받이 두 줄, 앞으로 넓은 앉는 판, 쇠다리. 검은 테두리
