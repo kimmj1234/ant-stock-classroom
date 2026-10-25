@@ -1,37 +1,19 @@
 'use strict';
-// ===== 도시 모습 (서울 느낌): 손으로 설계한 16×16칸 블록 하나 =====
+// ===== 첫 맵: 잔디밭에 주택 한 채 =====
 // 칸 = 바닥 사각형 한 칸(32×32픽셀). 맵 밖으로는 못 나감.
-// 바닥은 아래 GROUND 지도(글자 한 칸 = 바닥 한 칸)로, 서 있는 물건은 THINGS 목록(칸 번호)으로 정함 → 둘 다 고치기 쉬움.
+// 바닥은 GROUND 지도(글자 한 칸 = 바닥 한 칸)로, 서 있는 물건은 place(...) 목록(칸 번호)으로 정함 → 둘 다 고치기 쉬움.
 // 물건은 캐릭터와 같은 굵기의 픽셀(그림 1칸 = 바닥 2픽셀)로 그림. 빛은 왼쪽 위에서 와서 그림자는 오른쪽 아래로 짐.
 const TILE = 32;                        // 바닥 한 칸(사각형)의 픽셀 크기
 const ART = 2;                          // 물건 그림 1칸 = 바닥 2픽셀 → 바닥 한 칸 = 그림 16칸
-const COLS = 16, ROWS = 16;             // 맵 크기(칸)
+const COLS = 40, ROWS = 24;             // 맵 크기(칸): 1280×768픽셀 → 화면 배율 2배면 2560×1536이라 큰 모니터(2560×1440)까지 꽉 참
 const MAP_W = COLS * TILE, MAP_H = ROWS * TILE;
-const START = { x: 5 * TILE + 16, y: 12 * TILE + 16 };   // 처음 서는 자리(픽셀): 큰길 남쪽 보도
+const START = { x: 20 * TILE, y: 15 * TILE };   // 처음 서는 자리(픽셀): 집 앞마당
 
 // ----- 바닥 지도 -----
-//   . 보도(베이지 판석)   k 점자블록(횡단보도 앞 노란 블록)   q 광장 돌바닥   g 잔디   p 주차장
-//   R 차도   Z 횡단보도
-//   가로 4차선 대로 = 7~10줄, 세로 2차선 골목 = 10~11칸 (차선 무늬·정지선은 위치로 자동)
-const GROUND = [
-  '..........RR....',
-  '..........RR....',
-  '..........RR....',
-  '..........RR....',
-  '..........RR....',
-  '.........kZZk...',
-  '........kkZZkk..',
-  'RRRRRRRRZZRRZZRR',
-  'RRRRRRRRZZRRZZRR',
-  'RRRRRRRRZZRRZZRR',
-  'RRRRRRRRZZRRZZRR',
-  '........kkZZkk..',
-  '.........kZZk...',
-  '..........RR....',
-  '..........RR....',
-  '..........RR....',
-];
-const MAIN = [7, 10], SIDE = [10, 11];  // 대로 줄 범위, 골목 칸 범위
+//   g 잔디   . 보도(베이지 판석)   k 점자블록   q 광장 돌바닥   p 주차장   R 차도   Z 횡단보도
+//   지금은 전부 잔디. 도로를 다시 놓으면 차선 무늬·정지선은 MAIN(대로 줄)·SIDE(골목 칸) 위치로 자동
+const GROUND = Array.from({ length: ROWS }, () => 'g'.repeat(COLS));
+const MAIN = [-1, -1], SIDE = [-1, -1];  // 대로 줄 범위, 골목 칸 범위 (지금은 도로 없음)
 const inMap = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
 const tileAt = (x, y) => (inMap(x, y) ? GROUND[y][x] : null);
 const isRoad = k => k === 'R' || k === 'Z';
@@ -46,11 +28,8 @@ function place(type, v, x, y, w = 1, d = 1, block = true) {
 const decal = (type, x, y, v = 0) => THINGS.push({ type, v, w: 1, d: 1, x: (x + 0.5) * TILE, y: (y + 1) * TILE, ground: true });   // 바닥 무늬(지나갈 수 있음)
 const deco = (type, x, y, v = 0, dy = 0) => THINGS.push({ type, v, w: 1, d: 1, x: (x + 0.5) * TILE, y: (y + 1) * TILE + dy });     // 작은 장식(지나갈 수 있음)
 
-// 지금은 도로만: 건물·나무·구조물은 하나씩 정해서 다시 올릴 예정 (그림은 아래 ARTS에 남아 있어 place(...) 한 줄로 바로 놓을 수 있음)
-//   예) place('shop', 0, 3, 2, 2, 3)  → 약국을 3칸·2줄부터 가로 2칸 × 세로 3줄로
-// 차도 위 바닥 무늬: 맨홀 · 배수구
-decal('manhole', 3, 8); decal('manhole', 11, 2); decal('manhole', 13, 9);
-decal('drain', 5, 7, 0); decal('drain', 1, 10, 1); decal('drain', 14, 10, 1); decal('drain', 10, 14, 2);
+// 주택 한 채: 맵 가운데, 가로 5칸 × 세로 3줄 (지붕은 위로 솟음). 다른 건물·나무 그림도 ARTS에 남아 있어 place(...) 한 줄로 놓을 수 있음
+place('house', 0, 18, 9, 5, 3);
 
 const blockedTile = (tx, ty) => !inMap(tx, ty) || SOLID.has(tx + ',' + ty);   // 맵 밖·물건 자리는 못 지나감
 const thingsAround = () => THINGS;
@@ -159,7 +138,7 @@ function tileImage(tx, ty) {
 
 // ----- 그림자: 바닥을 다 그린 뒤, 물건보다 먼저 그림 (빛은 왼쪽 위) -----
 const SHADE = 'rgba(32, 26, 52, 0.22)';
-const BIG = new Set(['cafe', 'shop', 'villa']);
+const BIG = new Set(['cafe', 'shop', 'villa', 'house']);
 function drawShadows(ctx, S, cam) {
   ctx.fillStyle = SHADE;
   for (const t of THINGS) {
@@ -217,6 +196,57 @@ function painter(w, h) {
 const SIGNS = [['약국', '#2f9e5a'], ['치킨', '#e8454b'], ['분식', '#f2a03d'], ['빵집', '#b5653f'], ['꽃집', '#d4537e'], ['PC방', '#3d7fd6'], ['안경', '#4bb3a0'], ['떡집', '#7b5bd6']];
 const WALLS = ['#f1e6d0', '#e9c46a', '#cfe0d6', '#f0d0c0', '#dcd3ef', '#d8e4f0', '#f3dfb4', '#e8d0d8'];
 const ARTS = {
+  // 주택(5칸 × 3줄, 키 5칸): 굴뚝 / 붉은 기와 박공지붕(위로 갈수록 좁아짐, 기와 줄·용마루) / 처마 그늘 /
+  // 크림색 나무 판자 벽 + 모서리 기둥 / 초록 덧창 달린 창문 두 개(창가 화분) / 차양 아래 현관문(창·손잡이) + 벽등 + 번지판 / 돌 기단·계단
+  house() {
+    const W = 80, H = 80, { c, box } = painter(W, H);
+    const ROOF = '#b5503c', ROOF_DK = '#8f3b2c', ROOF_LT = '#cf6a52', WALL = '#f3e6c8', WALL_DK = '#e2d1ad', WOOD = '#8a5a3b';
+    // 굴뚝
+    box(57, 2, 10, 20, INK); box(58, 3, 8, 18, '#a8553f'); box(58, 3, 8, 1, '#c97a5f');
+    for (let y = 6; y < 21; y += 4) box(58, y, 8, 1, '#8f3b2c');
+    box(55, 1, 14, 3, INK); box(56, 2, 12, 1, '#6b6670');
+    // 지붕: 위(용마루)는 좁고 아래(처마)는 맵 폭보다 살짝 넓게. 기와 줄은 4줄마다, 줄마다 이음새를 엇갈림
+    const top = 8, bottom = 34;
+    for (let y = top; y < bottom; y++) {
+      const t = (y - top) / (bottom - top - 1), inset = Math.round(13 * (1 - t));
+      const x0 = inset, w = W - inset * 2;
+      box(x0, y, w, 1, INK);
+      if (y > top) {
+        box(x0 + 1, y, w - 2, 1, (y - top) % 4 === 0 ? ROOF_DK : (y - top) % 4 === 1 ? ROOF_LT : ROOF);
+        for (let x = x0 + 4 + ((y - top) >> 2) % 2 * 4; x < x0 + w - 2; x += 8) if ((y - top) % 4 === 2) box(x, y, 1, 2, ROOF_DK);   // 기와 이음새
+        box(x0 + w - 4, y, 3, 1, ROOF_DK);   // 오른쪽 끝 그늘
+      }
+    }
+    box(13, top - 2, W - 26, 3, INK); box(14, top - 1, W - 28, 1, '#5a2a20');   // 용마루
+    box(0, bottom, W, 2, INK); box(2, bottom + 2, W - 4, 2, '#5a4a40');        // 처마 끝 + 그늘
+    // 벽: 나무 판자(4줄마다 그늘 줄) + 양 끝 모서리 기둥
+    box(3, 38, W - 6, 36, INK); box(4, 38, W - 8, 35, WALL);
+    for (let y = 41; y < 72; y += 4) box(4, y, W - 8, 1, WALL_DK);
+    box(4, 38, 3, 35, WOOD); box(W - 7, 38, 3, 35, '#6f4a30');
+    box(W - 10, 38, 3, 35, '#e8d7b4');   // 오른쪽 벽 그늘
+    // 창문 두 개: 창틀 + 유리(위 밝게) + 십자 창살 + 초록 덧창 + 창가 화분
+    for (const wx of [13, 53]) {
+      box(wx - 1, 43, 16, 14, INK); box(wx, 44, 14, 12, '#8fc3e6'); box(wx, 44, 14, 3, '#d4ecfa');
+      box(wx + 6, 44, 2, 12, '#f4f1ea'); box(wx, 49, 14, 2, '#f4f1ea');
+      box(wx - 6, 43, 5, 14, INK); box(wx - 5, 44, 3, 12, '#4f8f5a'); box(wx + 16, 43, 5, 14, INK); box(wx + 17, 44, 3, 12, '#3f7a4a');   // 덧창
+      for (let y = 46; y < 55; y += 3) { box(wx - 5, y, 3, 1, '#3f7a4a'); box(wx + 17, y, 3, 1, '#2f6a3a'); }
+      box(wx - 2, 57, 18, 4, INK); box(wx - 1, 58, 16, 2, WOOD);                                   // 화분 상자
+      [['#e8454b', 0], ['#f2c94c', 4], ['#f5a3b5', 8], ['#ffffff', 12]].forEach(([col, dx]) => { box(wx + dx, 55, 3, 3, col); box(wx + dx + 1, 57, 1, 1, '#3f8a37'); });
+    }
+    // 현관: 작은 차양 + 문(위 작은 창, 판넬, 손잡이) + 벽등 + 번지판
+    box(31, 41, 18, 3, INK); box(32, 41, 16, 2, '#6b7080');
+    box(33, 45, 14, 29, INK); box(34, 46, 12, 28, '#9a6b45'); box(34, 46, 12, 1, '#b5824f');
+    box(36, 48, 8, 6, INK); box(37, 49, 6, 4, '#f6e3b4');
+    box(36, 57, 3, 7, '#86593a'); box(41, 57, 3, 7, '#86593a'); box(36, 66, 8, 5, '#86593a');
+    box(43, 61, 2, 2, '#f2c94c');
+    box(50, 49, 4, 6, INK); box(51, 50, 2, 4, '#fff1b8');                                       // 벽등
+    box(26, 50, 5, 4, '#2f6fc6'); box(27, 51, 3, 1, '#ffffff');                                 // 번지판
+    // 돌 기단 + 계단
+    box(2, 73, W - 4, 4, INK); box(3, 73, W - 6, 3, '#b9b2a4'); box(3, 73, W - 6, 1, '#d8d1c3');
+    box(29, 74, 22, 4, INK); box(30, 74, 20, 3, '#c9c2b4'); box(30, 74, 20, 1, '#e2dccf');
+    box(27, 77, 26, 3, INK); box(28, 77, 24, 2, '#c9c2b4'); box(28, 77, 24, 1, '#e2dccf');
+    return c;
+  },
   // 작은 가게(2칸, 키 4칸): 옥상 난간 / 2층(창문·화분·실외기) / 간판(테두리·조명) / 줄무늬 차양 / 1층(진열창·유리문·계단)
   shop(v, w) {
     const W = w * 16, H = 64, { c, box, center, win, door, ac } = painter(W, H), [name, col] = SIGNS[v % 8], wall = WALLS[v % 8];
