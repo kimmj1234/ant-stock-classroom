@@ -126,6 +126,15 @@
   const $ = id => document.getElementById(id), game = $('game');
   const guide = $('guideWrap'), ok = $('guideOk'), menu = $('menuWrap'), main = $('menuMain'), settings = $('menuSettings');
   const post = name => fetch('/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+
+  // 실수로 나가기 막기: Ctrl+W·새로고침·창 닫기 직전에 브라우저의 "사이트에서 나가시겠습니까?" 확인 창을 띄움
+  // (Ctrl+W 자체는 브라우저가 웹페이지에 넘겨주지 않아서 완전히 막을 수는 없음). 메뉴로 일부러 나갈 때는 확인 없이
+  let leaving = false;
+  const leave = url => { leaving = true; location.assign(url); };
+  addEventListener('beforeunload', e => { if (!leaving && window.authState?.me) { e.preventDefault(); e.returnValue = ''; } });
+  // 화면 확대·축소 막기: Ctrl + 마우스 휠(터치패드 두 손가락 확대·축소 포함), Ctrl + +/−/0
+  addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+  addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && ['+', '=', '-', '_', '0'].includes(e.key)) e.preventDefault(); }, true);
   // 조작 안내 창
   let first = false;      // 이번이 처음 자동으로 뜬 것인지
   let fromMenu = false;   // 메뉴의 "이용방법"으로 열었는지 → 닫으면 메뉴로 돌아감(뒤로 가기처럼)
@@ -153,8 +162,8 @@
     settings: () => page(settings),
     back: () => page(main),
     guide: () => { menu.hidden = true; fromMenu = true; openGuide(); },
-    home: () => location.assign('/'),
-    logout: async () => { await post('logout').catch(() => {}); location.assign('/'); },
+    home: () => leave('/'),
+    logout: async () => { await post('logout').catch(() => {}); leave('/'); },
   };
   menu.addEventListener('click', e => { const act = e.target.closest('button')?.dataset.act; if (act) ACTS[act](); });
   $('menuBtn').addEventListener('click', () => (menu.hidden ? openMenu() : closeMenu()));
