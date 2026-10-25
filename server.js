@@ -152,8 +152,9 @@ function googleName(b) {
 }
 const nameCheck = b => { const bad = nameProblem(b.name); return bad ? { ok: false, msg: bad } : { ok: true, msg: '사용할 수 있는 닉네임이에요.' }; };   // 입력하는 동안 화면이 물어봄
 const AUTH = { login, google: googleLogin, googleName, nameCheck };   // 로그인 전에 부르는 API
-// 생활 정보: 게임 시간(분, 처음은 1일 오전 8시 — 6시는 아직 새벽이라 어두움), 현금(원), 가방(물건 목록)
-const lifeOf = a => ({ minutes: a.minutes ?? 480, cash: a.cash ?? 50000, bag: a.bag || [] });
+// 생활 정보: 게임 시간(분, 처음은 1일 오전 8시 — 6시는 아직 새벽이라 어두움), 현금(원), 가방(물건 목록), 서 있던 자리(장면·픽셀 위치, 없으면 처음 자리)
+const lifeOf = a => ({ minutes: a.minutes ?? 480, cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null });
+const SCENE_NAMES = ['field', 'home', 'city'];   // town.js의 장면 이름 (튜토리얼 공간 = field·home)
 
 // ===== HTTP =====
 function readBody(req) {
@@ -200,11 +201,15 @@ http.createServer(async (req, res) => {
       if (!accounts[key][name]) { accounts[key][name] = true; writeJSONFile(ACCOUNTS_FILE, accounts); }
       return json(res, 200, { ok: true });
     }
-    if (name === 'clock') {   // 게임 시간 저장: 앞으로만 감 (화면이 20초마다·페이지를 떠날 때 보냄)
+    if (name === 'progress') {   // 게임 시간·서 있던 자리 저장 (화면이 20초마다·장면을 바꿀 때·페이지를 떠날 때 보냄)
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
-      const m = b.minutes;
+      const a = accounts[key], m = b.minutes, p = b.place;
       if (!Number.isInteger(m) || m < 0 || m > 1e9) return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });
-      if (m > lifeOf(accounts[key]).minutes) { accounts[key].minutes = m; writeJSONFile(ACCOUNTS_FILE, accounts); }
+      if (m > lifeOf(a).minutes) a.minutes = m;   // 시간은 앞으로만 감
+      // 자리: 아는 장면 + 0~5000 사이 숫자만. 튜토리얼을 떠난 계정은 도시 쪽 자리만 받음(다시 못 돌아가게)
+      const inRange = v => Number.isFinite(v) && v >= 0 && v <= 5000;
+      if (p && SCENE_NAMES.includes(p.scene) && inRange(p.x) && inRange(p.y) && !(a.tutorialDone && p.scene !== 'city')) a.place = { scene: p.scene, x: Math.round(p.x), y: Math.round(p.y) };
+      writeJSONFile(ACCOUNTS_FILE, accounts);
       return json(res, 200, { ok: true });
     }
     return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });

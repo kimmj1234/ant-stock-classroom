@@ -20,7 +20,7 @@ const WEATHER = [
   [['sun', 0.4], ['cloud', 0.25], ['snow', 0.35]],
 ];
 const WX_NAME = { sun: '맑음', cloud: '흐림', rain: '비', snow: '눈' };
-const clock = { min: 360, saved: 360, ready: false };
+const clock = { min: 480, sent: '', ready: false };   // sent: 마지막으로 서버에 보낸 시간·자리
 function today(min) {
   const day = Math.floor(min / DAY), season = Math.floor(day / SEASON_DAYS) % 4, year = Math.floor(day / (SEASON_DAYS * 4)) + 1;
   let r = day === 0 ? 1 : hash(day, 77), wx = 'sun';   // 첫날은 늘 맑음
@@ -28,16 +28,17 @@ function today(min) {
   const m = Math.floor(min % DAY / 10) * 10, h = Math.floor(m / 60);
   return { year, season, date: day % SEASON_DAYS + 1, wx, time: `${h < 12 ? '오전' : '오후'} ${(h + 11) % 12 + 1}:${String(m % 60).padStart(2, '0')}` };
 }
-const saveClock = beacon => {
-  const minutes = Math.floor(clock.min);
-  if (!clock.ready || minutes <= clock.saved) return;
-  clock.saved = minutes;
-  const body = JSON.stringify({ minutes });
-  if (beacon) navigator.sendBeacon('/api/clock', new Blob([body], { type: 'application/json' }));
-  else fetch('/api/clock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).catch(() => {});
+// 진행 저장: 게임 시간 + 서 있던 자리(장면·위치). 바뀐 게 있을 때만 보냄 → 새로고침해도 그 자리에서 이어서 시작
+const saveProgress = beacon => {
+  if (!clock.ready) return;
+  const body = JSON.stringify({ minutes: Math.floor(clock.min), place: { scene: SCENE.name, x: Math.round(me.x), y: Math.round(me.y) } });
+  if (body === clock.sent) return;
+  clock.sent = body;
+  if (beacon) navigator.sendBeacon('/api/progress', new Blob([body], { type: 'application/json' }));
+  else fetch('/api/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).catch(() => {});
 };
-setInterval(saveClock, 20000);
-addEventListener('pagehide', () => saveClock(true));
+setInterval(saveProgress, 20000);
+addEventListener('pagehide', () => saveProgress(true));
 
 // ===== 기본 UI 그림: 픽셀 아이콘 (글자 한 칸 = 픽셀 한 칸) =====
 const ICON_PAL = {
@@ -103,9 +104,15 @@ const onAuth = who => {
   if (!who) return location.replace('/#login');
   me.name = who.name;
   me.basicUI = !!who.basicUI;   // 안내원에게 기본 UI를 받았는지 → 받았으면 화면 테두리에 기본 UI
-  if (who.life) { clock.min = clock.saved = who.life.minutes; me.cash = who.life.cash; me.bag = who.life.bag; clock.ready = true; }
+  if (who.life) { clock.min = who.life.minutes; me.cash = who.life.cash; me.bag = who.life.bag; clock.ready = true; }
   showHud();
-  if (who.tutorialDone && SCENE.name !== 'city') { useScene('city'); me.x = START.x; me.y = START.y; }   // 튜토리얼을 이미 떠났으면 다시 못 들어감
+  // 서 있던 자리에서 이어서 시작. 튜토리얼을 이미 떠났으면 튜토리얼 쪽 자리는 무시하고 도시 입구로(다시 못 들어감)
+  const pl = who.life?.place;
+  if (pl && SCENES[pl.scene] && (!who.tutorialDone || pl.scene === 'city')) {
+    useScene(pl.scene);
+    ({ x: me.x, y: me.y } = blockedAt(pl.x, pl.y) ? START : pl);   // 그 자리가 막혔으면(맵이 바뀐 경우 등) 처음 자리
+    me.dir = 's';
+  } else if (who.tutorialDone && SCENE.name !== 'city') { useScene('city'); me.x = START.x; me.y = START.y; }
 };
 document.addEventListener('auth', e => onAuth(e.detail));
 if (window.authState) onAuth(window.authState.me);
@@ -415,7 +422,7 @@ function frame(now) {
   updateHud();
   // 입력: 방향키 방향 그대로(위 = 화면 위쪽). 두 키를 같이 누르면(↑→ 등) 45도 대각선
   // 장면 바꾸기: 다 어두워지면 장면을 바꾸고 문 앞(안이면 현관 매트 앞)에 섬 → 다시 밝아짐
-  if (fade && !fade.done && now - fade.t0 >= FADE) { useScene(fade.sp.to); me.x = fade.sp.at.x; me.y = fade.sp.at.y; me.dir = fade.sp.to === 'home' ? 'n' : fade.sp.to === 'city' ? 'e' : 's'; me.left = fade.sp.to === 'city'; fade.done = true; }   // 도시 입구에서는 왼쪽(도시 쪽)을 봄
+  if (fade && !fade.done && now - fade.t0 >= FADE) { useScene(fade.sp.to); me.x = fade.sp.at.x; me.y = fade.sp.at.y; me.dir = fade.sp.to === 'home' ? 'n' : fade.sp.to === 'city' ? 'e' : 's'; me.left = fade.sp.to === 'city'; fade.done = true; saveProgress(); }   // 도시 입구에서는 왼쪽(도시 쪽)을 봄
   if (fade && now - fade.t0 >= FADE * 2) fade = null;
   const busy = fade || !talkBox.hidden || !document.getElementById('leaveWrap').hidden;   // 장면을 바꾸거나 대화하는 동안은 못 걸음
   let vx = busy ? 0 : stick.x + held.has('R') - held.has('L'), vy = busy ? 0 : stick.y + held.has('D') - held.has('U');
