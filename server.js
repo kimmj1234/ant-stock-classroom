@@ -16,7 +16,7 @@ const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');   // 로그인 쿠�
 const FILES = {
   '/': 'home.html', '/site.css': 'site.css', '/site.js': 'site.js', '/wordmark.css': 'wordmark.css',
   '/logo.svg': 'assets/logo.svg',                 // 브라우저 탭 아이콘: 픽셀 하트 두 개
-  '/play': 'play.html', '/game.js': 'game.js', '/sprites.js': 'sprites.js', '/town.js': 'town.js', '/country.js': 'country.js',     // 게임 화면 (로그인한 사람만, 안 했으면 화면이 메인으로 보냄)
+  '/play': 'play.html', '/game.js': 'game.js', '/sprites.js': 'sprites.js', '/town.js': 'town.js', '/country.js': 'country.js', '/world.js': 'world.js',     // 게임 화면 (로그인한 사람만, 안 했으면 화면이 메인으로 보냄)
 };
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml' };
 
@@ -159,6 +159,14 @@ const WORLD_FILE = path.join(DATA_DIR, 'world.json');
 const world = readJSONFile(WORLD_FILE) || { epoch: Date.now(), start: 480 };
 if (!fs.existsSync(WORLD_FILE)) writeJSONFile(WORLD_FILE, world);
 const worldMinutes = (t = Date.now()) => world.start + (t - world.epoch) * 3 / 60000;
+
+// ===== 주식 시장 (economy.js): 2초마다 세계 시각까지 게임 분을 진행. 시세·뉴스는 data/market.json =====
+const { marketOpen, nextOpen } = require('./world.js');
+const { createMarket, BY_ID: STOCKS } = require('./economy.js');
+const market = createMarket(path.join(DATA_DIR, 'market.json'), readJSONFile, writeJSONFile);
+market.advance(worldMinutes());
+setInterval(() => market.advance(worldMinutes()), 2000);
+const FEE = 0.00015, SELL_TAX = 0.0018;   // 거래 수수료 0.015%(사고팔 때), 파는 금액에 세금 0.18% (현실과 비슷하게)
 // 생활 정보: 현금(원), 가방(물건 목록), 서 있던 자리(장면·픽셀 위치, 없으면 처음 자리), 능력치 (게임 시간은 세계 시간 하나라 계정마다 두지 않음)
 // 능력치: 체력·배고픔·기분은 게이지 0~100 (100이 가장 좋음) / 지능·근력은 레벨(1부터, 돈으로 강화 — 나중엔 공부·운동 같은 행동으로도)
 //         매력은 인기도(0부터, 메이플스토리 인기도처럼 다른 사람이 +1/-1을 줌, 마이너스도 됨)
@@ -176,7 +184,7 @@ function fameProblem(giver, giverKey, toKey, today) {
   if (last && daysBetween(last, today) < 30) return '같은 사람에게는 30일에 한 번만 줄 수 있어요.';
   return null;
 }
-const lifeOf = a => ({ cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null, stats: { ...STATS_START, ...a.stats }, region: a.region || '한가람' });
+const lifeOf = a => ({ cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null, stats: { ...STATS_START, ...a.stats }, region: a.region || '한가람', holdings: a.holdings || {} });
 const SCENE_NAMES = ['field', 'home', 'city', 'h0', 'h1', 'h2', 'h3', 'h4', 'h5', 'mart', 'byeolha', 'danbi', 'nuribeol'];   // town.js의 장면 이름 (h0~h5 = 주택가 집 안, mart = 마트 안, 나머지는 다른 지역)
 // 갈 수 있는 지역: 이름 → { 장면, 지도 칸 좌표(country.js와 같음), 도착 자리 = 그 지역 터미널 문 앞(town.js terminalAt) }
 const REGIONS = {
@@ -276,6 +284,33 @@ http.createServer(async (req, res) => {
       a.cash = life.cash - fare; a.region = b.to; a.place = { scene: dest.scene, x: dest.at[0], y: dest.at[1] };
       writeJSONFile(ACCOUNTS_FILE, accounts);
       return json(res, 200, { ok: true, cash: a.cash, region: b.to, place: a.place, fare });
+    }
+    if (name === 'market') {   // 시세판: 장 열림 여부 · 다음 개장 · 회사별 시세 · 뉴스 · 내 돈과 가진 주식
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      const now = worldMinutes(), life = lifeOf(accounts[key]);
+      market.advance(now);
+      return json(res, 200, { ok: true, now, open: marketOpen(now), next: nextOpen(now), ...market.view(), cash: life.cash, holdings: life.holdings });
+    }
+    if (name === 'trade') {   // 사고팔기 { id, side: 'buy' | 'sell', qty } — 장이 열려 있을 때 지금 가격으로. 돈·주식 수는 서버가 확인
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      const now = worldMinutes(); market.advance(now);
+      if (!marketOpen(now)) return json(res, 400, { ok: false, msg: '지금은 장이 닫혀 있어요. (평일 09:00~15:30)' });
+      const qty = b.qty, a = accounts[key], life = lifeOf(a);
+      if (!Object.hasOwn(STOCKS, b.id) || !['buy', 'sell'].includes(b.side)) return json(res, 400, { ok: false, msg: '잘못된 주문이에요.' });
+      if (!Number.isInteger(qty) || qty < 1 || qty > 100000) return json(res, 400, { ok: false, msg: '수량은 1주 이상으로 적어 주세요.' });
+      const price = market.priceOf(b.id), amount = price * qty, fee = Math.floor(amount * FEE), h = { ...life.holdings }, cur = h[b.id] || { qty: 0, cost: 0 };
+      if (b.side === 'buy') {
+        if (life.cash < amount + fee) return json(res, 400, { ok: false, msg: `돈이 부족해요. (${(amount + fee).toLocaleString('ko-KR')}원 필요)` });
+        a.cash = life.cash - amount - fee; h[b.id] = { qty: cur.qty + qty, cost: cur.cost + amount + fee };
+      } else {
+        if (cur.qty < qty) return json(res, 400, { ok: false, msg: `가진 주식이 ${cur.qty}주뿐이에요.` });
+        const tax = Math.floor(amount * SELL_TAX);
+        a.cash = life.cash + amount - fee - tax;
+        const left = cur.qty - qty;
+        if (left) h[b.id] = { qty: left, cost: Math.round(cur.cost * left / cur.qty) }; else delete h[b.id];
+      }
+      a.holdings = h; writeJSONFile(ACCOUNTS_FILE, accounts);
+      return json(res, 200, { ok: true, price, qty, side: b.side, cash: a.cash, holdings: h });
     }
     if (name === 'shop') return json(res, 200, { ok: true, items: Object.entries(ITEMS).map(([id, [n, price]]) => ({ id, name: n, price })), bagSize: BAG_SIZE });   // 마트 상품 목록
     if (name === 'buy') {   // 물건 사기: { id } → 돈이 충분하고 가방에 빈칸이 있으면 돈을 빼고 가방에 넣음

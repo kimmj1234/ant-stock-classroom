@@ -5,8 +5,6 @@
 // 물건은 캐릭터와 같은 굵기의 픽셀(그림 1칸 = 바닥 2픽셀)로 그림. 빛은 왼쪽 위에서 와서 그림자는 오른쪽 아래로 짐.
 const TILE = 32;                        // 바닥 한 칸(사각형)의 픽셀 크기
 const ART = 2;                          // 물건 그림 1칸 = 바닥 2픽셀 → 바닥 한 칸 = 그림 16칸
-// 칸 좌표 → 0~1 사이 고정 난수 (같은 칸이면 늘 같은 값: 얼룩·배치에 씀)
-const hash = (x, y, s = 0) => { let h = Math.imul(x + 1013, 374761393) ^ Math.imul(y + 7, 668265263) ^ Math.imul(s + 3, 2246822519); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 // 지금 장면의 값들 (useScene이 채움)
 let SCENE, COLS, ROWS, MAP_W, MAP_H, GROUND, THINGS, SOLID, SPOTS, NPCS, START;
 const inMap = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;

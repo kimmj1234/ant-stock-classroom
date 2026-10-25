@@ -11,46 +11,14 @@ let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). �
 // ===== 게임 시간: 현실 1시간 = 게임 3시간 (현실 20초 = 게임 1분, 게임 하루 = 현실 8시간) — 모든 사람이 같은 세계 시간 =====
 // 서버가 정한 세계 시각을 접속할 때 받아서(/api/me의 world), 그 뒤로는 이 컴퓨터의 시계로 흘려 보냄 → 모두 같은 시각·날씨. 창을 열어도 멈추지 않음
 // 달력은 실제와 같음: 게임 하루 = 달력 하루, 1년 365일, 처음은 3월 1일 오전 8시. 계절은 달로 정함(봄 3~5월, 여름 6~8월, 가을 9~11월, 겨울 12~2월)
-const DAY = 1440, TIME_SPEED = 3;   // 현실 1초에 게임 3초
-const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const TIME_SPEED = 3;   // 현실 1초에 게임 3초 (달력·날씨·요일은 world.js)
 const SEASONS = [['봄', '#f5a3b5'], ['여름', '#7ed36a'], ['가을', '#f2a03d'], ['겨울', '#bfe3f5']];
 // ===== 한국(서울) 같은 계절: 해 뜨고 지는 시각, 날씨, 기온 =====
 // 게임 날짜마다 "1년 중 며칠째"(1월 1일 = 0)를 구해서, 그날의 서울 해·날씨·기온을 씀. 게임 0일째 = 3월 1일(59)
-const doyOf = day => (59 + day) % 365;
-function monthDay(doy) {   // 1년 중 며칠째 → [월, 일]
-  let m = 0;
-  while (doy >= MONTH_DAYS[m]) doy -= MONTH_DAYS[m++];
-  return [m + 1, doy + 1];
-}
 // 해 뜨고 지는 시각(분): 하지(6월 21일) 5:11·19:57 → 낮이 가장 김 / 동지(12월 22일) 7:43·17:17 → 낮이 가장 짧음 / 춘분·추분 무렵 6:27·18:37
 function sunTimes(day) {
   const c = Math.cos(2 * Math.PI * (doyOf(day) - 172) / 365);
   return { rise: 387 - 76 * c, set: 1117 + 80 * c };
-}
-// 날씨 확률표 [날씨, 확률] (나머지는 맑음)
-//   3~4월 황사가 잦음 / 6월 하순~7월 하순 장마(비가 거의 매일) / 한여름 소나기 / 8~9월 태풍 / 가을은 맑고 건조 / 겨울은 눈
-function weatherTable(d) {
-  if (d >= 59 && d < 121) return [['dust', 0.2], ['cloud', 0.2], ['rain', 0.15]];        // 3~4월
-  if (d >= 121 && d < 151) return [['cloud', 0.2], ['rain', 0.2], ['dust', 0.05]];        // 5월
-  if (d >= 151 && d < 172) return [['cloud', 0.25], ['rain', 0.25]];                      // 6월 초·중순
-  if (d >= 172 && d <= 208) return [['rain', 0.6], ['cloud', 0.25]];                      // 장마 (6월 21일 ~ 7월 27일)
-  if (d > 208 && d < 243) return [['rain', 0.3], ['cloud', 0.15], ['storm', 0.1]];       // 한여름: 소나기·태풍
-  if (d >= 243 && d < 273) return [['cloud', 0.2], ['rain', 0.12], ['storm', 0.08]];     // 9월: 늦은 태풍
-  if (d >= 273 && d < 334) return [['cloud', 0.2], ['rain', 0.12]];                       // 10~11월: 맑고 건조
-  return [['snow', 0.3], ['cloud', 0.2]];                                                  // 겨울
-}
-const JANGMA = d => d >= 172 && d <= 208;
-// 그날의 날씨: 날짜로 정해져서 같은 날은 늘 같음. 35%는 어제 날씨가 이어짐(그 철에 있는 날씨일 때) → 비 오는 날·맑은 날이 며칠씩 이어지기도 함
-const wxCache = new Map();
-function weatherOf(day) {
-  if (day <= 0) return 'sun';   // 첫날은 늘 맑음
-  if (wxCache.has(day)) return wxCache.get(day);
-  const table = weatherTable(doyOf(day));
-  let wx = null;
-  if (hash(day, 78) < 0.35) { const y = weatherOf(day - 1); if (y === 'sun' || table.some(([w]) => w === y)) wx = y; }
-  if (!wx) { let r = hash(day, 77); wx = 'sun'; for (const [w, p] of table) { if (r < p) { wx = w; break; } r -= p; } }
-  wxCache.set(day, wx);
-  return wx;
 }
 // 기온(°C): 서울 월평균 기온을 날짜에 맞게 이어 붙이고 + 하루 변화(해 뜰 무렵 가장 춥고 오후 3시 무렵 가장 더움) + 날마다 조금씩 다름 + 날씨(비·눈 오면 서늘하고 하루 변화가 작음)
 const MONTH_TEMP = [-2.4, 0.4, 5.7, 12.5, 17.8, 22.2, 24.9, 25.7, 21.2, 14.8, 7.2, 0.4];   // 1월 ~ 12월 (각 달 15일 무렵)
@@ -69,7 +37,7 @@ function today(min) {
   const season = [3, 3, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3][month - 1];   // 1·2월 겨울, 3~5월 봄, 6~8월 여름, 9~11월 가을, 12월 겨울
   const wx = weatherOf(day), m = Math.floor(min % DAY), h = Math.floor(m / 60);   // 시각은 1분 단위 (현실 20초마다 바뀜)
   return {
-    year, season, month, date, wx, ...sunTimes(day),
+    year, season, month, date, wx, ...sunTimes(day), weekday: WEEKDAYS[weekdayOf(day)],
     wxName: wx === 'rain' && JANGMA(doyOf(day)) ? '장마' : WX_NAME[wx],
     time: `${String(h).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`,   // 24시간제 (자정 00:00, 정오 12:00)
   };
@@ -113,6 +81,8 @@ const ICONS = {
   drink: ['...kkkk...', '..kcccck..', '..kssssk..', '..kswwsk..', '..kssssk..', '..kssssk..', '..kswwsk..', '..kssssk..', '..kcccck..', '...kkkk...'],
   snack: ['..........', '..oooooo..', '.oyyyyyyo.', '.oyrryyyo.', '.oyrryyyo.', '.oyyyyyyo.', '.oyyyyyyo.', '..oooooo..', '..........', '..........'],
   umbrella: ['....k.....', '..ssssss..', '.ssssssss.', 'ssssssssss', 's..s..s..s', '....k.....', '....k.....', '....k.....', '..k.k.....', '...k......'],
+  phone: ['.KKKKKKKKKKKK.', 'KKKKKKKKKKKKKK', 'KKKKKggggKKKKK', 'KKCCCCCCCCCCKK', 'KKCLLCCCCCCCKK', 'KKCLCCCCCCCCKK', 'KKCCCCCCCCCCKK', 'KKCCCCCCCRCCKK', 'KKCCCCCCRRCCKK', 'KKCCCCCRRRCCKK',
+    'KKCCCRCRRRCCKK', 'KKCCRRRRRRCCKK', 'KKCRRRRRRRCCKK', 'KKCCCCCCCCCCKK', 'KKCCCCCCCCCCKK', 'KKCCCCCCCCCCKK', 'KKKKKKKKKKKKKK', 'KKKKKWWWWKKKKK', 'KKKKKKKKKKKKKK', '.KKKKKKKKKKKK.'],   // 휴대폰 (화면에 오르는 막대)
   snow: ['...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', '.gggggggg.', '..........', '.c...c...c', 'ccc.ccc...', '.c...c...c', '..........'],
   coin: ['...oooo...', '..oyyyyo..', '.oyywwyyo.', 'oyywyyyyyo', 'oyyyyyyyyo', 'oyyyyyyyyo', 'oyyyyyyyyo', '.oyyyyyyo.', '..oyyyyo..', '...oooo...'],
   bag: [   // 파란 배낭: 손잡이, 별·고양이·웃는 얼굴 스티커, 하늘색 띠, 앞주머니 자물쇠, 하트 장식, 양옆 주머니
@@ -144,7 +114,7 @@ function drawIcon(id, name) {
   c.width = rows[0].length; c.height = rows.length;
   rows.forEach((row, y) => [...row].forEach((ch, x) => { if (ICON_PAL[ch]) { g.fillStyle = ICON_PAL[ch]; g.fillRect(x, y, 1, 1); } }));
 }
-drawIcon('hudCoin', 'coin'); drawIcon('hudBag', 'bag');
+drawIcon('hudCoin', 'coin'); drawIcon('hudBag', 'bag'); drawIcon('hudPhone', 'phone');
 const hudEl = document.getElementById('hud'), $hud = id => document.getElementById(id);
 let hudLast = '';
 function showHud() { hudEl.hidden = !me.basicUI; }
@@ -156,7 +126,7 @@ function updateHud() {   // 글자가 바뀔 때만 고침
   hudLast = key;
   const [name, color] = SEASONS[t.season];
   $hud('hudSeason').textContent = name; $hud('hudSeason').style.background = color;
-  $hud('hudDay').textContent = (t.year > 1 ? t.year + '년 ' : '') + t.month + '월 ' + t.date + '일';   // 2년째부터는 몇 년째인지도
+  $hud('hudDay').textContent = (t.year > 1 ? t.year + '년 ' : '') + t.month + '월 ' + t.date + '일 (' + t.weekday + ')';   // 2년째부터는 몇 년째인지도
   $hud('hudWxText').textContent = t.wxName; drawIcon('hudWx', icon);
   $hud('hudTemp').textContent = temp + '°C';
   $hud('hudClock').textContent = t.time;
@@ -303,6 +273,111 @@ $hud('travelList').addEventListener('click', async e => {
   notify(`${r.region}행 고속버스를 탔어요! (${won(r.fare)}원)`);
   fade = { t0: performance.now(), sp: { to: r.place.scene, at: { x: r.place.x, y: r.place.y }, face: 's' }, done: false };
 });
+// ===== 휴대폰 주식 앱 "한울증권": 시세 · 종목(차트·사고팔기) · 내 주식 · 뉴스 =====
+// 시세와 뉴스는 서버(economy.js)가 정함. 휴대폰이 열려 있으면 2초마다, 닫혀 있어도 15초마다 받아서 새 뉴스는 화면 위에 [속보]로 알림
+// 한국 증권 앱처럼 오르면 빨강(▲), 내리면 파랑(▼)
+const phone = { tab: 'list', sel: null, data: null, seen: null };
+const pct = (a, b) => b ? (a - b) / b * 100 : 0;
+const tone = d => d > 0 ? 'up' : d < 0 ? 'down' : 'flat';
+const signed = (n, f = won) => (n > 0 ? '▲' : n < 0 ? '▼' : '') + f(Math.abs(n));
+const whenOf = min => { const t = today(min); return `${t.month}월 ${t.date}일 ${t.time}`; };
+async function loadMarket() {
+  const r = await post('market');
+  if (!r.ok) return;
+  phone.data = r; me.cash = r.cash; me.holdings = r.holdings;
+  const latest = r.news[0] && r.news[0].min + r.news[0].text;
+  if (phone.seen !== null && latest && latest !== phone.seen && $hud('phoneWrap').hidden) notify('[속보] ' + r.news[0].text);   // 휴대폰을 안 보고 있을 때 새 뉴스
+  phone.seen = latest || '';
+  if (!$hud('phoneWrap').hidden) renderPhone();
+}
+setInterval(() => { if (me.basicUI && online) loadMarket(); }, 15000);
+document.addEventListener('phoneopen', () => { renderPhone(); loadMarket(); });
+setInterval(() => { if (!$hud('phoneWrap').hidden) loadMarket(); }, 2000);
+
+function renderPhone() {
+  const d = phone.data, scr = $hud('phoneScreen');
+  document.querySelectorAll('.phone-tabs button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === phone.tab || (phone.tab === 'detail' && b.dataset.tab === 'list')));
+  if (!d) { scr.innerHTML = '<p class="mk-empty">시세를 불러오는 중…</p>'; return; }
+  const st = $hud('mkStatus'), nx = today(d.next);
+  st.className = 'phone-status ' + (d.open ? 'open' : '');
+  st.textContent = d.open ? '장 열림 · 15:30에 마감' : `장 마감 · 다음 개장 ${nx.month}월 ${nx.date}일 (${nx.weekday}) 09:00`;
+  $hud('phoneClock').textContent = today(clock.min).time;
+  if (phone.tab === 'detail') return renderDetail();
+  if (phone.tab === 'list') {
+    scr.innerHTML = '<ul class="mk-list">' + d.stocks.map(s => {
+      const ch = s.price - s.prev;
+      return `<li><button type="button" class="mk-row" data-stock="${s.id}"><span>${s.name}<small>${s.sector} · ${s.region}</small></span><span class="mk-price ${tone(ch)}">${won(s.price)}<small class="${tone(ch)}">${signed(ch)} (${pct(s.price, s.prev).toFixed(2)}%)</small></span></button></li>`;
+    }).join('') + '</ul>';
+  } else if (phone.tab === 'mine') {
+    const rows = d.stocks.filter(s => d.holdings[s.id]).map(s => ({ s, h: d.holdings[s.id], val: s.price * d.holdings[s.id].qty }));
+    const val = rows.reduce((a, r) => a + r.val, 0), cost = rows.reduce((a, r) => a + r.h.cost, 0);
+    scr.innerHTML = `<div class="mk-sum"><span>주식 평가금액</span><b>${won(val)}원</b><span>평가 손익</span><b class="${tone(val - cost)}">${signed(val - cost)}원 (${pct(val, cost).toFixed(2)}%)</b><span>현금</span><b>${won(d.cash)}원</b></div>`
+      + (rows.length ? '<ul class="mk-list">' + rows.map(({ s, h, val: v }) => `<li><button type="button" class="mk-row" data-stock="${s.id}"><span>${s.name}<small>${h.qty}주 · 평균 ${won(Math.round(h.cost / h.qty))}원</small></span><span class="mk-price ${tone(v - h.cost)}">${won(v)}<small class="${tone(v - h.cost)}">${signed(v - h.cost)} (${pct(v, h.cost).toFixed(2)}%)</small></span></button></li>`).join('') + '</ul>'
+        : '<p class="mk-empty">아직 가진 주식이 없어요. 시세에서 회사를 골라 사 보세요.</p>');
+  } else {
+    scr.innerHTML = d.news.length ? '<ul class="mk-news">' + d.news.map(n => `<li><small>${whenOf(n.min)}</small><span class="${n.up ? 'up' : 'down'}">${n.up ? '▲' : '▼'}</span> ${n.text}<small>${n.ids.map(id => d.stocks.find(s => s.id === id)?.name).filter(Boolean).join(' · ')}</small></li>`).join('') + '</ul>'
+      : '<p class="mk-empty">아직 뉴스가 없어요.</p>';
+  }
+}
+// 종목 화면: 처음 한 번 틀을 만들고, 그 뒤엔 숫자·차트만 바꿈(적고 있는 수량이 지워지지 않게)
+function renderDetail() {
+  const d = phone.data, s = d.stocks.find(s => s.id === phone.sel), scr = $hud('phoneScreen');
+  if (!s) { phone.tab = 'list'; return renderPhone(); }
+  if (!scr.querySelector('#mkChart') || scr.dataset.shown !== s.id) {
+    scr.dataset.shown = s.id;
+    scr.innerHTML = `<div class="mk-detail"><button type="button" class="mk-back" data-back>‹ 시세</button>
+      <div><b class="mk-name">${s.name}</b> <small>${s.sector} · 본사 ${s.region}</small></div>
+      <div><b class="mk-big" id="mkPrice"></b> <span id="mkChange"></span></div>
+      <canvas id="mkChart" aria-label="오늘 가격 차트"></canvas>
+      <div class="mk-grid" id="mkGrid"></div>
+      <div class="mk-own" id="mkOwn"></div>
+      <div class="mk-order"><button type="button" class="mk-step" data-step="-1" aria-label="1주 빼기">−</button><input id="mkQty" type="number" min="1" max="100000" value="1" inputmode="numeric" aria-label="주문 수량(주)"><button type="button" class="mk-step" data-step="1" aria-label="1주 더하기">+</button></div>
+      <div class="mk-est" id="mkEst"></div>
+      <div class="mk-btns"><button type="button" class="mk-buy" data-side="buy">사기</button><button type="button" class="mk-sell" data-side="sell">팔기</button></div>
+      <p class="mk-msg" id="mkMsg" role="status"></p></div>`;
+  }
+  const ch = s.price - s.prev, h = d.holdings[s.id], qty = Math.max(1, Math.floor(+$hud('mkQty').value || 1));
+  $hud('mkPrice').textContent = won(s.price) + '원'; $hud('mkPrice').className = 'mk-big ' + tone(ch);
+  $hud('mkChange').innerHTML = `<span class="${tone(ch)}">${signed(ch)} (${pct(s.price, s.prev).toFixed(2)}%)</span>`;
+  $hud('mkGrid').innerHTML = `<span>시가</span><b>${won(s.open)}</b><span>전일 종가</span><b>${won(s.prev)}</b><span>고가</span><b class="up">${won(s.high)}</b><span>저가</span><b class="down">${won(s.low)}</b>`;
+  $hud('mkOwn').innerHTML = h ? `가진 주식 <b>${h.qty}주</b> · 평균 ${won(Math.round(h.cost / h.qty))}원 · <span class="${tone(s.price * h.qty - h.cost)}">${signed(s.price * h.qty - h.cost)}원</span>` : '가진 주식 없음';
+  $hud('mkEst').textContent = `${qty}주 × ${won(s.price)}원 = ${won(s.price * qty)}원 (수수료 0.015%, 팔 때 세금 0.18%) · 현금 ${won(d.cash)}원`;
+  document.querySelector('.mk-buy').disabled = !d.open || d.cash < s.price * qty;
+  document.querySelector('.mk-sell').disabled = !d.open || !h;
+  drawChart(s);
+}
+// 차트: 오늘 1분 가격 선(전일 종가보다 높으면 빨강, 낮으면 파랑) + 전일 종가 점선. 오늘 거래가 없으면 최근 종가들
+function drawChart(s) {
+  const c = $hud('mkChart'), dpr = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  if (!w) return;
+  c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const pts = s.hist.length > 1 ? s.hist : s.daily.map(x => x.close).concat(s.price);
+  const lo = Math.min(...pts, s.prev), hi = Math.max(...pts, s.prev), pad = (hi - lo) * 0.1 || hi * 0.01;
+  const y = v => h - 8 - (v - lo + pad) / (hi - lo + pad * 2) * (h - 16), x = i => s.hist.length > 1 ? 4 + i / 389 * (w - 8) : 4 + i / Math.max(1, pts.length - 1) * (w - 8);
+  g.strokeStyle = '#9a96a8'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, y(s.prev)); g.lineTo(w, y(s.prev)); g.stroke(); g.setLineDash([]);
+  const col = s.price >= s.prev ? '#d32f2f' : '#1e5bd8';
+  g.beginPath(); pts.forEach((v, i) => i ? g.lineTo(x(i), y(v)) : g.moveTo(x(i), y(v)));
+  g.strokeStyle = col; g.lineWidth = 2; g.stroke();
+  g.lineTo(x(pts.length - 1), h); g.lineTo(x(0), h); g.closePath(); g.fillStyle = col + '22'; g.fill();
+  g.fillStyle = '#6a6680'; g.font = "11px Galmuri11, monospace"; g.fillText(s.hist.length > 1 ? '오늘 (09:00~15:30)' : '최근 종가', 6, 13);
+}
+$hud('phoneScreen').addEventListener('click', async e => {
+  const t = e.target;
+  if (t.closest('[data-stock]')) { phone.sel = t.closest('[data-stock]').dataset.stock; phone.tab = 'detail'; return renderPhone(); }
+  if (t.closest('[data-back]')) { phone.tab = 'list'; return renderPhone(); }
+  if (t.closest('[data-step]')) { const q = $hud('mkQty'); q.value = Math.max(1, (+q.value || 1) + +t.closest('[data-step]').dataset.step); return renderDetail(); }
+  const side = t.closest('[data-side]')?.dataset.side;
+  if (!side) return;
+  const qty = Math.floor(+$hud('mkQty').value), s = phone.data.stocks.find(s => s.id === phone.sel);
+  t.disabled = true;
+  const r = await post('trade', { id: phone.sel, side, qty });
+  $hud('mkMsg').textContent = r.ok ? `${s.name} ${r.qty}주 ${side === 'buy' ? '샀어요' : '팔았어요'} (${won(r.price)}원)` : r.msg;
+  if (r.ok) { me.cash = r.cash; notify(`${s.name} ${r.qty}주 ${side === 'buy' ? '매수' : '매도'} 체결 · ${won(r.price)}원`); }
+  loadMarket();
+});
+$hud('phoneScreen').addEventListener('input', e => { if (e.target.id === 'mkQty') renderDetail(); });
+document.querySelector('.phone-tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { phone.tab = b.dataset.tab; renderPhone(); } });
 document.addEventListener('bagopen', () => {
   const c = $hud('invChar'), g = c.getContext('2d');
   g.clearRect(0, 0, c.width, c.height); g.drawImage(sprite(me.look, 's', 0), 0, 0);
