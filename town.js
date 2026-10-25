@@ -52,19 +52,34 @@ const HOMES = [
   { roof: 'hip', roofC: '#4a4d5c', wall: '#f7f5ee', door: 'c', doorC: '#9a6b45' },
 ];
 const HOME_SLOTS = { l: 6, c: 25, r: 44 };   // 창문·문 한 칸(14칸 너비)의 왼쪽 끝
-// ===== 도시 맵 틀 =====
-// 가로 80칸 × 세로 48칸. 도로 목록만 적으면 보도·차도·횡단보도·차선·정지선을 저절로 깔아 줌
-//   대로(4차선, 보도 2칸): 가운데 가로(22~25줄)·세로(38~41칸) / 골목(2차선, 보도 1칸): 가로 10·36줄, 세로 16·62칸
-//   도로로 나뉜 블록 16개는 빈 부지(e) + 들어설 곳 이름표, 오른쪽 가운데 블록은 공원(도시 입구 옆)
+// ===== 한가람 도시 맵 (현실 도시처럼) =====
+// 가로 120칸 × 세로 80칸. 바둑판이 아니라 실제 도시처럼 굵기가 다른 길(6차선 중앙대로 · 4차선 대로 · 2차선 길 · 골목)이 중간에 끝나고 엇갈리며,
+// 한가람천이 동서로 굽이쳐 흐르고 큰길 두 곳(시청로·동부대로)이 다리로 건너감. 구역마다 쓰임이 다름:
+//   북서 주택가(단독주택·빌라·놀이터) · 북쪽 학교 · 가운데 상가·전통시장·카페거리·마트 · 동쪽 도심(회사 빌딩·시청·은행·광장·병원·체육관·백화점)
+//   · 강 양쪽 둔치 공원 · 강 건너 아파트 단지와 고속버스터미널 · 남서쪽 한가람 숲
+// 도로: { dir: h 가로 / v 세로, at: 첫 차선 줄(칸), n: 차선 수, sw: 보도 폭, from·to: 도로가 놓인 구간(없으면 맵 끝까지) }
+const CITY_W = 120, CITY_H = 80;
 const CITY_ROADS = [
-  { dir: 'h', at: 22, n: 4, sw: 2 }, { dir: 'v', at: 38, n: 4, sw: 2 },
-  { dir: 'h', at: 10, n: 2, sw: 1 }, { dir: 'h', at: 36, n: 2, sw: 1 },
-  { dir: 'v', at: 16, n: 2, sw: 1 }, { dir: 'v', at: 62, n: 2, sw: 1 },
+  { dir: 'h', at: 30, n: 6, sw: 3 },                    // 중앙대로 (6차선)
+  { dir: 'h', at: 46, n: 4, sw: 2 },                    // 강변북로
+  { dir: 'v', at: 56, n: 4, sw: 2 },                    // 시청로 (강을 다리로 건넘)
+  { dir: 'v', at: 94, n: 4, sw: 2 },                    // 동부대로 (강을 다리로 건넘)
+  { dir: 'h', at: 8, n: 2, sw: 1, from: 20, to: 119 },  // 북부로
+  { dir: 'h', at: 68, n: 2, sw: 1, from: 36, to: 119 }, // 남부로 (서쪽 끝은 숲에서 끝남)
+  { dir: 'v', at: 20, n: 2, sw: 1, from: 0, to: 49 },   // 서부로
+  { dir: 'v', at: 8, n: 2, sw: 1, from: 0, to: 33 },    // 주택가 길
+  { dir: 'v', at: 38, n: 2, sw: 1, from: 8, to: 33 },   // 상가 골목
+  { dir: 'h', at: 19, n: 2, sw: 1, from: 56, to: 97 },  // 도심 골목
+  { dir: 'v', at: 76, n: 2, sw: 1, from: 30, to: 49 },  // 도심 남쪽 골목
 ];
-const LOT_NAMES = ['주택가', '아파트', '상가', '카페거리', '학교', '회사', '병원', '은행', '마트', '시장', '버스터미널', '회사', '회사', '체육관', '회사', '공원'];
+const LOT_NAMES = ['한가람 숲'];   // 이름표(lotsign) 글씨
+// 도로 목록 → 바닥: 보도·차도·횡단보도·차선·정지선을 저절로 깔아 줌. 길이 끝나는 곳은 보도가 둘러쌈
 function cityPlan(W, H, roads) {
   const g = Array.from({ length: H }, () => Array(W).fill('e'));
-  const inBand = (r, x, y, pad) => { const p = r.dir === 'h' ? y : x; return p >= r.at - pad && p < r.at + r.n + pad; };
+  const inBand = (r, x, y, pad) => {
+    const p = r.dir === 'h' ? y : x, q = r.dir === 'h' ? x : y;
+    return p >= r.at - pad && p < r.at + r.n + pad && q >= (r.from ?? 0) - pad && q <= (r.to ?? 1e9) + pad;
+  };
   const each = fn => { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) fn(x, y); };
   each((x, y) => { if (roads.some(r => inBand(r, x, y, r.sw))) g[y][x] = '.'; });   // 보도
   each((x, y) => { if (roads.some(r => inBand(r, x, y, 0))) g[y][x] = 'R'; });      // 차도
@@ -74,32 +89,27 @@ function cityPlan(W, H, roads) {
     const r = g[y][x] === 'R' && only(x, y);
     if (r && roads.some(o => o.dir !== r.dir && inBand(o, x, y, o.sw) && !inBand(o, x, y, 0))) { g[y][x] = 'Z'; zdir.set(x + ',' + y, r.dir); }
   });
-  // 차선: 4차선 = 흰 점선·노란 중앙선(겹선)·흰 점선, 2차선 = 노란 중앙선 / 정지선: 횡단보도 바로 앞(오른쪽 통행)
-  const LANES = { h4: [['dashB'], ['yelB'], ['yelT', 'dashB'], []], h2: [['yelB'], ['yelT']], v4: [['dashR'], ['yelR'], ['yelL', 'dashR'], []], v2: [['yelR'], ['yelL']] };
+  // 차선: 가운데 두 차선 사이 노란 중앙선(겹선), 같은 방향 차선 사이 흰 점선 (2·4·6차선 모두) / 정지선: 횡단보도 바로 앞(오른쪽 통행)
+  const laneMarks = (r, lane) => {
+    const half = r.n / 2, [dash, yelA, yelB] = r.dir === 'h' ? ['dashB', 'yelB', 'yelT'] : ['dashR', 'yelR', 'yelL'], m = [];
+    if (lane === half - 1) m.push(yelA); else if (lane < half - 1) m.push(dash);
+    if (lane === half) m.push(yelB);
+    if (lane >= half && lane < r.n - 1) m.push(dash);
+    return m;
+  };
   each((x, y) => {
     const r = g[y][x] === 'R' && only(x, y);
     if (!r) return;
-    const lane = r.dir === 'h' ? y - r.at : x - r.at, half = lane >= r.n / 2, m = [...LANES[r.dir + r.n][lane]];
+    const lane = r.dir === 'h' ? y - r.at : x - r.at, half = lane >= r.n / 2, m = laneMarks(r, lane);
     if (r.dir === 'h' && half && g[y][x + 1] === 'Z') m.push('stopR');       // 동쪽으로 가는 차선(아래쪽)
     if (r.dir === 'h' && !half && g[y][x - 1] === 'Z') m.push('stopL');      // 서쪽으로 가는 차선(위쪽)
     if (r.dir === 'v' && !half && g[y + 1]?.[x] === 'Z') m.push('stopB');    // 남쪽으로 가는 차선(왼쪽)
     if (r.dir === 'v' && half && g[y - 1]?.[x] === 'Z') m.push('stopT');     // 북쪽으로 가는 차선(오른쪽)
     if (m.length) marks.set(x + ',' + y, m);
   });
-  // 블록: 도로·보도에 안 걸린 가로 칸 구간 × 세로 줄 구간
-  const spans = (len, dir) => {
-    const out = []; let start = null;
-    for (let i = 0; i <= len; i++) {
-      const free = i < len && !roads.some(r => r.dir === dir && i >= r.at - r.sw && i < r.at + r.n + r.sw);
-      if (free && start === null) start = i;
-      if (!free && start !== null) { out.push([start, i - 1]); start = null; }
-    }
-    return out;
-  };
-  const blocks = spans(H, 'h').flatMap(([y0, y1]) => spans(W, 'v').map(([x0, x1]) => ({ x0, x1, y0, y1 })));
-  return { ground: g.map(row => row.join('')), marks, zdir, blocks };
+  return { ground: g.map(row => row.join('')), marks, zdir };
 }
-const CITY = cityPlan(80, 48, CITY_ROADS);
+const CITY = cityPlan(CITY_W, CITY_H, CITY_ROADS);
 // 지역 이름 (지역 표지판 그림 번호). 장면마다 region에 적어 두면 지도가 "지금 있는 곳"으로 씀
 const REGION_NAMES = ['한가람', '별하항', '단비', '누리벌'];
 // 지역 맵: 도로 목록으로 틀을 깔고(cityPlan), paint(x, y, 원래 칸)로 칸마다 바닥을 정함 (바다·논·공장 마당 등)
@@ -115,25 +125,26 @@ function terminalAt(place, spot, x, y) {
   spot({ type: 'terminal', x: dx, y: fy + 10, px: dx, py: fy - 70, r: 36 });
   return { x: dx, y: fy + 26 };
 }
-const CITY_PARK = 7;   // 공원이 될 블록 번호 (오른쪽 가운데 위, 도시 입구 옆)
-const CITY_HOMES = 0;  // 주택가 블록 번호 (왼쪽 위)
-// 블록 바닥: g 잔디 · . 보도(광장) · e 흙 운동장 · p 주차장 (블록 번호 → 바닥)
-const BLOCK_GROUND = { 1: 'g', 2: '.', 3: '.', 4: 'e', 5: '.', 6: '.', 8: '.', 9: '.', 10: '.', 11: 'p', 12: '.', 13: '.', 14: '.', 15: '.' };
-const inBlock = (b, x, y) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
+// 한가람 바닥: 길·보도(강 위는 다리) 말고는 구역마다 (강 S · 둔치 잔디 g · 산책길 l · 마당 g · 운동장 흙 e · 도심 돌광장 q · 주차장 p · 보도 .)
+const RIVER = x => 56 + 1.5 * Math.sin(x / 9);   // 한가람천 가운데 줄 (폭 5칸쯤, 굽이침)
+const inRect = (x, y, x0, y0, x1, y1) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
 CITY.ground = CITY.ground.map((row, y) => [...row].map((k, x) => {
-  if (inBlock(CITY.blocks[CITY_PARK], x, y)) return 'g';
-  const hb = CITY.blocks[CITY_HOMES];
-  if (inBlock(hb, x, y)) return y === hb.y0 + 4 ? '.' : 'g';   // 주택가: 잔디 마당 + 윗줄 집 앞 골목길(옆 보도와 이어짐)
-  const i = CITY.blocks.findIndex(b => inBlock(b, x, y)), bg = BLOCK_GROUND[i];
-  if (bg) return bg;
-  return k;
+  if (k !== 'e') return k;
+  const c = RIVER(x);
+  if (Math.abs(y - c) <= 2.2) return 'S';                                            // 한가람천
+  if (y >= 52 && y < c) return 'g';                                                  // 북쪽 둔치
+  if (y > c && y < 67) return y === 63 ? 'l' : 'g';                                  // 남쪽 둔치 공원 + 산책길
+  if (x <= 35 && y >= 67) return y === 71 || x === 18 ? 'l' : 'g';                   // 남서쪽 숲 + 오솔길
+  if (x <= 18 && y <= 26) return x >= 11 && [3, 7, 11].includes(y) ? '.' : 'g';      // 주택가: 마당 + 집 앞 골목
+  if (inRect(x, y, 23, 0, 53, 6)) return x >= 36 ? 'e' : '.';                       // 학교 + 운동장
+  if (y >= 71) return x >= 100 ? '.' : y <= 74 ? 'p' : y <= 78 ? 'g' : '.';         // 강 건너: 주차장 → 아파트 단지 → 단지 뒷길 / 터미널 광장
+  if (inRect(x, y, 0, 39, 53, 43) || inRect(x, y, 100, 39, 119, 43)) return x >= 41 && x <= 53 ? '.' : 'g';   // 빌라 마을 · 분수 광장
+  if (inRect(x, y, 62, 0, 91, 26)) return 'q';                                       // 도심 돌광장
+  return '.';
 }).join(''));
-
-// 주택가 집 6채: 왼쪽 위 칸(x, y), 문 가운데(doorX, 픽셀), 문 앞 줄 위쪽 끝(frontY, 픽셀) — 바깥(문 E)과 집 안(나가기)이 같이 씀
-const HOME_LOTS = [[0, 2], [5, 2], [10, 2], [0, 7], [5, 7], [10, 7]].map(([dx, dy], k) => {
-  const b = CITY.blocks[CITY_HOMES], x = b.x0 + dx, y = b.y0 + dy;
-  return { x, y, doorX: x * TILE + (HOME_SLOTS[HOMES[k].door] + 7) * ART, frontY: (y + 2) * TILE };
-});
+// 주택가 단독주택 6채(들어갈 수 있음): 왼쪽 위 칸(x, y), 문 가운데(doorX, 픽셀), 문 앞 줄 위쪽 끝(frontY, 픽셀) — 바깥(문 E)과 집 안(나가기)이 같이 씀
+const HOME_LOTS = [[11, 1], [15, 1], [11, 5], [15, 5], [11, 9], [15, 9]].map(([x, y], k) => ({ x, y, doorX: x * TILE + (HOME_SLOTS[HOMES[k].door] + 7) * ART, frontY: (y + 2) * TILE }));
+const CITY_START = { x: 118.5 * TILE, y: 28 * TILE + 20 };   // 도시 입구: 동쪽 끝 중앙대로 북쪽 보도 (튜토리얼에서 오면 여기)
 // 주택가 집 안 (가로 14칸 × 세로 10칸): 벽지 벽(위 3줄) · 나무 마루 · 러그 · 아래 가운데 현관 매트(E → 그 집 문 앞으로)
 // 가구 배치 두 가지를 번갈아: 짝수 집 = 침실·거실(침대·책장·TV·소파), 홀수 집 = 주방·식탁(조리대·냉장고·식탁) + 침대
 const HOUSE_GROUND = [
@@ -161,7 +172,8 @@ function houseScene(k) {
 
 // 마트 안 (가로 20칸 × 세로 12칸): 바둑판 타일 · 위쪽 벽에 음료 냉장고와 과일·채소 매대 · 진열대 네 줄 · 오른쪽 계산대 너머 점원(E → 사기)
 // 문: 도시 마트 유리문(가운데) 앞 ↔ 마트 안 아래 가운데 현관 매트
-const MART_DOOR = { x: 20 * TILE + 96 * ART, y: 35 * TILE };   // 도시: 마트(20칸부터, 그림 가운데 96칸) 문 앞 보도 줄 위쪽 끝
+const MART_AT = [41, 24];   // 한가람 마트 왼쪽 위 칸 (가로 12칸 × 3줄)
+const MART_DOOR = { x: MART_AT[0] * TILE + 96 * ART, y: (MART_AT[1] + 3) * TILE };   // 도시: 마트 유리문(그림 가운데 96칸) 앞 보도 줄 위쪽 끝
 const MART_GROUND = ['wwwwwwwwwwwwwwwwwwww', 'wwwwwwwwwwwwwwwwwwww', 'wwwwwwwwwwwwwwwwwwww',
   ...Array(8).fill('bmmmmmmmmmmmmmmmmmmb'), 'bbbbbbbbbddbbbbbbbbb'];
 function martScene() {
@@ -302,61 +314,70 @@ const SCENES = {
       .forEach(([x, y], i) => place(KINDS[i % KINDS.length], i, x, y));
     spot({ type: 'door', x: 20 * TILE, y: 12 * TILE + 10, px: 20 * TILE, py: 12 * TILE - 98, to: 'home', at: { x: 10 * TILE, y: 10 * TILE } });
     place('signpost', 0, 2, 13);
-    spot({ type: 'exit', x: 0.5 * TILE, y: 15 * TILE, px: 2.5 * TILE, py: 11 * TILE - 40, to: 'city', face: 'e', faceLeft: true, at: { x: 78.5 * TILE, y: 21 * TILE + 20 } });   // 도시 오른쪽 끝, 대로 위쪽 보도 (왼쪽 = 도시 쪽을 봄)
+    spot({ type: 'exit', x: 0.5 * TILE, y: 15 * TILE, px: 2.5 * TILE, py: 11 * TILE - 40, to: 'city', face: 'e', faceLeft: true, at: CITY_START });   // 도시 동쪽 끝, 중앙대로 북쪽 보도 (왼쪽 = 도시 쪽을 봄)
   }),
-  // 도시 입구: 튜토리얼을 떠나면 오는 곳(다음부터는 여기서 시작). 오른쪽 끝에서 흙길이 들어옴. 도시는 앞으로 하나씩 지음
-  city: Object.assign(makeScene('city', CITY.ground, { x: 78.5 * TILE, y: 21 * TILE + 20 }, ({ place, spot, deco }) => {
-    // 블록마다 건물·소품 (b = 블록, 건물 앞면은 아래쪽 보도를 봄. 맨 아랫줄 블록은 앞에 광장을 둠)
-    const BUILD = {
-      1: b => { place('apt', 0, b.x0, b.y1 - 3, 7, 4); place('apt', 1, b.x0 + 9, b.y1 - 3, 7, 4); place('bench', 0, b.x0 + 7, b.y1, 2, 1); place('pine', 3, b.x0 + 7, b.y1 - 3); place('maple', 4, b.x0 + 8, b.y1 - 5); },   // 아파트 101·102동
-      2: b => { for (let k = 0; k < 8; k++) { place('shop', k, b.x0 + k * 2, b.y1 - 1, 2, 2); place('shop', k + 3, b.x0 + k * 2, b.y0 + 2, 2, 2); } for (const k of [1, 4, 6]) deco('aboard', b.x0 + k * 2, b.y0 + 4); },   // 상가 두 줄 (가운데 골목)
-      3: b => { [0, 5, 10].forEach((dx, k) => place('cafe', k, b.x0 + dx, b.y0 + 3, 3, 2)); [1, 3, 6, 8, 11, 13].forEach((dx, k) => place('patio', k, b.x0 + dx, b.y0 + 6)); },   // 카페거리: 카페 셋 + 야외 파라솔 자리
-      4: b => { place('school', 0, b.x0, b.y1 - 2, 10, 3); place('goal', 0, b.x0 + 11, b.y0 + 1, 3, 1); place('flagpole', 0, b.x0 + 10, b.y1); },   // 학교 + 운동장 골대 + 국기 게양대
-      5: b => { place('office', 0, b.x0 + 1, b.y1 - 2, 6, 3); place('office', 1, b.x0 + 9, b.y1 - 2, 6, 3); place('bench', 0, b.x0 + 7, b.y1, 2, 1); },   // 회사 두 동 (한빛전자·누리소프트)
-      6: b => { place('hospital', 0, b.x0, b.y1 - 2, 9, 3); place('bench', 0, b.x0 + 13, b.y1, 2, 1); },   // 병원 + 벤치
-      8: b => { place('bank', 0, b.x0 + 1, b.y1 - 2, 8, 3); place('atm', 0, b.x0 + 11, b.y1); },   // 은행 + ATM
-      9: b => {   // 마트 + 카트, 가운데 유리문 앞에서 E → 마트 안
-        place('mart', 0, b.x0 + 1, b.y1 - 2, 12, 3); for (const dx of [14, 15]) place('cart', dx, b.x0 + dx, b.y1);
-        spot({ type: 'door', x: MART_DOOR.x, y: MART_DOOR.y + 10, px: MART_DOOR.x, py: MART_DOOR.y - 64, to: 'mart', at: { x: 10 * TILE, y: 10 * TILE } });
-      },
-      10: b => {   // 전통시장: 노점 두 줄 + 가운데 입구 간판(밑으로 지나갈 수 있음)
-        [0, 3, 6, 9, 12].forEach((dx, k) => place('stall', k, b.x0 + dx, b.y0 + 1, 3, 2));
-        [0, 3, 12].forEach((dx, k) => place('stall', k + 2, b.x0 + dx, b.y1 - 1, 3, 2));
-        place('marketgate', 0, b.x0 + 6, b.y1, 6, 1, false);
-      },
-      11: b => { terminalAt(place, spot, b.x0 + 1, b.y1 - 2); [0, 1, 2].forEach(k => place('bus', k, b.x0 + 11 + k, b.y1 - 4, 1, 3)); },   // 고속버스터미널 + 서 있는 버스
-      12: b => { place('office', 2, b.x0 + 1, b.y0 + 4, 6, 3); place('office', 3, b.x0 + 8, b.y0 + 4, 6, 3); place('bench', 0, b.x0 + 6, b.y0 + 7, 2, 1); },   // 회사 두 동 (대한건설·푸른식품)
-      13: b => { place('office', 4, b.x0 + 2, b.y0 + 4, 6, 3); place('office', 5, b.x0 + 10, b.y0 + 4, 6, 3); place('bench', 0, b.x0 + 8, b.y0 + 7, 2, 1); },   // 회사 두 동 (별빛제약·바다해운)
-      14: b => { place('gym', 0, b.x0 + 3, b.y0 + 2, 10, 3); place('hoop', 0, b.x1 - 1, b.y0 + 6); },   // 체육관 + 농구대
-      15: b => { place('office', 6, b.x0 + 1, b.y0 + 4, 6, 3); place('office', 7, b.x0 + 8, b.y0 + 4, 6, 3); place('bench', 0, b.x0 + 6, b.y0 + 7, 2, 1); },   // 회사 두 동 (하늘항공·새봄화학)
-    };
-    // 블록마다 가운데에 들어설 곳 이름표 (공원 블록은 "공원" + 나무·벤치)
-    let n = 0;
-    CITY.blocks.forEach((b, i) => {
-      const cx = Math.floor((b.x0 + b.x1) / 2), cy = Math.floor((b.y0 + b.y1) / 2);
-      if (i === CITY_HOMES) {   // 주택가: 집 6채 (윗줄은 골목길을, 아랫줄은 큰길 보도를 바라봄) + 집 사이 울타리 나무 + 문 옆 우편함
-        n++;
-        [[0, 2], [5, 2], [10, 2], [0, 7], [5, 7], [10, 7]].forEach(([dx, dy], k) => {
-          const x = b.x0 + dx, y = b.y0 + dy;
-          place('home', k, x, y, 4, 2);
-          place('mailbox', k, x + { l: 2, c: 0, r: 1 }[HOMES[k].door], y + 2, 1, 1, false);   // 문 옆 칸
-          const lot = HOME_LOTS[k];   // 문 앞에서 E → 이 집 안 (현관 매트 앞에 섬)
-          spot({ type: 'door', x: lot.doorX, y: lot.frontY + 10, px: lot.doorX, py: lot.frontY - 70, to: 'h' + k, at: { x: 7 * TILE, y: 8 * TILE + 16 } });
-        });
-        for (const x of [4, 9, 14]) for (const y of [2, 3, 7, 8]) place('hedge', 0, b.x0 + x, b.y0 + y);
-        return;
-      }
-      if (BUILD[i]) return BUILD[i](b);
-      place('lotsign', LOT_NAMES.length - 1, cx - 1, cy, 3, 1);   // 공원 안내판
-      if (i !== CITY_PARK) return;
-      const KINDS = ['cherry', 'maple', 'ginkgo', 'pine'];
-      [[b.x0 + 1, b.y0 + 1], [b.x0 + 4, b.y0 + 4], [b.x1 - 1, b.y0 + 1], [b.x1 - 4, b.y1 - 1], [b.x0 + 1, b.y1 - 1], [b.x1 - 1, b.y1 - 2], [b.x0 + 9, b.y0 + 1]]
-        .forEach(([x, y], k) => place(KINDS[k % 4], k + 30, x, y));
-      place('bench', 0, cx - 1, cy + 2, 2, 1);
+  // 한가람(수도): 튜토리얼을 떠나면 오는 곳(동쪽 끝 중앙대로). 건물 앞면은 모두 아래쪽 길·보도를 봄
+  city: Object.assign(makeScene('city', CITY.ground, CITY_START, ({ place, spot, deco }) => {
+    const trees = (list, kinds, v0) => list.forEach(([x, y], i) => place(kinds[i % kinds.length], v0 + i, x, y));
+    // --- 북서 주택가: 단독주택 6채(문 앞 E → 집 안) · 빌라 · 놀이터 ---
+    HOME_LOTS.forEach((lot, k) => {
+      place('home', k, lot.x, lot.y, 4, 2);
+      place('mailbox', k, lot.x + { l: 2, c: 0, r: 1 }[HOMES[k].door], lot.y + 2, 1, 1, false);
+      spot({ type: 'door', x: lot.doorX, y: lot.frontY + 10, px: lot.doorX, py: lot.frontY - 70, to: 'h' + k, at: { x: 7 * TILE, y: 8 * TILE + 16 } });
     });
-    // 대로 보도에 가로등: 6칸마다 (교차로·횡단보도·골목 근처는 비움)
-    for (let x = 2; x < 80; x += 6) if ((x < 33 || x > 46) && !(x >= 14 && x <= 19) && !(x >= 60 && x <= 65)) { if (x !== 26) place('lamp', 0, x, 20); place('lamp', 0, x, 27); }   // (26, 20)은 회사 앞 벤치 자리라 비움
-    for (let y = 2; y < 48; y += 6) if (y < 17 || y > 30) { place('lamp', 0, 36, y); place('lamp', 0, 43, y); }
+    [[11, 14], [15, 14], [11, 19], [15, 19], [1, 15], [1, 20]].forEach(([x, y], k) => place('villa', k, x, y, 4, 2));
+    place('playground', 0, 1, 3, 3, 2); place('bench', 0, 2, 25, 2, 1);
+    trees([[0, 9], [3, 11], [5, 7], [12, 24], [15, 24], [17, 22], [5, 0], [0, 13]], ['maple', 'cherry', 'pine', 'ginkgo'], 80);
+    // --- 북쪽 학교 + 흙 운동장 ---
+    place('school', 0, 24, 3, 10, 3); place('flagpole', 0, 35, 5);
+    place('goal', 0, 41, 1, 3, 1); place('goal', 1, 48, 1, 3, 1); place('hoop', 0, 52, 5);
+    // --- 상가와 전통시장 (상가 골목 서쪽) ---
+    for (let k = 0; k < 7; k++) { place('shop', k, 23 + k * 2, 11, 2, 2); place('shop', k + 3, 23 + k * 2, 24, 2, 2); }
+    [23, 26, 29, 32].forEach((x, k) => place('stall', k, x, 15, 3, 2));
+    [23, 26, 32].forEach((x, k) => place('stall', k + 4, x, 19, 3, 2));
+    place('marketgate', 0, 27, 22, 6, 1, false);
+    // --- 카페거리 + 마트 (상가 골목 동쪽) ---
+    [41, 45, 49].forEach((x, k) => place('cafe', k, x, 11, 3, 2));
+    [42, 44, 46, 48, 50].forEach((x, k) => place('patio', k, x, 14));
+    place('vending', 0, 44, 20); place('bin', 0, 46, 20); place('flowers', 1, 49, 18);
+    place('mart', 0, MART_AT[0], MART_AT[1], 12, 3); deco('cart', 53, 25); deco('cart', 53, 26);
+    spot({ type: 'door', x: MART_DOOR.x, y: MART_DOOR.y + 10, px: MART_DOOR.x, py: MART_DOOR.y - 64, to: 'mart', at: { x: 10 * TILE, y: 10 * TILE } });
+    // --- 동쪽 도심: 회사 빌딩 8동 · 시청 · 은행 · 분수 광장 ---
+    [62, 69, 76, 83].forEach((x, k) => { place('office', k, x, 4, 6, 3); place('office', k + 4, x, 15, 6, 3); });
+    place('cityhall', 0, 62, 24, 10, 3); place('bank', 0, 74, 24, 8, 3); place('atm', 0, 83, 26);
+    place('fountain', 0, 86, 23, 3, 2); place('bench', 0, 89, 26, 2, 1);
+    trees([[68, 11], [75, 11], [82, 11], [89, 11]], ['ginkgo'], 90);
+    // --- 동부대로 동쪽: 병원 · 체육관 · 백화점 ---
+    place('hospital', 0, 102, 4, 9, 3); place('bench', 0, 113, 6, 2, 1);
+    place('gym', 0, 102, 15, 10, 3); place('hoop', 0, 114, 17);
+    place('dept', 0, 102, 23, 14, 4);
+    trees([[117, 12], [117, 16], [117, 20], [118, 2]], ['pine', 'maple'], 95);
+    // --- 중앙대로와 강 사이: 빌라 마을 · 분수 광장 · 상가 · 카페 ---
+    [[1, 41], [6, 41], [11, 41], [15, 41], [24, 41], [29, 41], [34, 41], [101, 41], [106, 41], [111, 41]].forEach(([x, y], k) => place('villa', k + 2, x, y, 4, 2));
+    place('fountain', 0, 46, 40, 3, 2); place('bench', 0, 42, 42, 2, 1); place('bench', 0, 50, 42, 2, 1);
+    for (let k = 0; k < 6; k++) place('shop', k + 1, 62 + k * 2, 41, 2, 2);
+    [79, 83, 87].forEach((x, k) => place('cafe', k, x, 41, 3, 2));
+    place('townsign', 0, 116, 40, 3, 1);
+    // --- 강변 공원: 둔치 나무·벤치·놀이터·농구대 ---
+    for (let x = 4; x < 118; x += 9) if (!(x >= 53 && x <= 62) && !(x >= 91 && x <= 100)) { place(x % 2 ? 'cherry' : 'maple', x, x, 52); }
+    [[30, 61], [70, 61], [108, 61], [14, 61]].forEach(([x, y]) => place('bench', 0, x, y, 2, 1));
+    for (let x = 2; x < 118; x += 7) if (!(x >= 52 && x <= 62) && !(x >= 90 && x <= 100)) place(x % 3 ? 'ginkgo' : 'pine', x + 1, x, 65);
+    place('playground', 1, 80, 64, 3, 2); place('hoop', 0, 46, 65);
+    // --- 남서쪽 한가람 숲 ---
+    place('lotsign', 0, 13, 68, 3, 1);
+    for (let y = 67; y < 80; y++) for (let x = 0; x <= 35; x++) if (y !== 71 && x !== 18 && !(y === 68 && x >= 12 && x <= 16) && hash(x, y, 31) < 0.16) place(['pine', 'pine', 'maple', 'ginkgo'][Math.floor(hash(x, y, 32) * 4)], x * 7 + y, x, y);
+    // --- 강 건너: 아파트 단지(앞 주차장) · 고속버스터미널 ---
+    [[37, 0], [45, 1], [63, 0], [72, 1], [81, 1]].forEach(([x, v]) => place('apt', v, x, 75, 7, 4));
+    for (const x of [37, 39, 41, 45, 47, 63, 65, 67, 72, 74, 81, 83, 85, 88]) if (hash(x, 9, 7) < 0.7) place('car', Math.floor(hash(x, 8, 7) * 4), x, 72, 1, 2);
+    place('playground', 0, 52, 72, 2, 2);
+    terminalAt(place, spot, 102, 74);
+    [0, 1, 2].forEach(k => place('bus', k, 113 + k * 2, 71, 1, 3));
+    // --- 거리: 가로수·가로등(교차로 근처는 비움) · 버스정류장 · 지하철역 입구 ---
+    const nearCross = x => [[6, 11], [18, 23], [36, 41], [52, 63], [74, 79], [90, 101]].some(([a, b]) => x >= a && x <= b);
+    for (let x = 2; x < 118; x += 6) if (!nearCross(x)) { place('lamp', 0, x, 27); place('lamp', 0, x, 38); place('lamp', 0, x, 44); place('lamp', 0, x, 51); if (!nearCross(x + 3)) place('ginkgo', 70 + x, x + 3, 38); }
+    for (let y = 2; y < 80; y += 7) if (!(y >= 5 && y <= 12) && !(y >= 16 && y <= 23) && !(y >= 25 && y <= 40) && !(y >= 42 && y <= 53) && !(y >= 64 && y <= 72)) { place('lamp', 0, 54, y); place('lamp', 0, 93, y); }
+    place('busstop', 0, 28, 37, 2, 1); place('busstop', 0, 66, 28, 2, 1); place('busstop', 0, 110, 37, 2, 1);
+    place('subway', 0, 31, 28, 2, 1); place('subway', 0, 100, 37, 2, 1);
   }), { marks: CITY.marks, zdir: CITY.zdir, region: '한가람' }),
   ...Object.fromEntries(HOME_LOTS.map((_, k) => ['h' + k, houseScene(k)])),   // 주택가 집 안 h0 ~ h5
   mart: martScene(),   // 마트 안
@@ -633,7 +654,7 @@ function tileImage(tx, ty) {
 
 // ----- 그림자: 바닥을 다 그린 뒤, 물건보다 먼저 그림 (빛은 왼쪽 위) -----
 const SHADE = 'rgba(32, 26, 52, 0.22)';
-const BIG = new Set(['cafe', 'shop', 'villa', 'house', 'home', 'apt', 'office', 'school', 'hospital', 'bank', 'mart', 'gym', 'terminal', 'fishmarket', 'factory', 'warehouse', 'barn']);
+const BIG = new Set(['cafe', 'shop', 'villa', 'house', 'home', 'apt', 'office', 'school', 'hospital', 'bank', 'mart', 'gym', 'terminal', 'fishmarket', 'factory', 'warehouse', 'barn', 'cityhall', 'dept']);
 // 밤에 불이 켜지는 곳: 물건 그림 안의 [x, y, 가로, 세로] (그림 칸 단위). 창문은 창살 사이 유리 네 칸씩
 // 바깥 하늘이 보이는 유리: 물건 그림 안의 [x, y, 가로, 세로] (집 안 창문은 창살 사이 네 칸) → 시간·날씨에 맞춰 색이 바뀜
 const SKY_GLASS = { wwin: [[6, 4, 9, 9], [17, 4, 9, 9], [6, 15, 9, 9], [17, 15, 9, 9]] };
@@ -1482,6 +1503,48 @@ const ARTS = {
     for (const x of [8, 37]) { box(x, 16, 3, 18, INK); box(x + 1, 16, 1, 18, '#8a5a3b'); }
     box(0, 0, 48, 19, INK); box(1, 1, 46, 17, '#8a5a3b'); box(3, 3, 42, 13, '#f4e7c8');
     center(REGION_NAMES[v] || '', 24, 4, '#4a2c18');
+    return c;
+  },
+  // ===== 현실 도시 한가람: 시청 · 백화점 · 지하철역 입구 · 놀이터 =====
+  cityhall() {   // 한가람시청(가로 10칸): 흰 돌 건물 · 가운데 높은 탑과 시계 · 국기 · 넓은 계단 · 유리 현관
+    const W = 160, H = 112, t = bTools(W, H), { box } = t;
+    box(66, 0, 28, 44, INK); box(67, 1, 26, 43, '#eceae2'); box(89, 1, 4, 43, '#d6d3c8');                   // 가운데 탑
+    box(72, 8, 16, 16, INK); box(73, 9, 14, 14, '#ffffff'); box(79, 11, 2, 6, INK); box(80, 16, 5, 2, INK);    // 시계
+    box(79, 26, 2, 14, '#9aa3ad'); box(81, 26, 10, 6, '#e8454b'); box(81, 29, 10, 3, '#3d7fd6');               // 국기
+    t.wall(4, 40, W - 8, 62, '#f1efe8'); box(5, 41, W - 10, 4, '#c9c4b5');
+    t.sign(48, 48, 64, '한가람시청', '#2f3b55', '#ffffff');
+    for (const y of [68, 84]) for (const x of [12, 28, 44, 104, 120, 136]) t.glass(x, y, 10, 10, '#bfe3f5', hash(x, y, 9) < 0.5);
+    for (const x of [62, 74, 86, 98]) { box(x - 1, 66, 6, 36, INK); box(x, 66, 4, 36, '#ffffff'); }            // 기둥
+    t.glass(66, 80, 28, 21, '#bfe3f5', true); box(79, 80, 2, 21, '#9aa3ad');
+    box(0, 102, W, 10, INK); box(1, 102, W - 2, 3, '#e2dac8'); box(1, 105, W - 2, 3, '#d0c8b5'); box(1, 108, W - 2, 3, '#c0b8a4');   // 계단
+    return t.c;
+  },
+  dept() {   // 가람백화점(가로 14칸, 키 7칸): 크림 외벽 · 꼭대기 큰 간판 · 층마다 진열창 · 1층 회전문과 차양
+    const W = 224, H = 112, t = bTools(W, H), { box } = t;
+    t.wall(2, 6, W - 4, 102, '#efe4d0'); box(3, 7, W - 6, 20, '#8a2f3f'); box(3, 7, W - 6, 2, '#b04a5a');
+    t.center('가람백화점', 112, 10, '#f6e3b4');
+    for (const y of [32, 52]) { box(3, y + 16, W - 6, 2, '#d6c7a8'); for (let x = 10; x < W - 14; x += 26) t.glass(x, y, 20, 14, '#cfe9f8', hash(x, y, 4) < 0.7); }
+    box(3, 72, W - 6, 6, '#8a2f3f'); for (let x = 3; x < W - 3; x += 8) box(x, 78, 4, 4, '#b04a5a');          // 차양
+    for (const x of [12, 52, 148, 188]) { t.glass(x, 84, 26, 20, '#cfe9f8', true); box(x + 4, 92, 6, 6, '#f2c94c'); box(x + 14, 90, 6, 8, '#e8454b'); }   // 진열창 (마네킹·상품)
+    t.glass(92, 82, 40, 25, '#bfe3f5', true); box(111, 82, 2, 25, '#9aa3ad');
+    t.base(108);
+    return t.c;
+  },
+  subway() {   // 지하철역 입구(가로 2칸): 초록 지붕 · 아래로 내려가는 계단 · 'M' 표지 기둥
+    const { c, box, center } = painter(32, 36);
+    box(0, 6, 32, 6, INK); box(1, 7, 30, 4, '#3f9a5a'); box(1, 7, 30, 1, '#6fc08a');
+    box(2, 12, 2, 18, INK); box(28, 12, 2, 18, INK);
+    box(4, 12, 24, 22, '#3a3a44'); for (let y = 14; y < 34; y += 4) box(5, y, 22, 2, '#6b7080');               // 계단
+    box(8, 0, 16, 9, INK); box(9, 1, 14, 7, '#ffffff'); center('지하철', 16, -2, '#2f6fc6');
+    return c;
+  },
+  playground() {   // 놀이터(가로 3칸): 모래밭 · 미끄럼틀 · 그네
+    const { c, box } = painter(48, 34);
+    box(0, 20, 48, 14, '#e9d29a'); for (let i = 0; i < 6; i++) box(4 + i * 7, 24 + (i % 2) * 4, 2, 1, '#d9bf82');
+    box(4, 4, 2, 22, INK); box(22, 4, 2, 22, INK); box(4, 4, 20, 2, INK); box(9, 6, 1, 12, '#6b7080'); box(17, 6, 1, 12, '#6b7080');   // 그네 틀·줄
+    box(7, 18, 5, 2, '#e8454b'); box(15, 18, 5, 2, '#3d7fd6');                                                 // 그네 의자
+    box(30, 6, 8, 20, INK); box(31, 7, 6, 18, '#f2c94c'); for (let y = 9; y < 25; y += 4) box(31, y, 6, 1, '#c9951c');   // 미끄럼틀 사다리
+    for (let i = 0; i < 14; i++) box(37 + Math.floor(i * 0.7), 7 + i, 4, 2, '#e8454b');                         // 미끄럼판
     return c;
   },
   fridgecase() {   // 음료 냉장고(가로 3칸): 은색 틀 + 유리문 셋 + 칸마다 색색 병

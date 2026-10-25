@@ -194,7 +194,7 @@ const lifeOf = a => ({ cash: a.cash ?? 50000, bag: a.bag || [], place: a.place |
 const SCENE_NAMES = ['field', 'home', 'city', 'h0', 'h1', 'h2', 'h3', 'h4', 'h5', 'mart', 'byeolha', 'danbi', 'nuribeol'];   // town.js의 장면 이름 (h0~h5 = 주택가 집 안, mart = 마트 안, 나머지는 다른 지역)
 // 갈 수 있는 지역: 이름 → { 장면, 지도 칸 좌표(country.js와 같음), 도착 자리 = 그 지역 터미널 문 앞(town.js terminalAt) }
 const REGIONS = {
-  한가람: { scene: 'city', x: 64, y: 74, at: [2272, 1146] },
+  한가람: { scene: 'city', x: 64, y: 74, at: [3424, 2490] },   // 한가람 터미널(102, 74) 문 앞
   별하항: { scene: 'byeolha', x: 30, y: 36, at: [1056, 634] },
   단비: { scene: 'danbi', x: 82, y: 92, at: [992, 1050] },
   누리벌: { scene: 'nuribeol', x: 58, y: 16, at: [1248, 506] },
