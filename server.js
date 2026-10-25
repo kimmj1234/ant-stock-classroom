@@ -166,6 +166,12 @@ const { createMarket, BY_ID: STOCKS } = require('./economy.js');
 const market = createMarket(path.join(DATA_DIR, 'market.json'), readJSONFile, writeJSONFile);
 market.advance(worldMinutes());
 setInterval(() => market.advance(worldMinutes()), 2000);
+// ===== 세계 시뮬레이션 (sim/): 사람·일·사건·사회. 2초마다 세계 시각까지 진행(한 번에 최대 40ms), 지역·나라 사건은 주식 뉴스로도 =====
+const { createSim } = require('./sim/index.js');
+const sim = createSim({ file: path.join(DATA_DIR, 'sim.json'), read: readJSONFile, write: writeJSONFile, toMarket: (min, n) => market.ingest(min, n) });
+sim.advance(worldMinutes());
+setInterval(() => sim.advance(worldMinutes()), 2000);
+process.on('SIGINT', () => { sim.kernel.save(); process.exit(0); });   // 끌 때 마지막 상태 저장
 const FEE = 0.00015, SELL_TAX = 0.0018;   // 거래 수수료 0.015%(사고팔 때), 파는 금액에 세금 0.18% (현실과 비슷하게)
 // 생활 정보: 현금(원), 가방(물건 목록), 서 있던 자리(장면·픽셀 위치, 없으면 처음 자리), 능력치 (게임 시간은 세계 시간 하나라 계정마다 두지 않음)
 // 능력치: 체력·배고픔·기분은 게이지 0~100 (100이 가장 좋음) / 지능·근력은 레벨(1부터, 돈으로 강화 — 나중엔 공부·운동 같은 행동으로도)
@@ -284,6 +290,13 @@ http.createServer(async (req, res) => {
       a.cash = life.cash - fare; a.region = b.to; a.place = { scene: dest.scene, x: dest.at[0], y: dest.at[1] };
       writeJSONFile(ACCOUNTS_FILE, accounts);
       return json(res, 200, { ok: true, cash: a.cash, region: b.to, place: a.place, fare });
+    }
+    if (name === 'people' || name === 'person' || name === 'society') {   // 세계: people { scene } = 그 장면 밖을 걷는 사람들 / person { id } = 말 걸기 / society = 나라 통계·소식
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      const now = worldMinutes();
+      if (name === 'people') return json(res, 200, { ok: true, people: SCENE_NAMES.includes(b.scene) ? sim.visible(b.scene, now) : [] });
+      if (name === 'person') { const t = Number.isInteger(b.id) && sim.talk(b.id, now); return t ? json(res, 200, { ok: true, ...t }) : json(res, 404, { ok: false, msg: '그 사람은 지금 없어요.' }); }
+      return json(res, 200, { ok: true, ...sim.society() });
     }
     if (name === 'market') {   // 시세판: 장 열림 여부 · 다음 개장 · 회사별 시세 · 뉴스 · 내 돈과 가진 주식
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });

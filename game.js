@@ -303,6 +303,7 @@ function renderPhone() {
   st.textContent = d.open ? '장 열림 · 15:30에 마감' : `장 마감 · 다음 개장 ${nx.month}월 ${nx.date}일 (${nx.weekday}) 09:00`;
   $hud('phoneClock').textContent = today(clock.min).time;
   if (phone.tab === 'detail') return renderDetail();
+  if (phone.tab === 'world') return renderWorld(scr);
   if (phone.tab === 'list') {
     scr.innerHTML = '<ul class="mk-list">' + d.stocks.map(s => {
       const ch = s.price - s.prev;
@@ -378,6 +379,88 @@ $hud('phoneScreen').addEventListener('click', async e => {
 });
 $hud('phoneScreen').addEventListener('input', e => { if (e.target.id === 'mkQty') renderDetail(); });
 document.querySelector('.phone-tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { phone.tab = b.dataset.tab; renderPhone(); } });
+// ===== 세계 사람들: 서버 시뮬레이션(sim/)에서 지금 밖에 나와 있는 사람(출근·산책·장보기·구직 …)을 10초마다 받아 맵을 걸어 다니게 함 =====
+// 걷는 모습은 화면 꾸밈이라 이 컴퓨터에서만 정함(보도·잔디·흙길 위를 천천히 돌아다님). 가까이서 E → 그 사람의 지금 삶으로 만든 대사
+const walkers = new Map();   // 번호 → { id, name, job, act, look, x, y, tx, ty, dir, left, moving, wait }
+const WALK_SCENES = ['city', 'byeolha', 'danbi', 'nuribeol'], WALK_GROUND = '.glnoqkcep';
+let walkScene = null, walkTiles = null;
+function walkTilesOf() {   // 이 장면에서 사람이 서 있을 수 있는 칸들 (차도·물·벽·물건 자리 빼고)
+  if (walkTiles) return walkTiles;
+  walkTiles = [];
+  for (let ty = 0; ty < ROWS; ty++) for (let tx = 0; tx < COLS; tx++) if (WALK_GROUND.includes(tileAt(tx, ty)) && !SOLID.has(tx + ',' + ty)) walkTiles.push([tx, ty]);
+  return walkTiles;
+}
+async function loadWalkers() {
+  if (!online || !me.basicUI) return;
+  const scene = SCENE.name;
+  if (!WALK_SCENES.includes(scene)) return;
+  const r = await post('people', { scene });
+  if (!r.ok || SCENE.name !== scene) return;
+  const ids = new Set(r.people.map(p => p.id));
+  for (const id of walkers.keys()) if (!ids.has(id)) walkers.delete(id);   // 집·일터로 들어간 사람은 사라짐
+  const tiles = walkTilesOf();
+  for (const p of r.people) {
+    const w = walkers.get(p.id);
+    if (w) { w.act = p.act; w.job = p.job; continue; }
+    const [tx, ty] = tiles[Math.floor(hash(p.id, 5, 9) * tiles.length)] || [0, 0];
+    walkers.set(p.id, { ...p, x: (tx + 0.5) * TILE, y: (ty + 0.7) * TILE, tx: null, ty: null, dir: 's', left: false, moving: false, wait: Math.random() * 3 });
+  }
+}
+setInterval(loadWalkers, 10000);
+function updateWalkers(dt) {
+  if (walkScene !== SCENE.name) { walkers.clear(); walkTiles = null; walkScene = SCENE.name; loadWalkers(); }   // 장면이 바뀌면 그 장면 사람들을 한 번 받아 옴
+  const tiles = walkTiles || (WALK_SCENES.includes(SCENE.name) ? walkTilesOf() : []);
+  for (const w of walkers.values()) {
+    if (w.talking > 0) { w.talking -= dt; w.moving = false; continue; }
+    if (w.wait > 0) { w.wait -= dt; w.moving = false; continue; }
+    if (w.tx == null) {   // 가까운(6칸 안) 걸을 수 있는 칸을 새 목적지로
+      for (let i = 0; i < 8 && w.tx == null; i++) {
+        const [tx, ty] = tiles[Math.floor(Math.random() * tiles.length)] || [];
+        if (tx != null && Math.abs((tx + 0.5) * TILE - w.x) < TILE * 6 && Math.abs((ty + 0.7) * TILE - w.y) < TILE * 6) { w.tx = (tx + 0.5) * TILE; w.ty = (ty + 0.7) * TILE; }
+      }
+      if (w.tx == null) { w.wait = 1; continue; }
+    }
+    const dx = w.tx - w.x, dy = w.ty - w.y, d = Math.hypot(dx, dy), step = 34 * dt;
+    if (d < 2) { w.tx = null; w.wait = 1 + Math.random() * 4; w.moving = false; continue; }
+    const nx = w.x + dx / d * step, ny = w.y + dy / d * step;
+    if (blockedAt(nx, ny)) { w.tx = null; w.wait = 0.5; continue; }   // 막히면 다른 곳으로
+    w.x = nx; w.y = ny; w.moving = true; face(w, dx, dy);
+  }
+}
+function nearWalker() {
+  let best = null, bd = 56;   // 걸어 다니는 사람은 조금 멀리서도 말 걸 수 있게
+  for (const w of walkers.values()) { const d = Math.hypot(w.x - me.x, w.y - me.y); if (d < bd) { bd = d; best = w; } }
+  return best;
+}
+async function talkToWalker(w) {
+  w.talking = 30; face(w, me.x - w.x, me.y - w.y);
+  const r = await post('person', { id: w.id });
+  if (!r.ok) { w.talking = 0; walkers.delete(w.id); return notify(r.msg); }
+  talk = { npc: { name: `${r.name}${r.job ? ' · ' + r.job : ''}`, lines: r.lines, walker: w }, i: 0 };
+  say(); talkBox.hidden = false;
+}
+
+// ===== 휴대폰 "세상" 탭: 나라 통계 · 지역별 인구·일자리·기분 · 동네~나라 소식 · 시스템 건강 =====
+let societyAt = 0;
+async function loadSociety() {
+  const r = await post('society');
+  if (!r.ok) return;
+  phone.society = r; societyAt = performance.now();
+  if (phone.tab === 'world') renderPhone();
+}
+setInterval(() => { if (!$hud('phoneWrap').hidden && phone.tab === 'world') loadSociety(); }, 10000);
+function renderWorld(scr) {
+  const w = phone.society;
+  if (!w || !w.stats) { scr.innerHTML = '<p class="mk-empty">세상 소식을 불러오는 중…</p>'; if (performance.now() - societyAt > 3000) loadSociety(); return; }
+  const st = w.stats, SC = { local: '동네', regional: '지역', national: '나라' };
+  const moodWord = m => m > 20 ? '즐거움' : m > 5 ? '좋음' : m > -5 ? '보통' : m > -20 ? '지침' : '힘듦';
+  scr.innerHTML = `<div class="mk-sum"><span>한울 인구</span><b>${won(st.pop)}명</b><span>일하는 나이 중 일하는 사람</span><b>${(st.employment * 100).toFixed(1)}%</b>
+    <span>사람들 기분</span><b>${moodWord(st.mood)} (${st.mood.toFixed(0)})</b><span>저축 가운뎃값</span><b>${won(Math.round(st.savings / 10000))}만 원</b>
+    <span>어제 태어남 · 떠남</span><b>${st.births}명 · ${st.deaths}명</b><span>경기 · 세금</span><b>${(w.econ.demand * 100).toFixed(0)} · ${(w.econ.tax * 100).toFixed(1)}%</b></div>
+    <h3 class="mk-h">지역</h3><ul class="mk-list">${w.regions.sort((a, b) => b.pop - a.pop).map(r => `<li class="mk-reg"><span>${r.name}<small>${COUNTRY.INFO[r.name] || ''}</small></span><span class="mk-price">${r.pop}명<small>일자리 ${r.jobs} · ${moodWord(r.mood)}</small></span></li>`).join('')}</ul>
+    <h3 class="mk-h">소식</h3><ul class="mk-news">${w.news.map(n => `<li><small>${whenOf(n.min)} · ${SC[n.scale] || ''}${n.region ? ' · ' + n.region : ''}</small>${n.text}</li>`).join('') || '<li>아직 소식이 없어요.</li>'}</ul>
+    <h3 class="mk-h">세계 시스템</h3><p class="mk-sys">계산 ${w.health.lastMs}ms · 돈 합계 ${w.health.money ? '정상' : '확인 필요'}${w.health.checks.length ? '<br>' + w.health.checks.map(c => c.text).join('<br>') : ''}</p>`;
+}
 document.addEventListener('bagopen', () => {
   const c = $hud('invChar'), g = c.getContext('2d');
   g.clearRect(0, 0, c.width, c.height); g.drawImage(sprite(me.look, 's', 0), 0, 0);
@@ -449,6 +532,7 @@ function notify(text) { got.textContent = text; got.hidden = false; clearTimeout
 talkBox.addEventListener('click', () => {   // 대화창 누르기(또는 E·Enter·Space) = 다음 말, 마지막 말이면 닫기 (줄 것이 있으면 이때 받음)
   if (++talk.i < linesOf(talk.npc).length) return say();
   talkBox.hidden = true; cv.focus();
+  if (talk.npc.walker) talk.npc.walker.talking = 1.5;   // 대화가 끝나면 잠깐 뒤 다시 걸음
   const gift = talk.npc.gives;
   if (gift && !me[gift]) {
     me[gift] = true;
@@ -461,7 +545,8 @@ function interact() {
   if (!talkBox.hidden) return talkBox.click();   // 휴대폰 E 버튼
   if (fade) return;
   if (me.sit) { if (me.sit.phase === 'on') standUp(performance.now()); return; }   // 앉아 있으면 E = 일어나기
-  const sp = nearSpot(me.x, me.y);
+  const sp = nearSpot(me.x, me.y), wk = nearWalker();
+  if (wk && (!sp || Math.hypot(wk.x - me.x, wk.y - me.y) < Math.hypot(sp.x - me.x, sp.y - me.y))) { held.clear(); return talkToWalker(wk); }   // 걸어 다니는 사람에게 말 걸기
   if (!sp) return;
   held.clear();
   if (sp.type === 'seat') return sitDown(sp);
@@ -783,7 +868,7 @@ function frame(now) {
     vx = vy = 0;
   }
   updateSit(now);
-  updateOthers(dt, now); sendMove(now);
+  updateOthers(dt, now); sendMove(now); updateWalkers(dt);
   const len = Math.hypot(vx, vy);
   if (len > 1) { vx /= len; vy /= len; }   // 대각선도 같은 빠르기
   if (me.moving && len <= 0.1) saveProgress();   // 걷다가 멈추면 바로 저장
@@ -809,13 +894,14 @@ function frame(now) {
   drawShadows(ctx, S, cam);   // 물건 그림자 (바닥 위, 물건 아래)
   // 건물·나무·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
   // 바닥 무늬(맨홀·주차 P)는 맨 먼저 → 무엇에든 가려짐
-  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), ...[...others.values()].map(o => ({ y: o.sit ? o.sit.by + 1 : o.y, draw: () => drawPlayer(o, cam, now) })), { y: me.sit ? me.sit.sp.by + 1 : me.y, draw: () => drawPlayer(me, cam, now) }];   // 앉아 있으면 벤치보다 앞에 그림
+  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), ...[...walkers.values()].map(w => ({ y: w.y, draw: () => drawPlayer(w, cam, now) })), ...[...others.values()].map(o => ({ y: o.sit ? o.sit.by + 1 : o.y, draw: () => drawPlayer(o, cam, now) })), { y: me.sit ? me.sit.sp.by + 1 : me.y, draw: () => drawPlayer(me, cam, now) }];   // 앉아 있으면 벤치보다 앞에 그림
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
   drawClocks(cam);
   drawSky(cam, W, H, dt, now);
-  NPCS.forEach(n => drawName(n, cam)); others.forEach(o => drawName(o, cam)); drawName(me, cam);
-  const sp = !busy && (me.sit ? me.sit.phase === 'on' && { type: 'stand' } : nearSpot(me.x, me.y));
-  if (sp) drawPrompt(sp, cam);
+  NPCS.forEach(n => drawName(n, cam)); walkers.forEach(w => drawName(w, cam)); others.forEach(o => drawName(o, cam)); drawName(me, cam);
+  const sp = !busy && (me.sit ? me.sit.phase === 'on' && { type: 'stand' } : nearSpot(me.x, me.y)), wk = !busy && !me.sit && nearWalker();
+  if (wk && (!sp || Math.hypot(wk.x - me.x, wk.y - me.y) < Math.hypot(sp.x - me.x, sp.y - me.y))) drawPrompt({ type: 'npc', npc: wk }, cam);
+  else if (sp) drawPrompt(sp, cam);
   if (fade) {   // 검은 화면으로 어두워졌다 밝아짐
     const t = (now - fade.t0) / FADE;
     ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(0, Math.min(1, t < 1 ? t : 2 - t))})`; ctx.fillRect(0, 0, W, H);

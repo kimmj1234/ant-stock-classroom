@@ -122,7 +122,9 @@ function createMarket(file, read, write) {
     news: st.news.slice(0, 20),
   });
   const priceOf = id => st.stocks[id]?.price;
-  return { advance, view, priceOf, BY_ID };
+  // 바깥(세계 시뮬레이션)에서 온 뉴스: 영향은 ±10% 안으로만 받음 (한 사건이 시장을 뒤집지 않게)
+  const ingest = (min, n) => { const fx = Object.fromEntries(Object.entries(n.fx).filter(([k]) => BY_ID[k] || inSector(k).length).map(([k, v]) => [k, Math.max(-10, Math.min(10, v))])); if (Object.keys(fx).length) { addNews(min, { text: n.text, fx }); dirty = true; } };
+  return { advance, view, priceOf, BY_ID, ingest };
 }
 
 module.exports = { createMarket, COMPANIES, BY_ID, tickOf };
