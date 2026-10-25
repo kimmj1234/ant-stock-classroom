@@ -72,8 +72,8 @@
   <div class="stick" id="stick" aria-hidden="true"><div class="knob" id="knob"></div></div>
   <button class="ebtn" id="ebtn" type="button" aria-label="상호작용">E</button>
   <button class="help" id="help" type="button" aria-label="조작 안내 다시 보기">?</button>
-  <!-- 조작 안내 창: 들어오면 뜨고, 확인(또는 Enter·E·Esc·Space)으로 닫음 -->
-  <div class="guide-wrap" id="guideWrap">
+  <!-- 조작 안내 창: 처음 한 번만 저절로 뜨고, 확인(또는 Enter·E·Esc·Space)으로 닫음. "?"로 다시 열기 -->
+  <div class="guide-wrap" id="guideWrap" hidden>
     <section class="guide" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
       <h2 id="guideTitle">조작 방법</h2>
       <ul class="keyboard">
@@ -98,11 +98,19 @@
 <script src="/game.js"></script>
 <script>
 'use strict';
-// 조작 안내 창: 열려 있는 동안 Enter·E·Esc·Space는 창 닫기에만 씀(게임으로 안 넘어가게 먼저 가로챔)
+// 조작 안내 창: 계정을 만들고 처음 들어왔을 때 한 번만 저절로 뜸(서버 계정에 "봤음" 기록). 그 뒤로는 "?" 버튼으로만 열림
+// 열려 있는 동안 Enter·E·Esc·Space는 창 닫기에만 씀(게임으로 안 넘어가게 먼저 가로챔)
 {
   const wrap = document.getElementById('guideWrap'), ok = document.getElementById('guideOk');
+  let first = false;   // 이번이 처음 자동으로 뜬 것인지
   const open = () => { wrap.hidden = false; ok.focus(); };
-  const close = () => { wrap.hidden = true; document.getElementById('game').focus(); };
+  const close = () => {
+    wrap.hidden = true; document.getElementById('game').focus();
+    if (first) { first = false; fetch('/api/guideSeen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); }
+  };
+  const onMe = me => { if (me && !me.guideSeen && wrap.hidden && !first) { first = true; open(); } };
+  document.addEventListener('auth', e => onMe(e.detail));
+  if (window.authState) onMe(window.authState.me);
   ok.addEventListener('click', close);
   document.getElementById('help').addEventListener('click', open);
   addEventListener('keydown', e => {
@@ -110,7 +118,6 @@
     e.preventDefault(); e.stopPropagation();
     close();
   }, true);
-  open();
 }
 </script>
 </body>

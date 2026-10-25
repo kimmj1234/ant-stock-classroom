@@ -185,10 +185,16 @@ http.createServer(async (req, res) => {
       return json(res, 200, rest, token ? setCookie(token, req) : {});
     }
     if (name === 'logout') { sessions.delete(tokenHash(tokenOf(req))); saveSessions(); return json(res, 200, { ok: true }, setCookie('', req)); }
+    const key = sessions.get(tokenHash(tokenOf(req)));
     if (name === 'me') {
       // 로그인 전은 정상 상황이라 200 + auth:false (브라우저 콘솔에 빨간 오류가 남지 않게)
-      const key = sessions.get(tokenHash(tokenOf(req)));
-      return json(res, 200, key && accounts[key] ? { ok: true, me: { name: accounts[key].name } } : { ok: false, auth: false, msg: '로그인이 필요해요.' });
+      // guideSeen: 게임 조작 안내 창을 이미 봤는지 (처음 한 번만 띄움)
+      return json(res, 200, key && accounts[key] ? { ok: true, me: { name: accounts[key].name, guideSeen: !!accounts[key].guideSeen } } : { ok: false, auth: false, msg: '로그인이 필요해요.' });
+    }
+    if (name === 'guideSeen') {   // 조작 안내 창을 닫았음 → 계정에 기록해서 다음부터는 안 띄움
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      if (!accounts[key].guideSeen) { accounts[key].guideSeen = true; writeJSONFile(ACCOUNTS_FILE, accounts); }
+      return json(res, 200, { ok: true });
     }
     return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });
   }
