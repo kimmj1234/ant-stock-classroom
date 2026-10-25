@@ -64,13 +64,13 @@ const CITY_ROADS = [
   { dir: 'h', at: 46, n: 4, sw: 2 },                    // 강변북로
   { dir: 'v', at: 56, n: 4, sw: 2 },                    // 시청로 (강을 다리로 건넘)
   { dir: 'v', at: 94, n: 4, sw: 2 },                    // 동부대로 (강을 다리로 건넘)
-  { dir: 'h', at: 8, n: 2, sw: 1, from: 20, to: 119 },  // 북부로
+  { dir: 'h', at: 8, n: 2, sw: 1, from: 21, to: 119 },  // 북부로 (서부로에서 시작)
   { dir: 'h', at: 68, n: 2, sw: 1, from: 36, to: 119 }, // 남부로 (서쪽 끝은 숲에서 끝남)
-  { dir: 'v', at: 20, n: 2, sw: 1, from: 0, to: 49 },   // 서부로
-  { dir: 'v', at: 8, n: 2, sw: 1, from: 0, to: 33 },    // 주택가 길
-  { dir: 'v', at: 38, n: 2, sw: 1, from: 8, to: 33 },   // 상가 골목
-  { dir: 'h', at: 19, n: 2, sw: 1, from: 56, to: 97 },  // 도심 골목
-  { dir: 'v', at: 76, n: 2, sw: 1, from: 30, to: 49 },  // 도심 남쪽 골목
+  { dir: 'v', at: 20, n: 2, sw: 1, from: 0, to: 46 },   // 서부로 (강변북로에서 끝남)
+  { dir: 'v', at: 8, n: 2, sw: 1, from: 0, to: 30 },    // 주택가 길 (중앙대로에서 끝남)
+  { dir: 'v', at: 38, n: 2, sw: 1, from: 9, to: 30 },   // 상가 골목 (북부로 ~ 중앙대로)
+  { dir: 'h', at: 19, n: 2, sw: 1, from: 59, to: 94 },  // 도심 골목 (시청로 ~ 동부대로)
+  { dir: 'v', at: 76, n: 2, sw: 1, from: 35, to: 46 },  // 도심 남쪽 골목 (중앙대로 ~ 강변북로)
 ];
 const LOT_NAMES = ['한가람 숲'];   // 이름표(lotsign) 글씨
 // 도로 목록 → 바닥: 보도·차도·횡단보도·차선·정지선을 저절로 깔아 줌. 길이 끝나는 곳은 보도가 둘러쌈
@@ -84,11 +84,16 @@ function cityPlan(W, H, roads) {
   each((x, y) => { if (roads.some(r => inBand(r, x, y, r.sw))) g[y][x] = '.'; });   // 보도
   each((x, y) => { if (roads.some(r => inBand(r, x, y, 0))) g[y][x] = 'R'; });      // 차도
   const marks = new Map(), zdir = new Map(), only = (x, y) => { const on = roads.filter(r => inBand(r, x, y, 0)); return on.length === 1 ? on[0] : null; };
-  // 횡단보도: 차도 칸이 직각으로 만나는 도로의 보도 줄 위에 있으면 (교차로 바로 옆, 보도와 보도를 이음)
-  each((x, y) => {
-    const r = g[y][x] === 'R' && only(x, y);
-    if (r && roads.some(o => o.dir !== r.dir && inBand(o, x, y, o.sw) && !inBand(o, x, y, 0))) { g[y][x] = 'Z'; zdir.set(x + ',' + y, r.dir); }
-  });
+  // 횡단보도: 두 길이 만나는 교차로(T자 포함) 바로 바깥, 건너는 길마다 양쪽에 2칸 폭 (보도 폭과 상관없이 현실처럼 일정하게)
+  //   r = 건너는 길, o = 만나는 길 → r 위에서 o의 차선 띠 바로 앞뒤 2칸씩. 다른 길과 겹친 칸·차도가 아닌 칸은 건너뜀
+  const meets = (a, b) => b.at + b.n - 1 >= (a.from ?? 0) && b.at <= (a.to ?? 1e9);
+  for (const r of roads) for (const o of roads) {
+    if (r.dir === o.dir || !meets(r, o) || !meets(o, r)) continue;
+    for (const q of [o.at - 2, o.at - 1, o.at + o.n, o.at + o.n + 1]) for (let p = r.at; p < r.at + r.n; p++) {
+      const [x, y] = r.dir === 'h' ? [q, p] : [p, q];
+      if (g[y]?.[x] === 'R' && only(x, y) === r) { g[y][x] = 'Z'; zdir.set(x + ',' + y, r.dir); }
+    }
+  }
   // 차선: 가운데 두 차선 사이 노란 중앙선(겹선), 같은 방향 차선 사이 흰 점선 (2·4·6차선 모두) / 정지선: 횡단보도 바로 앞(오른쪽 통행)
   const laneMarks = (r, lane) => {
     const half = r.n / 2, [dash, yelA, yelB] = r.dir === 'h' ? ['dashB', 'yelB', 'yelT'] : ['dashR', 'yelR', 'yelL'], m = [];
