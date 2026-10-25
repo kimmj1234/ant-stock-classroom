@@ -16,6 +16,7 @@ const WALL_TILES = 'wbSav';             // 벽·물(S)·논(a)·밭(v) 칸은 �
 //   place(종류, 색번호, x, y, 가로칸, 세로줄, 막힘) — (x, y) = 왼쪽 위 칸. 그림은 차지한 칸의 아래 가운데에 세움
 function makeScene(name, ground, start, build) {
   const sc = { name, cols: ground[0].length, rows: ground.length, ground, start, things: [], solid: new Set(), spots: [], npcs: [] };
+  sc.indoor = ground.some(row => row.includes('w'));   // 벽지(w)가 있으면 건물 안: 비·눈이 안 내리고 창밖 하늘만 보임
   const place = (type, v, x, y, w = 1, d = 1, block = true) => {
     if (block) for (let yy = y; yy < y + d; yy++) for (let xx = x; xx < x + w; xx++) sc.solid.add(xx + ',' + yy);
     sc.things.push({ type, v, w, d, x: (x + w / 2) * TILE, y: (y + d) * TILE });

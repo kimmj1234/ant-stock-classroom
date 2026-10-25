@@ -681,12 +681,12 @@ function drawSignTexts(texts, ox, oy, k) {
   }
   ctx.restore();
 }
-function drawPlayer(p, cam, now) {
+function drawPlayer(p, cam, now, noShadow) {
   const k = S * SPRITE.scale;   // 캐릭터 픽셀 1칸 = k px
   const step = p.moving ? 1 + (Math.floor(now / 160) % 2) : p.swing || 0;
   const img = sprite(p.look, p.dir, step, p.pose);
   const f = toScreen(p.x, p.y), x = Math.round(f.x - cam.x), y = Math.round(f.y - cam.y);   // 발밑 자리
-  if (!p.sit) {   // 그림자 (벤치에 앉아 있으면 벤치 그림자로 충분)
+  if (!p.sit && !noShadow) {   // 그림자 (벤치에 앉아 있으면 벤치 그림자로 충분)
     ctx.fillStyle = 'rgba(0, 0, 0, .22)';
     ctx.beginPath(); ctx.ellipse(x, y, SPRITE.w / 3 * k, SPRITE.w / 9 * k, 0, 0, Math.PI * 2); ctx.fill();
   }
@@ -744,8 +744,36 @@ function drawClocks(cam) {
 //   집 안: 비·눈은 안 보이고, 밤에도 불이 켜져 있어 조금만 어두움
 const drops = [];
 let skyCam = null;
+let skyShade = 1, litRects = [];   // 이번 프레임의 어둠(밝기 배율)과 불빛 자리 [왼, 위, 오른, 아래, 그 물건의 발밑 y]
+// ===== 하늘 위에 다시 그리기 =====
+// 3) 불 켜진 창문(그 건물)보다 앞에 선 사람은 불빛에 덮이지 않게 다시 그림 (어둠만큼 어둡게)
+// 4) 내 캐릭터가 앞에 있는 건물·나무에 가려지면 반투명하게 비쳐 보이게
+const alphaOf = new WeakMap();   // 물건 그림의 투명도 (가려졌는지 볼 때 씀)
+function opaqueAt(img, ix, iy) {
+  if (ix < 0 || iy < 0 || ix >= img.width || iy >= img.height) return false;
+  let d = alphaOf.get(img);
+  if (!d) { d = img.getContext('2d').getImageData(0, 0, img.width, img.height).data; alphaOf.set(img, d); }
+  return d[(iy * img.width + ix) * 4 + 3] > 0;
+}
+function drawOverSky(cam, now) {
+  const k = S * SPRITE.scale, footY = p => (p.sit ? p.sit.by + 1 : p.y);
+  const again = (p, alpha) => { ctx.save(); ctx.globalAlpha = alpha; if (skyShade < 0.99) ctx.filter = `brightness(${skyShade.toFixed(3)})`; drawPlayer(p, cam, now, true); ctx.restore(); };
+  if (litRects.length) for (const p of [...NPCS, ...walkers.values(), ...others.values(), me]) {
+    const x = p.x * S - cam.x, y = p.y * S - cam.y, r = [x - 8 * k, y - 17 * k, x + 8 * k, y + k];
+    if (litRects.some(l => l[4] < footY(p) && r[0] < l[2] && r[2] > l[0] && r[1] < l[3] && r[3] > l[1])) again(p, 1);
+  }
+  // 내 몸 가운데·머리 자리가 내 발밑보다 앞(아래)에 서 있는 물건 그림에 덮였는지
+  const kk = S * ART, mx = me.x * S - cam.x, my = me.y * S - cam.y, pts = [[mx, my - 8 * k], [mx, my - 13 * k]];
+  const hidden = THINGS.some(t => {
+    if (t.ground || t.y <= footY(me) + 2) return false;
+    const img = thingArt(t), ox = t.x * S - cam.x - img.width * kk / 2, oy = t.y * S - cam.y - img.height * kk;
+    return pts.some(([px, py]) => opaqueAt(img, Math.floor((px - ox) / kk), Math.floor((py - oy) / kk)));
+  });
+  if (hidden) again(me, 0.55);
+}
 function drawSky(cam, W, H, dt, now) {
-  const t = today(clock.min), m = clock.min % DAY, out = SCENE.name !== 'home';
+  const t = today(clock.min), m = clock.min % DAY, out = !SCENE.indoor;
+  litRects = [];
   const ramp = (a, b) => Math.min(1, Math.max(0, (m - a) / (b - a)));
   // 밤 정도 0(낮) ~ 1(한밤): 해 뜨기 40분 전부터 밝아져 해 뜬 30분 뒤 완전히 낮, 해 지기 30분 전부터 어두워져 해 진 50분 뒤 완전히 밤
   const { rise, set } = t;
@@ -791,6 +819,7 @@ function drawSky(cam, W, H, dt, now) {
   if (out && t.wx === 'dust') fill('rgba(205, 160, 80, 0.24)');   // 황사: 누렇고 뿌연 하늘
   if (dusk) fill(`rgba(255, 130, 50, ${dusk})`);
   if (night) fill(`rgba(16, 20, 56, ${night})`);
+  skyShade = (1 - gloom) * (1 - dusk) * (1 - night) * (out && t.wx === 'dust' ? 0.85 : 1);
   // 불빛: 어두운 만큼 창문·등이 노랗게 켜지고 둘레가 은은하게 밝음 (어둠 위에 그려서 밤에 또렷함)
   const lit = out ? night / 0.55 : 0;
   if (lit > 0.05) {
@@ -811,6 +840,7 @@ function drawSky(cam, W, H, dt, now) {
         const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
         g.addColorStop(0, `rgba(255, 200, 110, ${0.28 * lit})`); g.addColorStop(1, 'rgba(255, 200, 110, 0)');
         ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+        litRects.push([cx - r, cy - r, cx + r, cy + r, t.y]);
         ctx.fillStyle = `rgba(255, 214, 120, ${0.9 * lit})`; ctx.fillRect(Math.round(ox + x * k), Math.round(oy + y * k), w * k, h * k);
         ctx.fillStyle = `rgba(255, 240, 190, ${0.9 * lit})`; ctx.fillRect(Math.round(ox + x * k), Math.round(oy + y * k), w * k, k);   // 위쪽 한 줄은 더 밝게
       }
@@ -909,6 +939,7 @@ function frame(now) {
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
   drawClocks(cam);
   drawSky(cam, W, H, dt, now);
+  drawOverSky(cam, now);
   NPCS.forEach(n => drawName(n, cam)); walkers.forEach(w => drawName(w, cam)); others.forEach(o => drawName(o, cam)); drawName(me, cam);
   const sp = !busy && (me.sit ? me.sit.phase === 'on' && { type: 'stand' } : nearSpot(me.x, me.y)), wk = !busy && !me.sit && nearWalker();
   if (wk && (!sp || Math.hypot(wk.x - me.x, wk.y - me.y) < Math.hypot(sp.x - me.x, sp.y - me.y))) drawPrompt({ type: 'npc', npc: wk }, cam);
