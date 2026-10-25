@@ -7,6 +7,12 @@ const { OCC } = require('./data.js');
 const brain = require('./brain.js');
 const mind = require('./mind.js');
 const belief = require('./belief.js');
+const rel = require('./rel.js');
+// 친한 사이 인사: 이름을 부름 (친구 / 절친)
+const NAME_GREET = {
+  friend: { elder: ['허허, {}님 아닌가. 반갑구먼.'], kid: ['{}! 안녕!'], bright: ['{}님! 반가워요!', '어, {}님이다! 안녕하세요!'], shy: ['아, {}님… 안녕하세요.'], blunt: ['아, {}님이네요.'], warm: ['{}님, 오늘도 왔네요. 밥은 먹었어요?'], plain: ['{}님, 안녕하세요.'] },
+  close: { elder: ['{}님 왔는가! 기다렸네.'], kid: ['{}!! 보고 싶었어!'], bright: ['{}님!! 보고 싶었어요!', '{}님! 마침 생각하고 있었어요!'], shy: ['{}님… 와 줘서 좋아요.'], blunt: ['{}님 왔어요? 마침 심심했는데.'], warm: ['{}님! 반가워요, 요즘 잘 지냈어요?'], plain: ['{}님, 반가워요!'] },
+};
 
 const jong = s => { const c = s.charCodeAt(s.length - 1) - 0xac00; return c >= 0 && c <= 11171 ? c % 28 : 0; };
 const ro = s => s + (jong(s) && jong(s) !== 8 ? '으로' : '로'), eun = s => s + (jong(s) ? '은' : '는'), ira = s => s + (jong(s) ? '이' : '');
@@ -98,8 +104,10 @@ const REGION_TALK = {
 };
 const HOBBY = ['등산', '낚시', '독서', '요리', '게임', '그림 그리기', '축구', '노래', '사진 찍기', '뜨개질', '자전거', '화분 가꾸기'];
 
+const NOW_SHORT = { work: '일하는 중이라서요.', commute: '바빠서요.', shop: '장 보러 가는 길이라서요.' };
 // 다시 만났을 때 인사 (같은 날 / 며칠 만)
 const AGAIN_TODAY = { elder: ['허허, 또 만났구먼.', '아까 그 젊은이로구먼.'], kid: ['어? 또 만났네!', '아까 그 사람이다!'], bright: ['어, 또 만났네요! 반가워요!', '오늘만 두 번째네요!'], shy: ['아… 또 뵙네요.', '저, 아까…'], blunt: ['또 왔어요?', '아까 봤잖아요.'], warm: ['어머, 또 만났네요. 반가워요.', '또 보네요. 오늘 많이 바빠요?'], plain: ['또 뵙네요.', '아까 뵀죠?'] };
+const AGAIN_SOON = { elder: ['허허, 어제 그 젊은이구먼.'], kid: ['어제 봤지? 또 만났네!'], bright: ['어, 또 만났네요! 반가워요!'], shy: ['아… 또 뵙네요.'], blunt: ['또 보네요.'], warm: ['또 만났네요! 잘 지냈어요?'], plain: ['또 뵙네요.'] };   // 하루이틀 만
 const AGAIN = { elder: ['허허, 오랜만일세.', '이게 얼마 만인가.'], kid: ['오랜만이야!', '어, 그때 그 사람!'], bright: ['와, 오랜만이에요! 잘 지냈어요?', '오랜만이에요! 보고 싶었어요!'], shy: ['아, 오랜만이에요…', '…기억나요. 오랜만이에요.'], blunt: ['오랜만이네요.', '또 보네요.'], warm: ['오랜만이에요! 그동안 잘 지냈어요?', '반가워요, 오랜만이네요.'], plain: ['오랜만이에요.', '오랜만에 뵙네요.'] };
 
 // 대사 만들기. 일관성:
@@ -109,6 +117,7 @@ const AGAIN = { elder: ['허허, 오랜만일세.', '이게 얼마 만인가.'],
 //   · 첫마디는 늘 머리 위 표시와 같은 "지금 하는 일"(+ 실제 욕구에 맞는 이유)
 //   · 다시 말 걸면 아직 안 한 다음 주제로 넘어감 (만난 횟수만큼 순서를 돌림)
 function makeTalk({ S, n, min, age, empName, ageOf, news, quote, met, doing, rumors = [], bal = 0 }) {
+  const lv = rel.level(met);
   const day = Math.floor(min / DAY), h = Math.floor((min % DAY) / 60);
   const F = k => hash(n.id, 501, k), D = k => hash(day, n.id, k);
   const fix = (list, k) => list[Math.floor(F(k) * list.length)], today = (list, k) => list[Math.floor(D(k) * list.length)];
@@ -116,7 +125,12 @@ function makeTalk({ S, n, min, age, empName, ageOf, news, quote, met, doing, rum
   const lines = [];
   // 인사 (나를 기억하는지)
   const sameDay = met.last != null && Math.floor(met.last / DAY) === day;
-  lines.push(fix(!met.times ? GREET[tone] : sameDay ? AGAIN_TODAY[tone] : AGAIN[tone], 1));
+  if (met.today > 4) return [met.today > 6 ? '…' : '또요? 아까부터 계속 말 거시네요… 저 좀 바빠요.', fix(CLOSE[tone], 8)];   // 너무 자주 말 걸면 귀찮아함
+  if (lv === 'cold') return ['…무슨 일이에요?', NOW_SHORT[n.act] || '좀 바빠서요.', '그럼 이만.'];
+  lines.push(met.name && (lv === 'friend' || lv === 'close') ? fix(NAME_GREET[lv][tone], 1).replaceAll('{}', met.name) : fix(!met.times ? GREET[tone] : sameDay ? AGAIN_TODAY[tone] : day - Math.floor(met.last / DAY) <= 2 ? AGAIN_SOON[tone] : AGAIN[tone], 1));
+  if (met.times === 1 && met.name && !kid) lines.push(`${met.name}님이라고 했죠? 기억하고 있어요.`);   // 두 번째 만남: 이름을 기억함
+  if (met.gift && day - met.gift.day <= 7 && day !== met.gift.day && met.thanked !== met.gift.day && (met.thanked = met.gift.day)) lines.push(met.gift.umbrella ? '그때 우산 빌려줘서 정말 고마웠어요.' : `지난번에 준 ${met.gift.item}, 정말 맛있게 먹었어요. 고마워요!`);
+  if (met.coworker && met.times && !kid) lines.push(fix(['같은 일터에서 일하니까 든든해요.', '오늘도 같이 힘내요, 동료님!'], 40));
   // 소개는 처음 만났을 때만
   if (!met.times) lines.push(kid ? `나는 ${ira(n.name)}야! ${age}살이야.` : job ? fix([`저는 ${n.name}, ${empName ? empName + '에서 ' : ''}${ro(job.name)} 일해요.`, `${job.name} ${iE(n.name)}. ${age}살이고요.`, `${empName || '이 동네'}에서 일하는 ${ira2(n.name)} 해요.`], 2)
     : n.occ === 'retired' ? fix([`${n.name}일세. 일은 그만두고 쉬는 중이지.`, `나는 ${n.name}. 올해 ${age}이라네.`], 2) : n.occ === 'jobless' ? `저는 ${iE(n.name)}. 요즘 일자리를 찾는 중이에요.` : `저는 ${n.name}, ${age}살이에요.`);
@@ -133,18 +147,21 @@ function makeTalk({ S, n, min, age, empName, ageOf, news, quote, met, doing, rum
   // 마음: 지금 감정(이유와 함께) · 오늘 계획(약속)
   const fl = mind.feelLine(n), pl = mind.planLine(n, h, day);
   if (fl) lines.push(kid ? banmal(fl) : fl);
-  if (pl && !(fresh && th.why[0]?.includes('약속') && pl.endsWith('나왔어요!')) && !(fl?.includes('님이랑') && pl.startsWith('아까'))) lines.push(pl);   // 같은 이야기를 두 번 하지 않게   // 이미 약속 때문에 간다고 했으면 겹치지 않게
+  if (pl && (pl.includes('님이랑') || D(41) < 0.5) && !(fresh && th.why[0]?.includes('약속') && pl.endsWith('나왔어요!')) && !(fl?.includes('님이랑') && pl.startsWith('아까'))) lines.push(pl);   // 같은 이야기를 두 번 하지 않게   // 이미 약속 때문에 간다고 했으면 겹치지 않게
   // 회사 소문 (사람마다 느끼는 정도가 다름: 결과 q + 그 사람·그 계획마다 고정된 착각). 무뚝뚝한 사람은 절반쯤 입을 다묾
   const feel = (p, k) => p.q + (hash(n.id, p.id, 61) - 0.5) * k;
   const myCo = S.work.emps[n.emp]?.company;
-  if (n.occ === 'reporter') {
+  const trusted = rel.trusts(n, met, tone === 'blunt');   // 회사 일·소문은 믿는 사람에게만
+  if (n.occ === 'reporter' && !trusted) lines.push(F(32) < 0.6 ? '취재 중인 게 있긴 한데, 아직은 말 못 해요. 좀 더 친해지면 몰라도요.' : '');
+  else if (n.occ === 'reporter') {
     rumors.slice().sort((a, b) => a.release - b.release).filter((p, i) => hash(n.id, p.id, 62) < 0.6 || i === 0).slice(0, 2).forEach(p => { const l = reporterLine(p, p.kind === 'rate' ? (hash(n.id, p.id, 63) < 0.75 ? p.q : 0) : feel(p, 0.9), min); if (l) lines.push(l); });
   } else if (myCo && !kid) {
     const p = rumors.filter(p => p.co === myCo).sort((a, b) => a.release - b.release)[0];
-    if (p) lines.push(tone === 'blunt' && F(30) < 0.5 ? '회사 일은 함부로 말 못 해요. 보안이라서요.' : insiderLine(p, feel(p, 0.6), min) + (n.port?.[myCo] ? ' 그래서 저도 우리 회사 주식 좀 샀어요.' : ''));
+    if (p && !trusted) lines.push(F(31) < 0.5 ? '회사에 재밌는 일이 있긴 한데… 아직은 비밀이에요.' : '');
+    else if (p) lines.push(tone === 'blunt' && F(30) < 0.5 ? '회사 일은 함부로 말 못 해요. 보안이라서요.' : insiderLine(p, feel(p, 0.6), min) + (n.port?.[myCo] ? ' 그래서 저도 우리 회사 주식 좀 샀어요.' : ''));
   }
   // 들은 소문(누구에게서·몇 다리) · 산 주식과 수익
-  if (!kid) for (const l of belief.talkLines(n, myCo)) lines.push(l);
+  if (!kid && trusted) for (const l of belief.talkLines(n, myCo)) lines.push(l);
   // 주제 (그 사람에게 맞는 것만, 순서는 사람마다 고정)
   const topics = [];
   if (job) topics.push(() => job.weather?.includes(wx) ? '오늘은 날씨 때문에 일을 공쳤어요. 그만큼 벌이도 줄었고요.' : n.stress > 70 ? '요즘 일이 너무 많아서 좀 지쳤어요.' : today(WORK[n.occ] || ['일은 그럭저럭 할 만해요.'], 3));
@@ -171,7 +188,7 @@ function makeTalk({ S, n, min, age, empName, ageOf, news, quote, met, doing, rum
   if (news) topics.push(() => `그나저나 들었어요? ${news}`);
   // 순서: 사람마다 고정, 만난 횟수만큼 돌려서 다음 이야기 (밝은 사람은 한 마디 더)
   const order = topics.map((f, i) => [F(20 + i), f]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
-  const take = n.tr.e > 0.6 ? 3 : 2, start = (met.times * take) % order.length;
+  const take = (n.tr.e > 0.6 ? 3 : 2) + (lv === 'close' ? 1 : 0), start = (met.times * take) % order.length;
   for (let i = 0; i < take && i < order.length; i++) { const l = order[(start + i) % order.length](); if (l && !lines.includes(l)) lines.push(l); }
   for (let i = lines.length - 1; i >= 0; i--) if (!lines[i]) lines.splice(i, 1);
   lines.push(fix(CLOSE[tone], 8));

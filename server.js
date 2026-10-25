@@ -306,12 +306,23 @@ http.createServer(async (req, res) => {
       writeJSONFile(ACCOUNTS_FILE, accounts);
       return json(res, 200, { ok: true, cash: a.cash, region: b.to, place: a.place, fare });
     }
-    if (name === 'people' || name === 'person' || name === 'society') {   // 세계: people { scene } = 그 장면 밖을 걷는 사람들 / person { id } = 말 걸기 / society = 나라 통계·소식
+    if (['people', 'person', 'society', 'gift', 'contacts'].includes(name)) {   // 세계: people { scene } = 그 장면 밖을 걷는 사람들 / person { id } = 말 걸기 / society = 나라 통계·소식
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
       const now = worldMinutes();
-      if (name === 'people') return json(res, 200, { ok: true, people: SCENE_NAMES.includes(b.scene) ? sim.visible(b.scene, now) : [] });
+      if (name === 'people') return json(res, 200, { ok: true, people: SCENE_NAMES.includes(b.scene) ? sim.visible(b.scene, now, key) : [] });
+      if (name === 'contacts') return json(res, 200, { ok: true, people: sim.contacts(key, now) });   // 나를 아는 사람들 (호감 순)
+      if (name === 'gift') {   // 선물 주기 { id, slot, scene }: 가방 칸의 물건을 그 사람에게
+        const a = accounts[key], life = lifeOf(a), it = life.bag[b.slot];
+        if (!it || !Number.isInteger(b.id) || !SCENE_NAMES.includes(b.scene)) return json(res, 400, { ok: false, msg: '줄 물건이 없어요.' });
+        const r = sim.gift(b.id, now, key, { name: a.name, emp: a.job?.emp }, it.id, it.name, b.scene);
+        if (!r) return json(res, 404, { ok: false, msg: '그 사람은 지금 여기 없어요.' });
+        a.bag = life.bag.filter((_, i) => i !== b.slot); writeJSONFile(ACCOUNTS_FILE, accounts);
+        return json(res, 200, { ok: true, ...r, bag: a.bag });
+      }
       // person: 누가 말을 걸었는지(key)도 넘겨 NPC가 그 사람을 기억함
-      if (name === 'person') { const t = Number.isInteger(b.id) && sim.talk(b.id, now, key); return t ? json(res, 200, { ok: true, ...t }) : json(res, 404, { ok: false, msg: '그 사람은 지금 없어요.' }); }
+      if (name === 'person') {
+        const a = accounts[key], t = Number.isInteger(b.id) && sim.talk(b.id, now, key, { name: a.name, emp: a.job?.emp });
+        if (t?.give) { const life = lifeOf(a); if (life.bag.length < BAG_SIZE) { a.bag = [...life.bag, { id: t.give, name: ITEMS[t.give][0] }]; t.bag = a.bag; writeJSONFile(ACCOUNTS_FILE, accounts); } else t.bagFull = true; } return t ? json(res, 200, { ok: true, ...t }) : json(res, 404, { ok: false, msg: '그 사람은 지금 없어요.' }); }
       return json(res, 200, { ok: true, ...sim.society() });
     }
     if (['job', 'apply', 'quitjob', 'clockin', 'clockout'].includes(name)) {   // 일자리: job = 내 일·구인 공고·새 알림 / apply { emp } / quitjob / clockin / clockout

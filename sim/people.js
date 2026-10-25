@@ -12,6 +12,7 @@ const { makeTalk } = require('./talk.js');
 const brain = require('./brain.js');
 const mind = require('./mind.js');
 const belief = require('./belief.js');   // 믿음·소문·투자
+const rel = require('./rel.js');         // 플레이어와의 관계
 const { marketOpen } = require('../world.js');     // 마음: 감정·인생 목표·하루 계획(약속)   // 뇌: 먹을 것 고르기·날씨 반응·성향 (모든 판단을 한 구조로)
 
 const OUTDOOR = new Set(['commute', 'walk', 'market', 'jobhunt', 'shop', 'cafe', 'eatOut', 'visit']);   // 맵에 걸어 다니는 모습으로 보이는 행동 (가게·카페·식당·친구 집은 '가는 중'으로)
@@ -194,6 +195,7 @@ function createPeople() {
       lifeStage(n, day);
       mind.reviewGoal(ctx, n, age, remember, (amount, to) => ctx.ledger.move(acct(n.id), to, amount));
       belief.daily(ctx, n, live);
+      if (n.met) rel.daily(n, day);
       for (const id in n.friends) if (Number(id) !== n.spouse && (n.friends[id] -= 0.6) < 5) delete n.friends[id];   // 안 만나면 조금씩 멀어짐
       if ((day - n.born) % 365 === 0 && age > 0) remember(n, day, `${age}번째 생일이었다`, 8);
       n.health = ctx.clamp(n.health + (n.health < 100 ? 4 : 0), 0, 100, 80);
@@ -304,7 +306,7 @@ function createPeople() {
     daily: dayOf,
     coarse(ctx, days) { for (let i = 0; i < days; i++) dayOf({ ...ctx, day: ctx.day + i }); },
     // ----- 밖에서 보이는 사람들 (그 지역 맵에 걸어 다님) -----
-    visible(S, region, min) {
+    visible(S, region, min, who) {
       const day = Math.floor(min / DAY), wx = weatherOf(day), rainy = ['rain', 'storm', 'snow'].includes(wx);
       const label = n => {
         if (n.occ === 'reporter' && n.act === 'work') return '취재 중';
@@ -316,22 +318,35 @@ function createPeople() {
         return STREET_NAME[n.act] || actName(n.act, min);
       };
       return Object.values(S.people.list).filter(n => n.region === region && (OUTDOOR.has(n.act) || n.act === 'work' && (OCC[n.occ]?.place === 'market' || n.occ === 'reporter') || n.act === 'eatHome' && n.dish && hashOut(n, min))).slice(0, 60).map(n => ({
-        id: n.id, name: n.name, age: ageOf(n, day), job: OCC[n.occ]?.name || { child: '어린이', student: '학생', retired: '은퇴', jobless: '구직 중' }[n.occ], act: label(n), umbrella: rainy && !!n.umbToday, run: rainy && n.wet > 45 && !n.umbToday, look: { body: 'blob', face: 'dot', suit: null, ...n.look },
+        id: n.id, name: n.name, age: ageOf(n, day), job: OCC[n.occ]?.name || { child: '어린이', student: '학생', retired: '은퇴', jobless: '구직 중' }[n.occ], act: label(n), call: who ? rel.callOf(n, who, min, !!n.bel) : null, umbrella: rainy && !!n.umbToday, run: rainy && n.wet > 45 && !n.umbToday, look: { body: 'blob', face: 'dot', suit: null, ...n.look },
       }));
     },
     // ----- 말 걸기: 지금 상태로 대사를 만듦 -----
     // ----- 말 걸기: talk.js가 그 사람의 지금 삶·말투로 대사를 만듦 -----
-    talk(S, id, min, news, quote, who, rumors = [], bal = 0) {
+    talk(S, id, min, news, quote, who, rumors = [], bal = 0, me = {}, ledger = null) {   // eslint: me = { name, emp } 플레이어
       const n = S.people.list[id];
       if (!n) return null;
       const job = OCC[n.occ], emp = S.work.emps[n.emp];
-      n.met ||= {};
-      const met = n.met[who] || { times: 0, last: null };   // 이 사람(플레이어)을 만난 횟수·마지막 시각
+      const met = rel.onTalk(n, who, me, min);   // 이 플레이어와의 관계 (만난 횟수·호감·신뢰) — 말 걸 때마다 바뀜
       const lines = makeTalk({ S, n, min, age: ageOf(n, Math.floor(min / DAY)), empName: emp?.name, ageOf, news, quote, met, rumors, bal, doing: n.occ === 'reporter' && n.act === 'work' ? '취재 중' : STREET_NAME[n.act] || actName(n.act, min) });
-      n.met[who] = { times: met.times + 1, last: Math.floor(min) };
+      const give = ledger && rel.giveBack(n, who, min, brain.selfOf(n), amount => ledger.move('p:' + n.id, S.work.local?.[n.region]?.mart || 'ext', amount));
+      if (give) lines.splice(lines.length - 1, 0, `아 참, 이거 받아요! 지나가다 ${met.name}님 생각나서 샀어요.`);
+      met.times++; met.last = Math.floor(min); met.callDay = Math.floor(min / DAY);
       const keys = Object.keys(n.met);
       if (keys.length > 8) delete n.met[keys.reduce((a, b) => (n.met[a].last < n.met[b].last ? a : b))];   // 가장 오래전에 만난 사람부터 잊음
-      return { name: n.name, job: job?.name, lines };
+      return { name: n.name, job: job?.name, lines, give, rel: { level: rel.level(met), name: rel.LEVEL_NAME[rel.level(met)], like: Math.round(met.like || 0), trust: Math.round(met.trust || 0) } };
+    },
+    // 선물 받기
+    gift(S, id, min, who, me, item, itemName, remember) {
+      const n = S.people.list[id];
+      if (!n) return null;
+      return rel.gift(n, who, me, item, itemName, min, brain.senseOf({ min, day: Math.floor(min / DAY), t: min % DAY }), brain.selfOf(n), remember);
+    },
+    // 나를 아는 사람들 (휴대폰 연락처)
+    contacts(S, who, min) {
+      const out = [];
+      for (const n of Object.values(S.people.list)) { const r = n.met?.[who]; if (r?.times) out.push({ id: n.id, name: n.name, job: OCC[n.occ]?.name || { child: '어린이', student: '학생', retired: '은퇴', jobless: '구직 중' }[n.occ], region: n.region, level: rel.LEVEL_NAME[rel.level(r)], like: Math.round(r.like || 0), trust: Math.round(r.trust || 0), times: r.times, last: r.last, gift: r.gift?.item || null }); }
+      return out.sort((a, b) => b.like - a.like || b.last - a.last).slice(0, 50);
     },
     ageOf, OUTDOOR,
   };

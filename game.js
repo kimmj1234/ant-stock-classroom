@@ -399,7 +399,7 @@ async function loadWalkers() {
   for (const id of walkers.keys()) if (!ids.has(id)) walkers.delete(id);   // 집·일터로 들어간 사람은 사라짐
   for (const p of r.people) {
     const w = walkers.get(p.id);
-    if (w) { w.act = p.act; w.job = p.job; w.umbrella = p.umbrella; w.run = p.run; continue; }
+    if (w) { w.act = p.act; w.job = p.job; w.umbrella = p.umbrella; w.run = p.run; if (!w.called) w.call = p.call; continue; }
     const [tx, ty] = tileNearMe(2, 14);
     walkers.set(p.id, { ...p, x: (tx + 0.5) * TILE, y: (ty + 0.7) * TILE, tx: null, ty: null, dir: 's', left: false, moving: false, wait: Math.random() * 3 });
   }
@@ -410,6 +410,11 @@ function updateWalkers(dt) {
   const tiles = walkTiles || (WALK_SCENES.includes(SCENE.name) ? walkTilesOf() : []);
   for (const w of walkers.values()) {
     if (w.talking > 0) { w.talking -= dt; w.moving = false; continue; }
+    if (w.call && !w.called && !me.atWork && talkBox.hidden) {   // 나를 아는 친한 사람: 보이면 다가와서 먼저 말을 걺
+      const d = Math.hypot(w.x - me.x, w.y - me.y);
+      if (d < 46) { w.called = true; w.bubble = { text: w.call, until: performance.now() + 5000 }; w.wait = 5; w.moving = false; face(w, me.x - w.x, me.y - w.y); notify(`${w.name}님이 말을 걸었어요! (E로 대화)`); continue; }
+      if (d < TILE * 9) { w.tx = me.x + (w.x < me.x ? -28 : 28); w.ty = me.y; w.wait = 0; }
+    }
     if (Math.hypot(w.x - me.x, w.y - me.y) > TILE * 25) { const [tx, ty] = tileNearMe(13, 18); w.x = (tx + 0.5) * TILE; w.y = (ty + 0.7) * TILE; w.tx = null; }
     if (w.wait > 0) { w.wait -= dt; w.moving = false; continue; }
     if (w.tx == null) {   // 가까운(6칸 안) 걸을 수 있는 칸을 새 목적지로
@@ -435,9 +440,35 @@ async function talkToWalker(w) {
   w.talking = 30; face(w, me.x - w.x, me.y - w.y);
   const r = await post('person', { id: w.id });
   if (!r.ok) { w.talking = 0; walkers.delete(w.id); return notify(r.msg); }
-  talk = { npc: { name: `${r.name}${r.job ? ' · ' + r.job : ''}`, lines: r.lines, walker: w }, i: 0 };
+  talk = { npc: { name: `${r.name}${r.job ? ' · ' + r.job : ''}${r.rel ? ' · ' + hearts(r.rel) : ''}`, lines: r.lines, walker: w }, i: 0 };
+  w.call = null;
+  if (r.give) { if (r.bag) { me.bag = r.bag; notify(`${r.name}님에게서 ${r.bag[r.bag.length - 1].name}을(를) 받았어요!`); } else notify(`${r.name}님이 선물을 줬지만 가방이 꽉 찼어요.`); }
   say(); talkBox.hidden = false;
 }
+// 관계 표시: 하트 (호감) + 단계
+const hearts = r => (r.like >= 60 ? '♥♥♥' : r.like >= 25 ? '♥♥' : r.like > 5 ? '♥' : r.like < -15 ? '💔' : '♡') + ' ' + r.name;
+// 선물 주기: 대화창의 "선물 주기" → 가방 물건 고르기 → 그 사람의 반응
+const talkGift = document.getElementById('talkGift');
+function showGift() {
+  const w = talk.npc?.walker, items = me.bag || [];
+  talkGift.hidden = !w || !items.length;
+  if (talkGift.hidden) return;
+  talkGift.innerHTML = talkGift.dataset.open ? items.map((it, i) => `<button type="button" data-slot="${i}">${it.name}</button>`).join('') + '<button type="button" data-slot="-1">그만두기</button>' : '<button type="button" data-open="1">선물 주기</button>';
+}
+talkGift.addEventListener('click', async e => {
+  e.stopPropagation();   // 대화창 누르기(다음 말)와 섞이지 않게
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.open) { talkGift.dataset.open = '1'; return showGift(); }
+  delete talkGift.dataset.open;
+  const slot = +b.dataset.slot, w = talk.npc?.walker;
+  if (slot < 0 || !w) return showGift();
+  const r = await post('gift', { id: w.id, slot, scene: SCENE.name });
+  if (!r.ok) { notify(r.msg); return showGift(); }
+  me.bag = r.bag;
+  talk = { npc: { ...talk.npc, lines: r.lines, name: talk.npc.name.replace(/ · [♥♡💔]+ .+$/, '') + ` · ${hearts({ like: r.like, name: { new: '처음 만남', known: '아는 사이', friend: '친구', close: '절친', cold: '서먹함' }[r.level] })}` }, i: 0 };
+  say();
+});
 
 // ===== 휴대폰 "세상" 탭: 나라 통계 · 지역별 인구·일자리·기분 · 동네~나라 소식 · 시스템 건강 =====
 let societyAt = 0;
@@ -465,6 +496,7 @@ const APPS = {
   stock: { name: '한울증권', color: '#d32f2f', mark: '▲', tabs: [['list', '시세'], ['mine', '내 주식'], ['news', '뉴스']] },
   job: { name: '한울잡', color: '#2f9e5a', mark: '잡', tabs: [['posts', '구인'], ['myjob', '내 일'], ['pay', '급여']] },
   world: { name: '세상', color: '#3d7fd6', mark: '◎', tabs: [['world', '세상']] },
+  people: { name: '사람들', color: '#e8708a', mark: '♥', tabs: [['people', '아는 사람']] },
 };
 function renderPhone() {
   const scr = $hud('phoneScreen'), app = APPS[phone.app], nav = document.querySelector('.phone-tabs');
@@ -481,14 +513,25 @@ function renderPhone() {
   if (!app) { st.className = 'phone-status'; const t = today(clock.min); st.textContent = `${t.month}월 ${t.date}일 (${t.weekday}) ${t.wxName}`; return renderHome(scr); }
   if (phone.app === 'job') return renderJob(scr, st);
   if (phone.app === 'world') { st.className = 'phone-status'; st.textContent = '한울 나라 소식과 통계'; return renderWorld(scr); }
+  if (phone.app === 'people') { st.className = 'phone-status'; st.textContent = '나를 아는 사람들 · 호감 순'; return renderPeople(scr); }
   renderStock();
+}
+// 사람들: 나를 아는 NPC (호감 하트·단계·신뢰·만난 횟수·마지막 만남·받은 선물)
+async function loadContacts() { const r = await post('contacts'); if (r.ok) { phone.contacts = r.people; if (phone.app === 'people') renderPhone(); } }
+function renderPeople(scr) {
+  const list = phone.contacts;
+  if (!list) { scr.innerHTML = '<p class="mk-empty">불러오는 중…</p>'; return; }
+  if (!list.length) { scr.innerHTML = '<p class="mk-empty">아직 아는 사람이 없어요. 거리에서 E로 말을 걸어 보세요.</p>'; return; }
+  scr.innerHTML = '<ul class="mk-list">' + list.map(p => `<li class="job-row"><div><b>${p.name}</b> <small>${p.job || ''} · ${p.region}</small></div>
+    <div class="job-meta"><span class="job-tag" style="background:${p.like >= 60 ? '#e8454b' : p.like >= 25 ? '#e8708a' : p.like < -15 ? '#6a6680' : '#b8a8c8'}">${p.level}</span>호감 ${hearts({ like: p.like, name: '' }).trim()} · 신뢰 ${p.trust}</div>
+    <small>${p.times}번 만남 · 마지막 ${whenOf(p.last)}${p.gift ? ' · 선물: ' + p.gift : ''}</small></li>`).join('') + '</ul>';
 }
 function renderHome(scr) {
   scr.innerHTML = '<div class="ph-home">' + Object.entries(APPS).map(([k, a]) => `<button type="button" class="ph-app" data-app="${k}"><span class="ph-ico" style="background:${a.color}">${a.mark}</span>${a.name}</button>`).join('') + '</div>';
 }
 function openApp(k) {
   phone.app = k; phone.tab = APPS[k].tabs[0][0];
-  if (k === 'stock') loadMarket(); if (k === 'job') loadJob(); if (k === 'world') loadSociety();
+  if (k === 'stock') loadMarket(); if (k === 'job') loadJob(); if (k === 'world') loadSociety(); if (k === 'people') { phone.contacts = null; loadContacts(); }
   renderPhone();
 }
 
@@ -646,6 +689,7 @@ function say() {
   document.getElementById('talkName').textContent = npc.name;
   document.getElementById('talkText').textContent = lines[i];
   document.getElementById('talkMore').textContent = i < lines.length - 1 ? '▼' : '닫기';
+  if (typeof showGift === 'function') showGift();
 }
 // 받은 것 알림: 화면 위쪽 노란 띠가 2.5초 동안 뜸
 const got = document.getElementById('got');
@@ -653,7 +697,7 @@ let gotTimer = 0;
 function notify(text) { got.textContent = text; got.hidden = false; clearTimeout(gotTimer); gotTimer = setTimeout(() => (got.hidden = true), 2500); }
 talkBox.addEventListener('click', () => {   // 대화창 누르기(또는 E·Enter·Space) = 다음 말, 마지막 말이면 닫기 (줄 것이 있으면 이때 받음)
   if (++talk.i < linesOf(talk.npc).length) return say();
-  talkBox.hidden = true; cv.focus();
+  talkBox.hidden = true; cv.focus(); delete talkGift.dataset.open;
   if (talk.npc.walker) talk.npc.walker.talking = 1.5;   // 대화가 끝나면 잠깐 뒤 다시 걸음
   const gift = talk.npc.gives;
   if (gift && !me[gift]) {
@@ -832,6 +876,16 @@ function drawName(p, cam, npc) {
     ctx.fillStyle = '#3d7fd6'; ctx.fillRect(Math.round(x - w / 2), ty, w, 12);
     ctx.fillStyle = '#ffffff'; ctx.fillText('NPC', x, ty + 10);
   }
+}
+// 말풍선 (먼저 말을 거는 사람): 이름표 위
+function drawBubble(p, cam) {
+  if (!p.bubble || performance.now() > p.bubble.until) return;
+  const y = Math.round(p.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 44, x = Math.round(p.x * S - cam.x);
+  ctx.font = 'bold 13px "Malgun Gothic", sans-serif'; ctx.textAlign = 'center';
+  const w = ctx.measureText(p.bubble.text).width + 16;
+  ctx.fillStyle = '#1e1b3a'; ctx.fillRect(x - w / 2 - 2, y - 20, w + 4, 26); ctx.fillRect(x - 4, y + 6, 8, 5);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(x - w / 2, y - 18, w, 22); ctx.fillRect(x - 2, y + 4, 4, 4);
+  ctx.fillStyle = '#1e1b3a'; ctx.fillText(p.bubble.text, x, y - 2);
 }
 // E 표시: 가까운 문·NPC 위에 자판 모양 "E" + 할 일 (들어가기·나가기·대화)
 function drawPrompt(sp, cam) {
@@ -1071,7 +1125,7 @@ function frame(now) {
   drawSky(cam, W, H, dt, now);
   drawOverSky(cam, now);
   // 이름표: 건물 뒤에 완전히 가려진 걷는 NPC는 이름표도 숨김 (다른 플레이어·나는 늘 보임)
-  NPCS.forEach(n => drawName(n, cam, true)); walkers.forEach(w => { if (!occluded(w, cam)) drawName(w, cam, true); }); others.forEach(o => drawName(o, cam)); if (!me.atWork) drawName(me, cam);
+  NPCS.forEach(n => drawName(n, cam, true)); walkers.forEach(w => { if (!occluded(w, cam)) { drawName(w, cam, true); drawBubble(w, cam); } }); others.forEach(o => drawName(o, cam)); if (!me.atWork) drawName(me, cam);
   const sp = !busy && (me.sit ? me.sit.phase === 'on' && { type: 'stand' } : nearSpot(me.x, me.y)), wk = !busy && !me.sit && nearWalker();
   if (wk && (!sp || Math.hypot(wk.x - me.x, wk.y - me.y) < Math.hypot(sp.x - me.x, sp.y - me.y))) drawPrompt({ type: 'npc', npc: wk }, cam);
   else if (sp) drawPrompt(sp, cam);
