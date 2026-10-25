@@ -105,6 +105,36 @@ CITY.ground = CITY.ground.map((row, y) => [...row].map((k, x) => {
   return k;
 }).join(''));
 
+// 주택가 집 6채: 왼쪽 위 칸(x, y), 문 가운데(doorX, 픽셀), 문 앞 줄 위쪽 끝(frontY, 픽셀) — 바깥(문 E)과 집 안(나가기)이 같이 씀
+const HOME_LOTS = [[0, 2], [5, 2], [10, 2], [0, 7], [5, 7], [10, 7]].map(([dx, dy], k) => {
+  const b = CITY.blocks[CITY_HOMES], x = b.x0 + dx, y = b.y0 + dy;
+  return { x, y, doorX: x * TILE + (HOME_SLOTS[HOMES[k].door] + 7) * ART, frontY: (y + 2) * TILE };
+});
+// 주택가 집 안 (가로 14칸 × 세로 10칸): 벽지 벽(위 3줄) · 나무 마루 · 러그 · 아래 가운데 현관 매트(E → 그 집 문 앞으로)
+// 가구 배치 두 가지를 번갈아: 짝수 집 = 침실·거실(침대·책장·TV·소파), 홀수 집 = 주방·식탁(조리대·냉장고·식탁) + 침대
+const HOUSE_GROUND = [
+  'wwwwwwwwwwwwww', 'wwwwwwwwwwwwww', 'wwwwwwwwwwwwww',
+  'bffffffffffffb', 'bffffffffffffb', 'bffffrrrrffffb', 'bffffrrrrffffb', 'bffffffffffffb', 'bffffffffffffb',
+  'bbbbbbddbbbbbb',
+];
+function houseScene(k) {
+  const lot = HOME_LOTS[k];
+  return makeScene('h' + k, HOUSE_GROUND, { x: 7 * TILE, y: 8 * TILE + 16 }, ({ place, wallDeco, spot }) => {
+    if (k % 2 === 0) {
+      wallDeco('wwin', 7, 2, 2.4); wallDeco('clock', 4, 1, 1.6); wallDeco('frame', 12, 1, 1.9);
+      place('bed', 0, 1, 3, 2, 3); place('nightstand', 0, 3, 3); place('shelf', 0, 5, 3, 2, 1);
+      place('tv', 0, 9, 3, 3, 1); place('ctable', 0, 9, 5, 3, 1); place('sofa', 0, 9, 7, 3, 1);
+      place('plant', 0, 1, 8); place('plant', 1, 12, 8);
+    } else {
+      wallDeco('wwin', 6, 2, 2.4); wallDeco('clock', 8, 1, 1.6); wallDeco('frame', 10, 2, 1.9);
+      place('counter', 0, 1, 3, 3, 1); place('fridge', 0, 4, 3); place('dtable', 0, 1, 6, 4, 1);
+      place('nightstand', 0, 9, 3); place('bed', 0, 10, 3, 2, 3);
+      place('plant', 1, 12, 8); place('plant', 0, 5, 8);
+    }
+    spot({ type: 'door', out: true, x: 7 * TILE, y: 9 * TILE + 16, px: 7 * TILE, py: 9 * TILE - 40, to: 'city', at: { x: lot.doorX, y: lot.frontY + 26 } });
+  });
+}
+
 const SCENES = {
   // 튜토리얼 공간(처음 서는 곳): 가로 40칸 × 세로 24칸 잔디밭 + 가운데 주택(가로 6칸 × 세로 3줄). 문 앞에서 E → 집 안
   // l 흙길: 현관에서 내려와 처음 서는 곳을 지나 왼쪽 끝까지. 왼쪽 끝 표지판 앞에서 E → 떠날지 묻고, 떠나면 다시 못 돌아옴
@@ -125,10 +155,10 @@ const SCENES = {
       .forEach(([x, y], i) => place(KINDS[i % KINDS.length], i, x, y));
     spot({ type: 'door', x: 20 * TILE, y: 12 * TILE + 10, px: 20 * TILE, py: 12 * TILE - 98, to: 'home', at: { x: 10 * TILE, y: 10 * TILE } });
     place('signpost', 0, 2, 13);
-    spot({ type: 'exit', x: 0.5 * TILE, y: 15 * TILE, px: 2.5 * TILE, py: 11 * TILE - 40, to: 'city', at: { x: 78.5 * TILE, y: 21 * TILE + 20 } });   // 도시 오른쪽 끝, 대로 위쪽 보도
+    spot({ type: 'exit', x: 0.5 * TILE, y: 15 * TILE, px: 2.5 * TILE, py: 11 * TILE - 40, to: 'city', face: 'e', faceLeft: true, at: { x: 78.5 * TILE, y: 21 * TILE + 20 } });   // 도시 오른쪽 끝, 대로 위쪽 보도 (왼쪽 = 도시 쪽을 봄)
   }),
   // 도시 입구: 튜토리얼을 떠나면 오는 곳(다음부터는 여기서 시작). 오른쪽 끝에서 흙길이 들어옴. 도시는 앞으로 하나씩 지음
-  city: Object.assign(makeScene('city', CITY.ground, { x: 78.5 * TILE, y: 21 * TILE + 20 }, ({ place }) => {
+  city: Object.assign(makeScene('city', CITY.ground, { x: 78.5 * TILE, y: 21 * TILE + 20 }, ({ place, spot }) => {
     // 블록마다 가운데에 들어설 곳 이름표 (공원 블록은 "공원" + 나무·벤치)
     let n = 0;
     CITY.blocks.forEach((b, i) => {
@@ -139,6 +169,8 @@ const SCENES = {
           const x = b.x0 + dx, y = b.y0 + dy;
           place('home', k, x, y, 4, 2);
           place('mailbox', k, x + { l: 2, c: 0, r: 1 }[HOMES[k].door], y + 2, 1, 1, false);   // 문 옆 칸
+          const lot = HOME_LOTS[k];   // 문 앞에서 E → 이 집 안 (현관 매트 앞에 섬)
+          spot({ type: 'door', x: lot.doorX, y: lot.frontY + 10, px: lot.doorX, py: lot.frontY - 70, to: 'h' + k, at: { x: 7 * TILE, y: 8 * TILE + 16 } });
         });
         for (const x of [4, 9, 14]) for (const y of [2, 3, 7, 8]) place('hedge', 0, b.x0 + x, b.y0 + y);
         return;
@@ -154,6 +186,7 @@ const SCENES = {
     for (let x = 2; x < 80; x += 6) if ((x < 33 || x > 46) && !(x >= 14 && x <= 19) && !(x >= 60 && x <= 65)) { place('lamp', 0, x, 20); place('lamp', 0, x, 27); }
     for (let y = 2; y < 48; y += 6) if (y < 17 || y > 30) { place('lamp', 0, 36, y); place('lamp', 0, 43, y); }
   }), { marks: CITY.marks, zdir: CITY.zdir }),
+  ...Object.fromEntries(HOME_LOTS.map((_, k) => ['h' + k, houseScene(k)])),   // 주택가 집 안 h0 ~ h5
   // 집 안: 가로 20칸 × 세로 12칸. w 벽지 벽(위 3줄), b 벽 윗면(테두리), f 나무 마루, r 러그, d 현관 매트(여기서 E → 밖으로)
   home: makeScene('home', [
     'wwwwwwwwwwwwwwwwwwww',
@@ -191,7 +224,7 @@ const SCENES = {
       '준비가 되면 집을 나가서 왼쪽 길 끝 표지판으로 가 봐. 한 번 떠나면 다시 못 돌아오니까 천천히 둘러보고 가!',
     ] }, 6, 7);
     // 현관 매트: E → 밖으로 (집 문 앞)
-    spot({ type: 'door', x: 10 * TILE, y: 11 * TILE + 16, px: 10 * TILE, py: 11 * TILE - 40, to: 'field', at: { x: 20 * TILE, y: 12 * TILE + 40 } });
+    spot({ type: 'door', x: 10 * TILE, y: 11 * TILE + 16, px: 10 * TILE, py: 11 * TILE - 40, to: 'field', out: true, at: { x: 20 * TILE, y: 12 * TILE + 40 } });
   }),
 };
 function useScene(name) {
@@ -201,6 +234,7 @@ function useScene(name) {
 }
 useScene('field');
 
+const TUTORIAL_SCENES = ['field', 'home'];   // 튜토리얼 공간 (떠나면 다시 못 들어감)
 const blockedTile = (tx, ty) => !inMap(tx, ty) || SOLID.has(tx + ',' + ty);   // 맵 밖·물건·벽 자리는 못 지나감
 const thingsAround = () => THINGS;
 // (x, y) 픽셀 근처(보통 30픽셀, NPC는 42픽셀 안)에 E로 할 수 있는 곳이 있으면 그중 가장 가까운 것

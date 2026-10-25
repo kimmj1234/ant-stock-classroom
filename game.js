@@ -201,11 +201,11 @@ const onAuth = who => {
   online = true;   // 이제부터 내 자리를 알리고 다른 사람을 받음
   // 서 있던 자리에서 이어서 시작. 튜토리얼을 이미 떠났으면 튜토리얼 쪽 자리는 무시하고 도시 입구로(다시 못 들어감)
   const pl = who.life?.place;
-  if (pl && SCENES[pl.scene] && (!who.tutorialDone || pl.scene === 'city')) {
+  if (pl && SCENES[pl.scene] && !(who.tutorialDone && TUTORIAL_SCENES.includes(pl.scene))) {
     useScene(pl.scene);
     ({ x: me.x, y: me.y } = blockedAt(pl.x, pl.y) ? START : pl);   // 그 자리가 막혔으면(맵이 바뀐 경우 등) 처음 자리
     me.dir = 's';
-  } else if (who.tutorialDone && SCENE.name !== 'city') { useScene('city'); me.x = START.x; me.y = START.y; }
+  } else if (who.tutorialDone && TUTORIAL_SCENES.includes(SCENE.name)) { useScene('city'); me.x = START.x; me.y = START.y; }
 };
 document.addEventListener('auth', e => onAuth(e.detail));
 if (window.authState) onAuth(window.authState.me);
@@ -461,7 +461,7 @@ function drawPrompt(sp, cam) {
   const who = sp.type === 'npc' ? sp.npc : sp.type === 'exit' || sp.type === 'stand' ? me : null;
   const x = Math.round((who ? who.x : sp.px) * S - cam.x);
   const y = who ? Math.round(who.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8 - 32 : Math.round(sp.py * S - cam.y);
-  const label = { npc: '대화', exit: '도시로 떠나기', seat: '앉기', stand: '일어나기' }[sp.type] || (sp.to === 'field' ? '나가기' : '들어가기');
+  const label = { npc: '대화', exit: '도시로 떠나기', seat: '앉기', stand: '일어나기' }[sp.type] || (sp.out ? '나가기' : '들어가기');
   ctx.font = '14px Galmuri14, "Malgun Gothic", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   const w = 26 + 6 + ctx.measureText(label).width + 10, viewW = cv.width / (devicePixelRatio || 1);
   const left = Math.max(8, Math.min(viewW - w - 8, x - Math.round(w / 2)));   // 화면 끝에서도 잘리지 않게
@@ -613,7 +613,7 @@ function frame(now) {
   GROUND_LOOK = td.wx === 'snow' ? 'snow' : td.season === 3 && weatherOf(tday - 1) === 'snow' ? 'melt' : ['spring', 'summer', 'autumn', 'winter'][td.season];
   // 입력: 방향키 방향 그대로(위 = 화면 위쪽). 두 키를 같이 누르면(↑→ 등) 45도 대각선
   // 장면 바꾸기: 다 어두워지면 장면을 바꾸고 문 앞(안이면 현관 매트 앞)에 섬 → 다시 밝아짐
-  if (fade && !fade.done && now - fade.t0 >= FADE) { useScene(fade.sp.to); me.x = fade.sp.at.x; me.y = fade.sp.at.y; me.dir = fade.sp.to === 'home' ? 'n' : fade.sp.to === 'city' ? 'e' : 's'; me.left = fade.sp.to === 'city'; fade.done = true; saveProgress(); }   // 도시 입구에서는 왼쪽(도시 쪽)을 봄
+  if (fade && !fade.done && now - fade.t0 >= FADE) { useScene(fade.sp.to); me.x = fade.sp.at.x; me.y = fade.sp.at.y; me.dir = fade.sp.face || (fade.sp.out ? 's' : 'n'); me.left = !!fade.sp.faceLeft; fade.done = true; saveProgress(); }   // 들어가면 위(안쪽), 나오면 아래를 봄
   if (fade && now - fade.t0 >= FADE * 2) fade = null;
   const busy = fade || !talkBox.hidden || !document.getElementById('leaveWrap').hidden;   // 장면을 바꾸거나 대화하는 동안은 못 걸음
   let vx = busy ? 0 : stick.x + held.has('R') - held.has('L'), vy = busy ? 0 : stick.y + held.has('D') - held.has('U');

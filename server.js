@@ -177,7 +177,8 @@ function fameProblem(giver, giverKey, toKey, today) {
   return null;
 }
 const lifeOf = a => ({ cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null, stats: { ...STATS_START, ...a.stats } });
-const SCENE_NAMES = ['field', 'home', 'city'];   // town.js의 장면 이름 (튜토리얼 공간 = field·home)
+const SCENE_NAMES = ['field', 'home', 'city', 'h0', 'h1', 'h2', 'h3', 'h4', 'h5'];   // town.js의 장면 이름 (h0~h5 = 주택가 집 안)
+const TUTORIAL_SCENES = ['field', 'home'];   // 튜토리얼 공간: 떠난 계정은 이 자리를 저장하지 않음
 // ===== 함께 돌아다니기(멀티플레이) =====
 // 접속한 사람마다(로그인 세션마다) 마지막 자리를 메모리에 두고, 각자 자리를 알릴 때(/api/move, 0.15초마다) 답장으로 같은 장면에 있는 다른 사람 목록을 돌려줌.
 // (계속 열어 두는 실시간 연결은 인터넷 주소(Cloudflare 터널)가 중간에 모아 두는 바람에 늦게 와서, 보통 요청·답장으로 바꿈)
@@ -280,7 +281,7 @@ http.createServer(async (req, res) => {
       // 자리: 아는 장면 + 0~5000 사이 숫자만. 튜토리얼을 떠난 계정은 도시 쪽 자리만 받음(다시 못 돌아가게)
       const inRange = v => Number.isFinite(v) && v >= 0 && v <= 5000;
       if (!p || !SCENE_NAMES.includes(p.scene) || !inRange(p.x) || !inRange(p.y)) return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });
-      if (!(a.tutorialDone && p.scene !== 'city')) { a.place = { scene: p.scene, x: Math.round(p.x), y: Math.round(p.y) }; writeJSONFile(ACCOUNTS_FILE, accounts); }
+      if (!(a.tutorialDone && TUTORIAL_SCENES.includes(p.scene))) { a.place = { scene: p.scene, x: Math.round(p.x), y: Math.round(p.y) }; writeJSONFile(ACCOUNTS_FILE, accounts); }
       return json(res, 200, { ok: true });
     }
     return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });
