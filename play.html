@@ -75,9 +75,10 @@
   <!-- 메뉴 창: ESC(또는 ☰)로 열고 닫음. 설정 안에서 조작 방법을 다시 볼 수 있음 -->
   <div class="guide-wrap" id="menuWrap" hidden>
     <section class="guide menu" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
-      <h2 id="menuTitle">메뉴</h2>
+      <h2 id="menuTitle">나의 두번째 인생</h2>
       <div class="menu-list" id="menuMain">
         <button type="button" class="primary" data-act="resume">게임으로 돌아가기</button>
+        <button type="button" data-act="guide">이용방법</button>
         <button type="button" data-act="settings">설정</button>
         <button type="button" data-act="home">홈페이지로 이동</button>
         <button type="button" class="danger" data-act="logout">로그아웃</button>
@@ -136,7 +137,7 @@
   // 메뉴 창
   const page = list => {
     main.hidden = list !== main; settings.hidden = list !== settings;
-    $('menuTitle').textContent = list === main ? '메뉴' : '설정';
+    $('menuTitle').textContent = list === main ? '나의 두번째 인생' : '설정';
     list.querySelector('button').focus();
   };
   const openMenu = () => { menu.hidden = false; page(main); };
