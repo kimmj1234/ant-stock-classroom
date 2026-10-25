@@ -153,8 +153,22 @@ function googleName(b) {
 const nameCheck = b => { const bad = nameProblem(b.name); return bad ? { ok: false, msg: bad } : { ok: true, msg: '사용할 수 있는 닉네임이에요.' }; };   // 입력하는 동안 화면이 물어봄
 const AUTH = { login, google: googleLogin, googleName, nameCheck };   // 로그인 전에 부르는 API
 // 생활 정보: 게임 시간(분, 처음은 3월 1일 오전 8시), 현금(원), 가방(물건 목록), 서 있던 자리(장면·픽셀 위치, 없으면 처음 자리), 능력치
-// 능력치: 체력·배고픔·기분은 0~100 (100이 가장 좋음), 지능·근력·매력은 레벨(1부터). 아직 바뀌는 일은 없고 처음 값
-const STATS_START = { health: 100, hunger: 100, mood: 80, smarts: 1, strength: 1, charm: 1 };
+// 능력치: 체력·배고픔·기분은 게이지 0~100 (100이 가장 좋음) / 지능·근력은 레벨(1부터, 돈으로 강화 — 나중엔 공부·운동 같은 행동으로도)
+//         매력은 인기도(0부터, 메이플스토리 인기도처럼 다른 사람이 +1/-1을 줌, 마이너스도 됨)
+const STATS_START = { health: 100, hunger: 100, mood: 80, smarts: 1, strength: 1, charm: 0 };
+// 강화: Lv n → n+1에 n × 10,000원 (Lv 1→2 10,000원, 2→3 20,000원 …), 최고 Lv 99
+const UPGRADABLE = ['smarts', 'strength'], MAX_LEVEL = 99;
+const upgradeCost = lv => lv * 10000;
+// 인기도 주기 규칙(메이플스토리처럼): 자기 자신은 안 됨, 하루(한국 날짜)에 한 번, 같은 사람에게는 30일에 한 번. 문제없으면 null, 아니면 이유
+const kstDay = (t = Date.now()) => new Date(t + 9 * 3600e3).toISOString().slice(0, 10);
+const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400e3);
+function fameProblem(giver, giverKey, toKey, today) {
+  if (toKey === giverKey) return '자기 자신에게는 인기도를 줄 수 없어요.';
+  if (giver.fameDay === today) return '인기도는 하루에 한 번만 줄 수 있어요.';
+  const last = giver.fameTo?.[toKey];
+  if (last && daysBetween(last, today) < 30) return '같은 사람에게는 30일에 한 번만 줄 수 있어요.';
+  return null;
+}
 const lifeOf = a => ({ minutes: a.minutes ?? 480, cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null, stats: { ...STATS_START, ...a.stats } });
 const SCENE_NAMES = ['field', 'home', 'city'];   // town.js의 장면 이름 (튜토리얼 공간 = field·home)
 
@@ -202,6 +216,28 @@ http.createServer(async (req, res) => {
       if (name === 'tutorialDone' && !accounts[key].basicUI) return json(res, 403, { ok: false, msg: '안내소에서 기본 UI를 먼저 받아야 해요.' });   // 기본 UI 없이는 튜토리얼을 못 떠남
       if (!accounts[key][name]) { accounts[key][name] = true; writeJSONFile(ACCOUNTS_FILE, accounts); }
       return json(res, 200, { ok: true });
+    }
+    if (name === 'upgrade') {   // 능력치 강화: 돈을 내고 지능·근력 1레벨 올림 (돈·레벨은 서버가 계산)
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      if (!UPGRADABLE.includes(b.stat)) return json(res, 400, { ok: false, msg: '강화할 수 없는 능력치예요.' });
+      const a = accounts[key], life = lifeOf(a), lv = life.stats[b.stat], cost = upgradeCost(lv);
+      if (lv >= MAX_LEVEL) return json(res, 400, { ok: false, msg: '이미 최고 레벨이에요.' });
+      if (life.cash < cost) return json(res, 400, { ok: false, msg: `돈이 부족해요. (${cost.toLocaleString('ko-KR')}원 필요)` });
+      a.cash = life.cash - cost; a.stats = { ...life.stats, [b.stat]: lv + 1 };
+      writeJSONFile(ACCOUNTS_FILE, accounts);
+      return json(res, 200, { ok: true, cash: a.cash, stats: a.stats });
+    }
+    if (name === 'fame') {   // 인기도 주기: { to: 닉네임, up: true(+1) / false(-1) }
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      const toKey = nameKey(cleanName(b.to) || ''), target = accounts[toKey];
+      if (!target) return json(res, 404, { ok: false, msg: '그런 사람이 없어요.' });
+      const giver = accounts[key], today = kstDay(), bad = fameProblem(giver, key, toKey, today);
+      if (bad) return json(res, 400, { ok: false, msg: bad });
+      const st = lifeOf(target).stats;
+      target.stats = { ...st, charm: st.charm + (b.up === false ? -1 : 1) };
+      giver.fameDay = today; giver.fameTo = { ...giver.fameTo, [toKey]: today };
+      writeJSONFile(ACCOUNTS_FILE, accounts);
+      return json(res, 200, { ok: true, charm: target.stats.charm });
     }
     if (name === 'progress') {   // 게임 시간·서 있던 자리 저장 (화면이 20초마다·장면을 바꿀 때·페이지를 떠날 때 보냄)
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });

@@ -174,20 +174,44 @@ if (window.authState) onAuth(window.authState.me);
 // ===== 가방 창 채우기 (play.html이 열 때 'bagopen'을 보냄) =====
 // 캐릭터: 지금 차림을 정면으로 크게 / 자금: 현금 / 능력치: 막대 셋 + 레벨 셋 / 가방: 쓸 수 있는 칸(처음 가방 3칸) + 잠긴 칸
 const BAG_SLOTS = 3, BAG_MAX = 12;
+// 능력치: 체력·배고픔·기분 = 게이지 / 지능·근력 = 레벨 + 돈으로 강화 버튼(Lv n → n+1에 n × 10,000원, 서버가 확인) / 매력 = 인기도(다른 사람이 +1·-1)
 const STAT_ROWS = [
   ['health', '체력', '#e8454b'], ['hunger', '배고픔', '#f2a03d'], ['mood', '기분', '#f2c94c'],
-  ['smarts', '지능'], ['strength', '근력'], ['charm', '매력'],
+  ['smarts', '지능', 'up'], ['strength', '근력', 'up'], ['charm', '매력', 'fame'],
 ];
+const won = n => n.toLocaleString('ko-KR');
+function statRow([k, name, kind], st) {
+  const v = st[k] ?? 0;
+  if (kind === 'up') {
+    const cost = v * 10000;
+    return `<li><span>${name}</span><span class="lv">Lv ${v}</span><button type="button" data-up="${k}" ${(me.cash || 0) < cost || v >= 99 ? 'disabled' : ''} title="${name} 강화: ${won(cost)}원">강화 ${won(cost)}원</button></li>`;
+  }
+  if (kind === 'fame') return `<li><span>${name}</span><span class="lv">인기도 ${v}</span><span class="fame">다른 사람이 줌</span></li>`;
+  return `<li><span>${name}</span><span class="bar"><i style="width:${v}%;background:${kind}"></i></span><span>${v}</span></li>`;
+}
+function fillStats() { $hud('invStats').innerHTML = STAT_ROWS.map(r => statRow(r, me.stats || {})).join(''); }
+// 강화 버튼: 서버에 요청 → 새 현금·능력치로 창·기본 UI를 고침
+$hud('invStats').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-up]');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  const r = await fetch('/api/upgrade', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stat: btn.dataset.up }) }).then(r => r.json()).catch(() => ({ ok: false, msg: '서버와 연결이 안 돼요.' }));
+  if (r.ok) {
+    me.cash = r.cash; me.stats = r.stats;
+    $hud('invCash').textContent = won(me.cash);
+    const [, name] = STAT_ROWS.find(([k]) => k === btn.dataset.up);
+    notify(`${name} 강화! Lv ${me.stats[btn.dataset.up]} 달성`);
+  } else notify(r.msg);
+  fillStats();
+  $hud('invStats').querySelector(`[data-up="${btn.dataset.up}"]`)?.focus();
+});
 document.addEventListener('bagopen', () => {
   const c = $hud('invChar'), g = c.getContext('2d');
   g.clearRect(0, 0, c.width, c.height); g.drawImage(sprite(me.look, 's', 0), 0, 0);
   $hud('invName').textContent = me.name;
   drawIcon('invCoin', 'coin');
   $hud('invCash').textContent = (me.cash || 0).toLocaleString('ko-KR');
-  const st = me.stats || {};
-  $hud('invStats').innerHTML = STAT_ROWS.map(([k, name, color]) => color
-    ? `<li><span>${name}</span><span class="bar"><i style="width:${st[k] ?? 0}%;background:${color}"></i></span><span>${st[k] ?? 0}</span></li>`
-    : `<li><span>${name}</span><span></span><span>Lv ${st[k] ?? 1}</span></li>`).join('');
+  fillStats();
   const items = me.bag || [];
   $hud('bagGrid').innerHTML = Array.from({ length: BAG_MAX }, (_, i) => i < BAG_SLOTS ? `<span class="slot">${items[i]?.name || ''}</span>` : '<span class="slot locked" title="더 큰 가방이 필요해요">잠김</span>').join('');
   $hud('bagEmpty').textContent = items.length ? `${items.length} / ${BAG_SLOTS}칸` : '아직 비어 있어요 · 3칸';
