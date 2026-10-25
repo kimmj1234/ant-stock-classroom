@@ -165,7 +165,6 @@
   .stats button:disabled { background: #a89276; cursor: default; box-shadow: 2px 0 #7a4a2a, -2px 0 #7a4a2a, 0 2px #7a4a2a, 0 -2px #7a4a2a; }
   .stats button:focus-visible { outline: 3px dashed #f2c94c; outline-offset: 3px; }
   .stats .lv { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
-  .stats .fame { font-size: 12px; color: #a07a52; }
   .menu-btn { display: none; }
   .menu-btn {
     position: absolute; right: 18px; bottom: 18px; width: 36px; height: 36px; border: 0; background: #fff; color: #000; cursor: pointer;
@@ -363,7 +362,15 @@
   closeWrap.addEventListener('click', e => { const b = e.target.closest('[data-close]'); if (b) answer(b.dataset.close === 'yes'); });
   // 가방 창: 열 때 game.js가 캐릭터·자금·능력치·가방 칸을 채움('bagopen' 알림)
   const bag = $('bagWrap'), bagBtn = $('bagBtn');
-  const openBag = () => { document.dispatchEvent(new Event('bagopen')); bag.hidden = false; $('bagClose').focus(); };
+  // 가방 창 크기: 화면 넓이의 절반쯤을 차지하도록 통째로 키움(작은 화면에서는 원래 크기, 화면 밖으로는 안 나가게)
+  const fitBag = () => {
+    const box = bag.querySelector('.inv');
+    box.style.zoom = 1;
+    const w = box.offsetWidth, h = box.offsetHeight, W = innerWidth, H = innerHeight;
+    box.style.zoom = Math.max(1, Math.min(Math.sqrt(W * H / 2 / (w * h)), W * 0.94 / w, H * 0.9 / h));
+  };
+  addEventListener('resize', () => { if (!bag.hidden) fitBag(); });
+  const openBag = () => { document.dispatchEvent(new Event('bagopen')); bag.hidden = false; fitBag(); $('bagClose').focus(); };
   const closeBag = () => { bag.hidden = true; game.focus(); };
   bagBtn.addEventListener('click', openBag);
   $('bagClose').addEventListener('click', closeBag);

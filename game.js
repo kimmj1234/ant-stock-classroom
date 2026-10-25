@@ -186,7 +186,7 @@ function statRow([k, name, kind], st) {
     const cost = v * 10000;
     return `<li><span>${name}</span><span class="lv">Lv ${v}</span><button type="button" data-up="${k}" ${(me.cash || 0) < cost || v >= 99 ? 'disabled' : ''} title="${name} 강화: ${won(cost)}원">강화 ${won(cost)}원</button></li>`;
   }
-  if (kind === 'fame') return `<li><span>${name}</span><span class="lv">인기도 ${v}</span><span class="fame">다른 사람이 줌</span></li>`;
+  if (kind === 'fame') return `<li><span>${name}</span><span class="lv">인기도 ${v}</span><span></span></li>`;
   return `<li><span>${name}</span><span class="bar"><i style="width:${v}%;background:${kind}"></i></span><span>${v}</span></li>`;
 }
 function fillStats() { $hud('invStats').innerHTML = STAT_ROWS.map(r => statRow(r, me.stats || {})).join(''); }
