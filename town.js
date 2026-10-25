@@ -140,6 +140,18 @@ function roadMarks(x, y) {
 
 // 바닥 한 칸 그림: 칸 종류·무늬·이웃 차도·변화(금·얼룩 등)마다 한 번만 그려 저장
 const tileCache = new Map();
+// 잔디·흙길의 계절 모습 (game.js가 정함): spring 연두 + 꽃 많음 / summer 초록 / autumn 누런 풀 + 떨어진 잎 / winter 마른 풀
+//   snow 눈 오는 날: 하얗게 덮임 / melt 눈 온 다음 날(겨울): 마른 풀 위에 녹다 남은 눈
+let GROUND_LOOK = 'summer';
+const GRASS = {   // [바탕, 풀결 어두운 색, 풀결 밝은 색, 풀 무더기]
+  spring: ['#86c95a', '#6db346', '#a6dc7a', '#69ad48'],
+  summer: ['#78bb55', '#62a444', '#8fcc6a', '#5e9e41'],
+  autumn: ['#b9b45c', '#9c9440', '#d3c978', '#a38b3a'],
+  winter: ['#a8a07a', '#8f8762', '#bdb592', '#857c58'],
+  melt: ['#a8a07a', '#8f8762', '#bdb592', '#857c58'],
+  snow: ['#eef2f8', '#d6dfec', '#ffffff', '#c9d4e4'],
+};
+const SEASONAL_TILES = 'gl';   // 계절 모습이 있는 바닥
 function tileImage(tx, ty) {
   const k = tileAt(tx, ty);
   if (k === null) return null;
@@ -153,7 +165,8 @@ function tileImage(tx, ty) {
   const grassy = (dx, dy) => +(tileAt(tx + dx, ty + dy) === 'g');   // 흙길: 잔디와 닿는 쪽만 가장자리(맵 끝으로는 그대로 이어짐)
   const inner = k === 'w' ? (tileAt(tx, ty + 1) !== 'w' ? 'base' : tileAt(tx, ty - 1) !== 'w' ? 'top' : '') : k === 'r' ? nb('r') : k === 'b' ? nb('b')
     : k === 'l' ? [grassy(0, -1), grassy(0, 1), grassy(-1, 0), grassy(1, 0)].join('') : '';
-  const key = [k, v, curb, marks.join('+'), zdir, inner].join('|');
+  const look = SEASONAL_TILES.includes(k) ? GROUND_LOOK : '';
+  const key = [k, v, curb, marks.join('+'), zdir, inner, look].join('|');
   if (tileCache.has(key)) return tileCache.get(key);
   const c = makeCanvas(TILE, TILE), g = c.getContext('2d');
   const box = (x, y, w, h, color) => { g.fillStyle = color; g.fillRect(x, y, w, h); };
@@ -179,17 +192,30 @@ function tileImage(tx, ty) {
     }
     if (zdir === 'h') for (let y = 2; y < TILE; y += 8) { box(1, y, TILE - 2, 5, WHITE); box(1, y + 4, TILE - 2, 1, '#cfcfc8'); }   // 가로 대로 건너는 횡단보도: 가로 막대
     if (zdir === 'v') for (let x = 2; x < TILE; x += 8) { box(x, 1, 5, TILE - 2, WHITE); box(x + 4, 1, 1, TILE - 2, '#cfcfc8'); }
-  } else if (k === 'g') {   // 잔디: 짧은 풀결 + 가끔 풀 무더기·작은 꽃
-    box(0, 0, TILE, TILE, '#78bb55');
-    for (let i = 0; i < 9; i++) { const px = Math.floor(hash(tx, ty, i) * 30), py = Math.floor(hash(tx, ty, i + 20) * 30); box(px, py, 1, 2, '#62a444'); box(px + 1, py, 1, 1, '#8fcc6a'); }
-    if (v === 4) { box(10, 12, 2, 2, '#ffffff'); box(20, 22, 2, 2, '#f5a3b5'); box(24, 8, 2, 2, '#f2c94c'); }
-    if (v === 5) { box(12, 16, 6, 3, '#5e9e41'); box(13, 15, 4, 1, '#5e9e41'); }
-  } else if (k === 'l') {   // 흙길: 밝은 흙 + 자갈·발자국 얼룩, 잔디와 닿는 쪽은 풀이 삐죽 덮음
-    box(0, 0, TILE, TILE, '#d2ab72');
+  } else if (k === 'g') {   // 잔디: 짧은 풀결 + 가끔 풀 무더기·작은 꽃 (계절마다 색이 바뀜, 눈 오면 하얗게 덮임)
+    const [base, dk, lt, tuft] = GRASS[look];
+    box(0, 0, TILE, TILE, base);
+    for (let i = 0; i < 9; i++) { const px = Math.floor(hash(tx, ty, i) * 30), py = Math.floor(hash(tx, ty, i + 20) * 30); box(px, py, 1, 2, dk); box(px + 1, py, 1, 1, lt); }
+    if (look === 'snow') {   // 눈 위로 마른 풀끝이 가끔 삐죽
+      for (let i = 0; i < 3; i++) box(Math.floor(hash(tx, ty, i + 70) * 30), Math.floor(hash(tx, ty, i + 80) * 30), 1, 2, '#9c946a');
+    } else {
+      if (look === 'melt') for (let i = 0; i < 3; i++) {   // 녹다 남은 눈 덩이
+        const px = Math.floor(hash(tx, ty, i + 90) * 24), py = Math.floor(hash(tx, ty, i + 95) * 26);
+        box(px, py, 7, 4, '#eef2f8'); box(px + 1, py - 1, 4, 1, '#eef2f8'); box(px + 1, py + 3, 6, 1, '#d6dfec');
+      }
+      if (v === 4 && (look === 'spring' || look === 'summer')) { box(10, 12, 2, 2, '#ffffff'); box(20, 22, 2, 2, '#f5a3b5'); box(24, 8, 2, 2, '#f2c94c'); }   // 작은 꽃
+      if (look === 'spring' && v === 1) { box(6, 24, 2, 2, '#f2c94c'); box(26, 16, 2, 2, '#ffffff'); }   // 봄엔 꽃이 더 많음 (민들레·냉이꽃)
+      if (look === 'autumn' && v < 3) [[6, 9, '#e0602a'], [22, 19, '#ecbc26'], [14, 26, '#bf3f28']].forEach(([x, y, c]) => box(x, y, 2, 1, c));   // 떨어진 잎
+      if (v === 5) { box(12, 16, 6, 3, tuft); box(13, 15, 4, 1, tuft); }
+    }
+  } else if (k === 'l') {   // 흙길: 밝은 흙 + 자갈·발자국 얼룩, 잔디와 닿는 쪽은 풀이 삐죽 덮음 (눈 오면 눈이 얇게 덮임)
+    box(0, 0, TILE, TILE, look === 'snow' ? '#e6e9f0' : '#d2ab72');
     for (let i = 0; i < 7; i++) { const px = Math.floor(hash(tx, ty, i + 40) * 29), py = Math.floor(hash(tx, ty, i + 60) * 29); box(px, py, 2, 2, i % 2 ? '#bf965d' : '#e2c08a'); }
     if (v === 2) { box(9, 12, 4, 3, '#a9a39a'); box(9, 12, 4, 1, '#cfc9bf'); }   // 돌멩이
     if (v === 4) box(18, 20, 6, 2, '#c49d64');
-    const [up, down, left, right] = [...inner].map(Number), G = '#78bb55', G2 = '#62a444';
+    if (look === 'snow') for (let i = 0; i < 6; i++) box(Math.floor(hash(tx, ty, i + 40) * 28), Math.floor(hash(tx, ty, i + 60) * 28), 4, 2, '#c9b08a');   // 눈 사이로 보이는 흙(발자국)
+    if (look === 'melt') for (let i = 0; i < 2; i++) box(Math.floor(hash(tx, ty, i + 50) * 22), Math.floor(hash(tx, ty, i + 55) * 26), 8, 4, '#e6e9f0');   // 녹다 남은 눈
+    const [up, down, left, right] = [...inner].map(Number), [G, G2] = GRASS[look];
     for (let i = 0; i < TILE; i += 4) {
       const j = Math.floor(hash(tx, ty, i) * 3);
       if (up) { box(i, 0, 4, 2 + j, G); box(i + 1, 2 + j, 1, 1, G2); }
