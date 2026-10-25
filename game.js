@@ -8,15 +8,20 @@ const SPEED = 240;                      // 화면에서 1초에 걷는 거리(px
 const me = { name: '', x: START.x, y: START.y, look: DEFAULT_LOOK, dir: 'se', left: false, moving: false };   // dir: 보는 방향(sprites.js의 s·se·e·ne·n), left: 좌우 뒤집기
 let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). 매 프레임 화면이 맵으로 꽉 차게 정함
 
-// ===== 게임 시간: 현실 1초 = 게임 1분 (하루 = 24분). 계절마다 28일, 봄 → 여름 → 가을 → 겨울 → 다음 해 =====
+// ===== 게임 시간: 현실 1시간 = 게임 3시간 (현실 20초 = 게임 1분, 게임 하루 = 현실 8시간) =====
+// 달력은 실제와 같음: 게임 하루 = 달력 하루, 1년 365일, 처음은 3월 1일 오전 8시. 계절은 달로 정함(봄 3~5월, 여름 6~8월, 가을 9~11월, 겨울 12~2월)
 // 창(메뉴·안내·가방 등)이 떠 있는 동안은 멈춤. 서버에 저장되어 이어짐
-const DAY = 1440, SEASON_DAYS = 28;
+const DAY = 1440, TIME_SPEED = 3;   // 현실 1초에 게임 3초
+const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 const SEASONS = [['봄', '#f5a3b5'], ['여름', '#7ed36a'], ['가을', '#f2a03d'], ['겨울', '#bfe3f5']];
 // ===== 한국(서울) 같은 계절: 해 뜨고 지는 시각, 날씨, 기온 =====
-// 게임 계절 28일 = 실제 석 달(봄 3~5월, 여름 6~8월, 가을 9~11월, 겨울 12~2월).
-// 게임 날짜마다 "실제 1년 중 며칠째"(1월 1일 = 0)를 구해서, 그날의 서울 해·날씨·기온을 씀
-const SEASON_START = [59, 151, 243, 334];   // 3월 1일, 6월 1일, 9월 1일, 12월 1일
-const doyOf = day => (SEASON_START[Math.floor(day / SEASON_DAYS) % 4] + Math.floor((day % SEASON_DAYS) * 92 / SEASON_DAYS)) % 365;
+// 게임 날짜마다 "1년 중 며칠째"(1월 1일 = 0)를 구해서, 그날의 서울 해·날씨·기온을 씀. 게임 0일째 = 3월 1일(59)
+const doyOf = day => (59 + day) % 365;
+function monthDay(doy) {   // 1년 중 며칠째 → [월, 일]
+  let m = 0;
+  while (doy >= MONTH_DAYS[m]) doy -= MONTH_DAYS[m++];
+  return [m + 1, doy + 1];
+}
 // 해 뜨고 지는 시각(분): 하지(6월 21일) 5:11·19:57 → 낮이 가장 김 / 동지(12월 22일) 7:43·17:17 → 낮이 가장 짧음 / 춘분·추분 무렵 6:27·18:37
 function sunTimes(day) {
   const c = Math.cos(2 * Math.PI * (doyOf(day) - 172) / 365);
@@ -60,10 +65,11 @@ function temperature(min) {
 const WX_NAME = { sun: '맑음', cloud: '흐림', rain: '비', snow: '눈', storm: '태풍', dust: '황사' };
 const clock = { min: 480, sent: '', ready: false };   // sent: 마지막으로 서버에 보낸 시간·자리
 function today(min) {
-  const day = Math.floor(min / DAY), season = Math.floor(day / SEASON_DAYS) % 4, year = Math.floor(day / (SEASON_DAYS * 4)) + 1;
-  const wx = weatherOf(day), m = Math.floor(min % DAY / 10) * 10, h = Math.floor(m / 60);
+  const day = Math.floor(min / DAY), year = Math.floor(day / 365) + 1, [month, date] = monthDay(doyOf(day));
+  const season = [3, 3, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3][month - 1];   // 1·2월 겨울, 3~5월 봄, 6~8월 여름, 9~11월 가을, 12월 겨울
+  const wx = weatherOf(day), m = Math.floor(min % DAY), h = Math.floor(m / 60);   // 시각은 1분 단위 (현실 20초마다 바뀜)
   return {
-    year, season, date: day % SEASON_DAYS + 1, wx, ...sunTimes(day),
+    year, season, month, date, wx, ...sunTimes(day),
     wxName: wx === 'rain' && JANGMA(doyOf(day)) ? '장마' : WX_NAME[wx],
     time: `${h < 12 ? '오전' : '오후'} ${(h + 11) % 12 + 1}:${String(m % 60).padStart(2, '0')}`,
   };
@@ -135,12 +141,12 @@ function showHud() { hudEl.hidden = !me.basicUI; }
 function updateHud() {   // 글자가 바뀔 때만 고침
   const t = today(clock.min), m = clock.min % DAY, icon = t.wx === 'sun' && (m < t.rise || m >= t.set) ? 'moon' : t.wx;   // 맑은 밤(해 진 뒤 ~ 해 뜨기 전)엔 달
   const temp = temperature(clock.min);
-  const key = [t.year, t.season, t.date, icon, t.time, temp, me.cash].join('|');
+  const key = [t.year, t.season, t.month, t.date, icon, t.time, temp, me.cash].join('|');
   if (key === hudLast) return;
   hudLast = key;
   const [name, color] = SEASONS[t.season];
   $hud('hudSeason').textContent = name; $hud('hudSeason').style.background = color;
-  $hud('hudDay').textContent = (t.year > 1 ? t.year + '년 ' : '') + t.date + '일';
+  $hud('hudDay').textContent = (t.year > 1 ? t.year + '년 ' : '') + t.month + '월 ' + t.date + '일';   // 2년째부터는 몇 년째인지도
   $hud('hudWxText').textContent = t.wxName; drawIcon('hudWx', icon);
   $hud('hudTemp').textContent = temp + '°C';
   $hud('hudClock').textContent = t.time;
@@ -514,7 +520,7 @@ function face(p, vx, vy) {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (clock.ready && !document.querySelector('.guide-wrap:not([hidden])')) clock.min += dt;   // 게임 시간 (창이 떠 있으면 멈춤)
+  if (clock.ready && !document.querySelector('.guide-wrap:not([hidden])')) clock.min += dt * TIME_SPEED / 60;   // 게임 시간: 현실 1초에 게임 3초 (창이 떠 있으면 멈춤)
   updateHud();
   // 입력: 방향키 방향 그대로(위 = 화면 위쪽). 두 키를 같이 누르면(↑→ 등) 45도 대각선
   // 장면 바꾸기: 다 어두워지면 장면을 바꾸고 문 앞(안이면 현관 매트 앞)에 섬 → 다시 밝아짐
