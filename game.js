@@ -379,34 +379,42 @@ function walkTilesOf() {   // 이 장면에서 사람이 서 있을 수 있는 �
   return walkTiles;
 }
 // 걷는 위치는 화면 꾸밈이라, 밖에 나온 사람들은 내 근처(14칸 안)에서 걸어 다님. 내가 멀리 가면(25칸 넘게) 화면 밖 근처로 옮겨 옴 → 넓은 도시 어디서나 거리가 살아 있음
-function tileNearMe(minT, maxT) {
+// 화면에 보이는 범위 (월드 좌표, 매 프레임) — 사람이 보는 앞에서 나타나거나 사라지지 않게
+let view = { x0: 0, y0: 0, x1: 0, y1: 0 };
+const offView = (x, y, m = TILE * 1.5) => x < view.x0 - m || x > view.x1 + m || y < view.y0 - m || y > view.y1 + m + TILE;
+// 내 근처(minT~maxT칸)의 걸을 수 있는 칸. hidden이면 화면 밖 칸만 (없으면 null)
+function tileNearMe(minT, maxT, hidden) {
   const tiles = walkTilesOf();
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 80; i++) {
     const t = tiles[Math.floor(Math.random() * tiles.length)];
     if (!t) break;
-    const d = Math.hypot((t[0] + 0.5) * TILE - me.x, (t[1] + 0.7) * TILE - me.y) / TILE;
-    if (d >= minT && d <= maxT) return t;
+    const x = (t[0] + 0.5) * TILE, y = (t[1] + 0.7) * TILE, d = Math.hypot(x - me.x, y - me.y) / TILE;
+    if (hidden ? offView(x, y) && !offView(x, y, TILE * 7) : d >= minT && d <= maxT) return t;   // 숨김: 화면 가장자리 바로 바깥 (7칸 안)
   }
-  return tiles[Math.floor(Math.random() * tiles.length)] || [0, 0];
+  return hidden ? null : tiles[Math.floor(Math.random() * tiles.length)] || [0, 0];
 }
-async function loadWalkers() {
+async function loadWalkers(first) {
+  first ||= !walkers.size;   // 아무도 없을 때(처음·로그인 직후)는 이미 거리에 있는 것으로
   if (!online || !me.basicUI) return;
   const scene = SCENE.name;
   if (!WALK_SCENES.includes(scene)) return;
   const r = await post('people', { scene });
   if (!r.ok || SCENE.name !== scene) return;
   const ids = new Set(r.people.map(p => p.id));
-  for (const id of walkers.keys()) if (!ids.has(id)) walkers.delete(id);   // 집·일터로 들어간 사람은 사라짐
+  for (const [id, w] of walkers) if (!ids.has(id) && !w.leaving) { w.leaving = performance.now(); w.tx = null; }   // 집·일터로 들어가는 사람: 화면 밖으로 걸어 나간 뒤 사라짐
   for (const p of r.people) {
     const w = walkers.get(p.id);
+    if (w?.leaving) w.leaving = 0;   // 다시 나옴
     if (w) { w.act = p.act; w.job = p.job; w.umbrella = p.umbrella; w.run = p.run; if (!w.called) w.call = p.call; continue; }
-    const [tx, ty] = tileNearMe(2, 14);
+    const t = first ? tileNearMe(2, 14) : tileNearMe(0, 0, true);   // 장면에 처음 들어올 땐 이미 거리에 있고, 그 뒤 새로 나온 사람은 화면 밖에서 걸어 들어옴
+    if (!t) continue;
+    const [tx, ty] = t;
     walkers.set(p.id, { ...p, x: (tx + 0.5) * TILE, y: (ty + 0.7) * TILE, tx: null, ty: null, dir: 's', left: false, moving: false, wait: Math.random() * 3 });
   }
 }
 setInterval(loadWalkers, 10000);
 function updateWalkers(dt) {
-  if (walkScene !== SCENE.name) { walkers.clear(); walkTiles = null; walkScene = SCENE.name; loadWalkers(); }   // 장면이 바뀌면 그 장면 사람들을 한 번 받아 옴
+  if (walkScene !== SCENE.name) { walkers.clear(); walkTiles = null; walkScene = SCENE.name; loadWalkers(true); }   // 장면이 바뀌면 그 장면 사람들을 한 번 받아 옴
   const tiles = walkTiles || (WALK_SCENES.includes(SCENE.name) ? walkTilesOf() : []);
   for (const w of walkers.values()) {
     if (w.talking > 0) { w.talking -= dt; w.moving = false; continue; }
@@ -415,8 +423,16 @@ function updateWalkers(dt) {
       if (d < 46) { w.called = true; w.bubble = { text: w.call, until: performance.now() + 5000 }; w.wait = 5; w.moving = false; face(w, me.x - w.x, me.y - w.y); notify(`${w.name}님이 말을 걸었어요! (E로 대화)`); continue; }
       if (d < TILE * 9) { w.tx = me.x + (w.x < me.x ? -28 : 28); w.ty = me.y; w.wait = 0; }
     }
-    if (Math.hypot(w.x - me.x, w.y - me.y) > TILE * 25) { const [tx, ty] = tileNearMe(13, 18); w.x = (tx + 0.5) * TILE; w.y = (ty + 0.7) * TILE; w.tx = null; }
-    if (w.wait > 0) { w.wait -= dt; w.moving = false; continue; }
+    if (w.leaving) {   // 들어가는 사람: 화면 밖이면 바로, 아니면 나에게서 멀어지는 쪽으로 걸어가다 화면 밖에서 사라짐 (오래 걸리면 흐려지며)
+      if (offView(w.x, w.y) || performance.now() - w.leaving > 15000) { walkers.delete(w.id); continue; }
+      if (w.tx == null) { const ang = Math.atan2(w.y - me.y, w.x - me.x); w.tx = w.x + Math.cos(ang) * TILE * 6; w.ty = w.y + Math.sin(ang) * TILE * 6; if (blockedAt(w.tx, w.ty)) w.tx = null; }
+    }
+    if (Math.hypot(w.x - me.x, w.y - me.y) > TILE * 25 && offView(w.x, w.y)) {   // 멀리 떨어진 사람은 (보이지 않을 때만) 내 근처 화면 밖으로 옮김
+      const t = tileNearMe(0, 0, true);
+      if (t) { w.x = (t[0] + 0.5) * TILE; w.y = (t[1] + 0.7) * TILE; w.tx = null; }
+    }
+    if (w.wait > 0 && !w.leaving) { w.wait -= dt; w.moving = false; continue; }
+    if (w.tx == null && w.leaving) { w.wait = 0.3; continue; }
     if (w.tx == null) {   // 가까운(6칸 안) 걸을 수 있는 칸을 새 목적지로
       for (let i = 0; i < 8 && w.tx == null; i++) {
         const [tx, ty] = tiles[Math.floor(Math.random() * tiles.length)] || [];
@@ -818,7 +834,7 @@ function drawGround(cam, W, H) {
 }
 // 건물·나무: 발밑(y) 가운데(x)를 기준으로 세움
 function drawThing(t, cam) {
-  const img = thingArt(t), k = S * ART, w = img.width * k, h = img.height * k;
+  const img = thingArt(t), k = S * ART, w = img.lw * k, h = img.lh * k;
   const ox = Math.round(t.x * S - cam.x - w / 2), oy = Math.round(t.y * S - cam.y - h);
   ctx.drawImage(img, ox, oy, w, h);
   if (img.texts?.length) drawSignTexts(img.texts, ox, oy, k);
@@ -909,7 +925,7 @@ function drawClocks(cam) {
   const k = S * ART, m = clock.min % DAY;
   for (const th of THINGS) {
     if (th.type !== 'clock') continue;
-    const img = thingArt(th), ox = th.x * S - cam.x - img.width * k / 2, oy = th.y * S - cam.y - img.height * k;
+    const img = thingArt(th), ox = th.x * S - cam.x - img.lw * k / 2, oy = th.y * S - cam.y - img.lh * k;
     const hand = (turn, len) => {
       ctx.fillStyle = INK;
       for (let r = 0; r <= len; r += 0.5) ctx.fillRect(Math.round(ox + Math.floor(5.5 + Math.sin(turn * 2 * Math.PI) * r) * k), Math.round(oy + Math.floor(5.5 - Math.cos(turn * 2 * Math.PI) * r) * k), k, k);
@@ -931,7 +947,8 @@ let skyShade = 1, litRects = [];   // 이번 프레임의 어둠(밝기 배율)�
 // 3) 불 켜진 창문(그 건물)보다 앞에 선 사람은 불빛에 덮이지 않게 다시 그림 (어둠만큼 어둡게)
 // 4) 내 캐릭터가 앞에 있는 건물·나무에 가려지면 반투명하게 비쳐 보이게
 const alphaOf = new WeakMap();   // 물건 그림의 투명도 (가려졌는지 볼 때 씀)
-function opaqueAt(img, ix, iy) {
+function opaqueAt(img, ix, iy) {   // ix·iy = 원래 크기 좌표 (2배 그림은 그 칸의 가운데 픽셀)
+  ix = ix * (img.res || 1) + ((img.res || 1) >> 1); iy = iy * (img.res || 1) + ((img.res || 1) >> 1);
   if (ix < 0 || iy < 0 || ix >= img.width || iy >= img.height) return false;
   let d = alphaOf.get(img);
   if (!d) { d = img.getContext('2d').getImageData(0, 0, img.width, img.height).data; alphaOf.set(img, d); }
@@ -951,7 +968,7 @@ function occluded(p, cam) {
   const k = S * SPRITE.scale, kk = S * ART, px0 = p.x * S - cam.x, py0 = p.y * S - cam.y, pts = [[px0, py0 - 8 * k], [px0, py0 - 13 * k]], foot = p.sit ? p.sit.by + 1 : p.y;
   return THINGS.some(t => {
     if (t.ground || t.y <= foot + 2) return false;
-    const img = thingArt(t), ox = t.x * S - cam.x - img.width * kk / 2, oy = t.y * S - cam.y - img.height * kk;
+    const img = thingArt(t), ox = t.x * S - cam.x - img.lw * kk / 2, oy = t.y * S - cam.y - img.lh * kk;
     return pts.some(([x, y]) => opaqueAt(img, Math.floor((x - ox) / kk), Math.floor((y - oy) / kk)));
   });
 }
@@ -971,7 +988,7 @@ function drawSky(cam, W, H, dt, now) {
     for (const th of THINGS) {
       const G = SKY_GLASS[th.type];
       if (!G) continue;
-      const img = thingArt(th), ox = th.x * S - cam.x - img.width * k / 2, oy = th.y * S - cam.y - img.height * k;
+      const img = thingArt(th), ox = th.x * S - cam.x - img.lw * k / 2, oy = th.y * S - cam.y - img.lh * k;
       for (const [x, y, w, h] of G) {
         const px = Math.round(ox + x * k), py = Math.round(oy + y * k), pw = w * k, ph = h * k;
         const pane = color => { ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph); };
@@ -1011,7 +1028,7 @@ function drawSky(cam, W, H, dt, now) {
     for (const t of THINGS) {
       const L = (typeof LIGHTS[t.type] === 'function' ? LIGHTS[t.type](t.v) : LIGHTS[t.type]) || thingArt(t).lights;   // 그림에 적어 둔 창문(lit)도 켬
       if (!L) continue;
-      const img = thingArt(t), ox = t.x * S - cam.x - img.width * k / 2, oy = t.y * S - cam.y - img.height * k;
+      const img = thingArt(t), ox = t.x * S - cam.x - img.lw * k / 2, oy = t.y * S - cam.y - img.lh * k;
       if (t.type === 'lamp') {   // 가로등: 발밑 바닥에 둥근 빛 웅덩이
         const fx = t.x * S - cam.x, fy = t.y * S - cam.y, rx = 34 * k;
         ctx.save(); ctx.translate(fx, fy); ctx.scale(1, 0.45);
@@ -1115,11 +1132,12 @@ function frame(now) {
   // 카메라: 나를 화면 가운데에. 맵 끝에 가까우면 바깥이 안 보이게 멈춤(맵이 화면보다 작으면 맵을 가운데에)
   const fitCam = (p, view, size) => Math.round(size > view ? Math.min(size - view, Math.max(0, p - view / 2)) : (size - view) / 2);
   const cam = { x: fitCam(f.x, W, MAP_W * S), y: fitCam(f.y - SPRITE.h * S * SPRITE.scale / 2, H, MAP_H * S) };
+  view = { x0: cam.x / S, y0: cam.y / S, x1: (cam.x + W) / S, y1: (cam.y + H) / S };
   drawGround(cam, W, H);
   drawShadows(ctx, S, cam);   // 물건 그림자 (바닥 위, 물건 아래)
   // 건물·나무·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
   // 바닥 무늬(맨홀·주차 P)는 맨 먼저 → 무엇에든 가려짐
-  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), ...[...walkers.values()].map(w => ({ y: w.y, draw: () => { drawPlayer(w, cam, now); if (w.umbrella) drawUmbrella(w, cam); } })), ...[...others.values()].map(o => ({ y: o.sit ? o.sit.by + 1 : o.y, draw: () => drawPlayer(o, cam, now) })), { y: me.sit ? me.sit.sp.by + 1 : me.y, draw: () => { if (!me.atWork) drawPlayer(me, cam, now); } }];   // 근무 중이면 일터 안이라 안 보임   // 앉아 있으면 벤치보다 앞에 그림
+  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), ...[...walkers.values()].map(w => ({ y: w.y, draw: () => { const fade = w.leaving ? Math.min(1, Math.max(0, (15000 - (performance.now() - w.leaving)) / 3000)) : 1; ctx.globalAlpha = fade; drawPlayer(w, cam, now); if (w.umbrella) drawUmbrella(w, cam); ctx.globalAlpha = 1; } })), ...[...others.values()].map(o => ({ y: o.sit ? o.sit.by + 1 : o.y, draw: () => drawPlayer(o, cam, now) })), { y: me.sit ? me.sit.sp.by + 1 : me.y, draw: () => { if (!me.atWork) drawPlayer(me, cam, now); } }];   // 근무 중이면 일터 안이라 안 보임   // 앉아 있으면 벤치보다 앞에 그림
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
   drawClocks(cam);
   drawSky(cam, W, H, dt, now);
