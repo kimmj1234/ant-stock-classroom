@@ -12,6 +12,7 @@ let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). �
 const onAuth = who => {
   if (!who) return location.replace('/#login');
   me.name = who.name;
+  if (who.tutorialDone && SCENE.name !== 'city') { useScene('city'); me.x = START.x; me.y = START.y; }   // 튜토리얼을 이미 떠났으면 다시 못 들어감
 };
 document.addEventListener('auth', e => onAuth(e.detail));
 if (window.authState) onAuth(window.authState.me);
@@ -74,6 +75,7 @@ function interact() {
   if (!sp) return;
   held.clear();
   if (sp.type === 'door') return void (fade = { t0: performance.now(), sp, done: false });
+  if (sp.type === 'exit') return window.askLeave(() => { fade = { t0: performance.now(), sp, done: false }; });   // 튜토리얼 떠나기: 확인 창에서 "떠나기"를 골라야 감
   face(sp.npc, me.x - sp.npc.x, me.y - sp.npc.y);   // NPC가 나를 봄
   talk = { npc: sp.npc, i: 0 };
   say(); talkBox.hidden = false;
@@ -161,7 +163,7 @@ function drawName(p, cam) {
 // E 표시: 가까운 문·NPC 위에 자판 모양 "E" + 할 일 (들어가기·나가기·대화)
 function drawPrompt(sp, cam) {
   const x = Math.round(sp.px * S - cam.x), y = Math.round(sp.py * S - cam.y);
-  const label = sp.type === 'npc' ? '대화' : sp.to === 'field' ? '나가기' : '들어가기';
+  const label = sp.type === 'npc' ? '대화' : sp.type === 'exit' ? '도시로 떠나기' : sp.to === 'field' ? '나가기' : '들어가기';
   ctx.font = '14px Galmuri14, "Malgun Gothic", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   const w = 26 + 6 + ctx.measureText(label).width + 10, left = x - Math.round(w / 2);
   ctx.fillStyle = '#000'; ctx.fillRect(left - 3, y - 16, w + 6, 32);
@@ -191,9 +193,9 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   // 입력: 방향키 방향 그대로(위 = 화면 위쪽). 두 키를 같이 누르면(↑→ 등) 45도 대각선
   // 장면 바꾸기: 다 어두워지면 장면을 바꾸고 문 앞(안이면 현관 매트 앞)에 섬 → 다시 밝아짐
-  if (fade && !fade.done && now - fade.t0 >= FADE) { useScene(fade.sp.to); me.x = fade.sp.at.x; me.y = fade.sp.at.y; me.dir = fade.sp.to === 'home' ? 'n' : 's'; fade.done = true; }
+  if (fade && !fade.done && now - fade.t0 >= FADE) { useScene(fade.sp.to); me.x = fade.sp.at.x; me.y = fade.sp.at.y; me.dir = fade.sp.to === 'home' ? 'n' : fade.sp.to === 'city' ? 'e' : 's'; me.left = fade.sp.to === 'city'; fade.done = true; }   // 도시 입구에서는 왼쪽(도시 쪽)을 봄
   if (fade && now - fade.t0 >= FADE * 2) fade = null;
-  const busy = fade || !talkBox.hidden;   // 장면을 바꾸거나 대화하는 동안은 못 걸음
+  const busy = fade || !talkBox.hidden || !document.getElementById('leaveWrap').hidden;   // 장면을 바꾸거나 대화하는 동안은 못 걸음
   let vx = busy ? 0 : stick.x + held.has('R') - held.has('L'), vy = busy ? 0 : stick.y + held.has('D') - held.has('U');
   const len = Math.hypot(vx, vy);
   if (len > 1) { vx /= len; vy /= len; }   // 대각선도 같은 빠르기

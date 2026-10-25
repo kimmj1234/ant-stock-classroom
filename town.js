@@ -37,11 +37,17 @@ function makeScene(name, ground, start, build) {
 }
 
 const SCENES = {
-  // 바깥: 가로 40칸 × 세로 24칸 잔디밭 + 가운데 주택(가로 6칸 × 세로 3줄). 문 앞에서 E → 집 안
-  field: makeScene('field', Array.from({ length: 24 }, () => 'g'.repeat(40)), { x: 20 * TILE, y: 15 * TILE }, ({ place, spot }) => {
+  // 튜토리얼 공간(처음 서는 곳): 가로 40칸 × 세로 24칸 잔디밭 + 가운데 주택(가로 6칸 × 세로 3줄). 문 앞에서 E → 집 안
+  // l 흙길: 현관에서 내려와 처음 서는 곳을 지나 왼쪽 끝까지. 왼쪽 끝 표지판 앞에서 E → 떠날지 묻고, 떠나면 다시 못 돌아옴
+  field: makeScene('field', Array.from({ length: 24 }, (_, y) => [...'g'.repeat(40)].map((k, x) => ((y === 14 || y === 15) && x <= 20) || ((y === 12 || y === 13) && (x === 19 || x === 20)) ? 'l' : k).join('')),
+    { x: 20 * TILE, y: 15 * TILE }, ({ place, spot }) => {
     place('house', 0, 17, 9, 6, 3);
     spot({ type: 'door', x: 20 * TILE, y: 12 * TILE + 10, px: 20 * TILE, py: 12 * TILE - 98, to: 'home', at: { x: 10 * TILE, y: 10 * TILE } });
+    place('signpost', 0, 1, 13);
+    spot({ type: 'exit', x: 0.5 * TILE, y: 15 * TILE, px: 1.5 * TILE, py: 12 * TILE - 30, to: 'city', at: { x: 37 * TILE, y: 15 * TILE } });
   }),
+  // 도시 입구: 튜토리얼을 떠나면 오는 곳(다음부터는 여기서 시작). 오른쪽 끝에서 흙길이 들어옴. 도시는 앞으로 하나씩 지음
+  city: makeScene('city', Array.from({ length: 24 }, (_, y) => (y === 14 || y === 15 ? 'g'.repeat(20) + 'l'.repeat(20) : 'g'.repeat(40))), { x: 37 * TILE, y: 15 * TILE }, () => {}),
   // 집 안: 가로 20칸 × 세로 12칸. w 벽지 벽(위 3줄), b 벽 윗면(테두리), f 나무 마루, r 러그, d 현관 매트(여기서 E → 밖으로)
   home: makeScene('home', [
     'wwwwwwwwwwwwwwwwwwww',
@@ -130,7 +136,9 @@ function tileImage(tx, ty) {
   const zdir = k === 'Z' ? (ty >= MAIN[0] && ty <= MAIN[1] ? 'h' : 'v') : '';
   // 집 안: 벽지는 맨 위·맨 아래 줄(몰딩·걸레받이), 러그는 가장자리, 벽 윗면은 안쪽 방향이 그림에 들어감
   const nb = ch => [tileAt(tx, ty - 1) !== ch, tileAt(tx, ty + 1) !== ch, tileAt(tx - 1, ty) !== ch, tileAt(tx + 1, ty) !== ch].map(Number).join('');
-  const inner = k === 'w' ? (tileAt(tx, ty + 1) !== 'w' ? 'base' : tileAt(tx, ty - 1) !== 'w' ? 'top' : '') : k === 'r' ? nb('r') : k === 'b' ? nb('b') : '';
+  const grassy = (dx, dy) => +(tileAt(tx + dx, ty + dy) === 'g');   // 흙길: 잔디와 닿는 쪽만 가장자리(맵 끝으로는 그대로 이어짐)
+  const inner = k === 'w' ? (tileAt(tx, ty + 1) !== 'w' ? 'base' : tileAt(tx, ty - 1) !== 'w' ? 'top' : '') : k === 'r' ? nb('r') : k === 'b' ? nb('b')
+    : k === 'l' ? [grassy(0, -1), grassy(0, 1), grassy(-1, 0), grassy(1, 0)].join('') : '';
   const key = [k, v, curb, marks.join('+'), zdir, inner].join('|');
   if (tileCache.has(key)) return tileCache.get(key);
   const c = makeCanvas(TILE, TILE), g = c.getContext('2d');
@@ -162,6 +170,19 @@ function tileImage(tx, ty) {
     for (let i = 0; i < 9; i++) { const px = Math.floor(hash(tx, ty, i) * 30), py = Math.floor(hash(tx, ty, i + 20) * 30); box(px, py, 1, 2, '#62a444'); box(px + 1, py, 1, 1, '#8fcc6a'); }
     if (v === 4) { box(10, 12, 2, 2, '#ffffff'); box(20, 22, 2, 2, '#f5a3b5'); box(24, 8, 2, 2, '#f2c94c'); }
     if (v === 5) { box(12, 16, 6, 3, '#5e9e41'); box(13, 15, 4, 1, '#5e9e41'); }
+  } else if (k === 'l') {   // 흙길: 밝은 흙 + 자갈·발자국 얼룩, 잔디와 닿는 쪽은 풀이 삐죽 덮음
+    box(0, 0, TILE, TILE, '#d2ab72');
+    for (let i = 0; i < 7; i++) { const px = Math.floor(hash(tx, ty, i + 40) * 29), py = Math.floor(hash(tx, ty, i + 60) * 29); box(px, py, 2, 2, i % 2 ? '#bf965d' : '#e2c08a'); }
+    if (v === 2) { box(9, 12, 4, 3, '#a9a39a'); box(9, 12, 4, 1, '#cfc9bf'); }   // 돌멩이
+    if (v === 4) box(18, 20, 6, 2, '#c49d64');
+    const [up, down, left, right] = [...inner].map(Number), G = '#78bb55', G2 = '#62a444';
+    for (let i = 0; i < TILE; i += 4) {
+      const j = Math.floor(hash(tx, ty, i) * 3);
+      if (up) { box(i, 0, 4, 2 + j, G); box(i + 1, 2 + j, 1, 1, G2); }
+      if (down) { box(i, TILE - 2 - j, 4, 2 + j, G); box(i + 2, TILE - 3 - j, 1, 1, G2); }
+      if (left) { box(0, i, 2 + j, 4, G); box(2 + j, i + 1, 1, 1, G2); }
+      if (right) { box(TILE - 2 - j, i, 2 + j, 4, G); box(TILE - 3 - j, i + 2, 1, 1, G2); }
+    }
   } else if (k === 'f' || k === 'd') {   // 나무 마루: 가로 널빤지(8픽셀), 줄마다 이음새를 엇갈림 / d = 현관 매트
     box(0, 0, TILE, TILE, '#c98d5a');
     for (let y = 0; y < TILE; y += 8) {
@@ -232,7 +253,7 @@ function tileImage(tx, ty) {
 
 // ----- 그림자: 바닥을 다 그린 뒤, 물건보다 먼저 그림 (빛은 왼쪽 위) -----
 const SHADE = 'rgba(32, 26, 52, 0.22)';
-const BIG = new Set(['cafe', 'shop', 'villa', 'house']);
+const BIG = new Set(['cafe', 'shop', 'villa', 'house']);   // 표지판처럼 가는 것은 아래에서 그림자 없음
 function drawShadows(ctx, S, cam) {
   ctx.fillStyle = SHADE;
   for (const t of THINGS) {
@@ -242,7 +263,7 @@ function drawShadows(ctx, S, cam) {
       const h = t.d * TILE * S, sw = 12 * S;
       ctx.beginPath(); ctx.moveTo(x + half, y - h); ctx.lineTo(x + half + sw, y - h + sw); ctx.lineTo(x + half + sw, y + 3 * S); ctx.lineTo(x + half, y); ctx.closePath(); ctx.fill();
       ctx.fillRect(x - half + 4 * S, y, half * 2, 3 * S);
-    } else if (t.type !== 'bollard' && t.type !== 'aboard' && t.type !== 'pots') {   // 나머지: 발밑 오른쪽으로 둥근 그림자
+    } else if (!['bollard', 'aboard', 'pots', 'signpost'].includes(t.type)) {   // 나머지: 발밑 오른쪽으로 둥근 그림자
       const rx = Math.max(8, t.w * TILE * 0.42) * S, ry = (t.type === 'car' ? 16 : t.type === 'fountain' ? 10 : 5) * S;
       ctx.beginPath(); ctx.ellipse(x + 5 * S, y - (t.type === 'car' ? 15 : t.type === 'fountain' ? 9 : 3) * S, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
     }
@@ -340,6 +361,14 @@ const ARTS = {
     return c;
   },
   // ===== 집 안 가구 (뒤 벽에 붙은 것은 위로 솟아 벽에 겹쳐 보임) =====
+  signpost() {   // 나무 표지판: 왼쪽을 가리키는 화살표 판 "도시"
+    const W = 30, H = 34, { c, box, center } = painter(W, H);
+    box(13, 12, 4, 22, INK); box(14, 12, 2, 22, '#8a5a3b');                                   // 기둥
+    box(4, 2, 25, 15, INK); box(1, 6, 3, 7, INK); box(0, 8, 1, 3, INK);                       // 판 + 화살표 끝
+    box(5, 3, 23, 13, '#c99a62'); box(2, 7, 3, 5, '#c99a62'); box(1, 9, 1, 1, '#c99a62'); box(5, 3, 23, 1, '#dcb37f');
+    center('도시', 17, 3, '#3a2a1e');
+    return c;
+  },
   bed() {   // 침대(2칸 × 3줄): 나무 머리판 + 베개 + 체크 이불
     const W = 32, H = 54, { c, box } = painter(W, H);
     box(1, 0, 30, 12, INK); box(2, 1, 28, 10, '#8a5a3b'); box(2, 1, 28, 2, '#a8774f'); box(4, 4, 24, 5, '#7a4e32');   // 머리판

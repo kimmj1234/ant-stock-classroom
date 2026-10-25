@@ -124,6 +124,14 @@
       <div class="menu-list yesno"><button type="button" class="danger" data-close="yes">예</button><button type="button" class="primary" data-close="no">아니오</button></div>
     </section>
   </div>
+  <!-- 튜토리얼 떠나기 확인 창: 떠나면 다시 못 돌아옴 -->
+  <div class="guide-wrap" id="leaveWrap" hidden>
+    <section class="guide menu wide" role="alertdialog" aria-modal="true" aria-labelledby="leaveTitle" aria-describedby="leaveText">
+      <h2 id="leaveTitle">도시로 떠날까요?</h2>
+      <p class="start-text" id="leaveText">이곳은 튜토리얼 공간이에요.<br>한 번 떠나면 다시 돌아올 수 없어요!</p>
+      <div class="menu-list yesno"><button type="button" class="primary" data-close="yes">떠나기</button><button type="button" data-close="no">아직 안 떠나기</button></div>
+    </section>
+  </div>
   <!-- 메뉴 창: ESC(또는 ☰)로 열고 닫음. 이용방법으로 조작 방법을 다시 볼 수 있음 -->
   <div class="guide-wrap" id="menuWrap" hidden>
     <section class="guide menu" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
@@ -218,6 +226,16 @@
     showWarn('이제 Ctrl + W를 누르면 창이 닫혀요', '게임 계속하기');
   };
   closeWrap.addEventListener('click', e => { const b = e.target.closest('[data-close]'); if (b) answer(b.dataset.close === 'yes'); });
+  // 튜토리얼 떠나기 확인 창 (game.js가 표지판 앞에서 E를 누르면 엶): 떠나기 → onYes, 아직 안 떠나기 → 게임으로
+  const leaveWrap = $('leaveWrap');
+  let onLeave = null;
+  window.askLeave = onYes => { onLeave = onYes; leaveWrap.hidden = false; leaveWrap.querySelector('[data-close=no]').focus(); };
+  leaveWrap.addEventListener('click', e => {
+    const b = e.target.closest('[data-close]');
+    if (!b) return;
+    leaveWrap.hidden = true; game.focus();
+    if (b.dataset.close === 'yes') { post('tutorialDone').catch(() => {}); onLeave(); }
+  });
   // 화면 확대·축소 막기: Ctrl + 마우스 휠(터치패드 두 손가락 확대·축소 포함), Ctrl + +/−/0
   addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
   addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && ['+', '=', '-', '_', '0'].includes(e.key)) e.preventDefault(); }, true);
@@ -277,10 +295,11 @@
       if (closeWrap.hidden) openClose();
       return;
     }
-    if (!closeWrap.hidden) {   // 확인 창: ←→(A/D)로 고르고 Enter·Space·E로 누름, ESC는 아니오
+    const ask = [closeWrap, leaveWrap].find(w => !w.hidden);
+    if (ask) {   // 예/아니오 창: ←→(A/D)로 고르고 Enter·Space·E로 누름, ESC는 아니오
       e.stopPropagation();
-      const yes = closeWrap.querySelector('[data-close=yes]'), no = closeWrap.querySelector('[data-close=no]');
-      if (e.key === 'Escape') { e.preventDefault(); answer(false); }
+      const yes = ask.querySelector('[data-close=yes]'), no = ask.querySelector('[data-close=no]');
+      if (e.key === 'Escape') { e.preventDefault(); no.click(); }
       else if (['ArrowLeft', 'ArrowRight', 'a', 'A', 'd', 'D'].includes(e.key)) { e.preventDefault(); (document.activeElement === yes ? no : yes).focus(); }
       else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); document.activeElement?.click(); }
       return;
