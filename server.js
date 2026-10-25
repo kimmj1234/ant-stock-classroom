@@ -152,8 +152,10 @@ function googleName(b) {
 }
 const nameCheck = b => { const bad = nameProblem(b.name); return bad ? { ok: false, msg: bad } : { ok: true, msg: '사용할 수 있는 닉네임이에요.' }; };   // 입력하는 동안 화면이 물어봄
 const AUTH = { login, google: googleLogin, googleName, nameCheck };   // 로그인 전에 부르는 API
-// 생활 정보: 게임 시간(분, 처음은 1일 오전 8시 — 6시는 아직 새벽이라 어두움), 현금(원), 가방(물건 목록), 서 있던 자리(장면·픽셀 위치, 없으면 처음 자리)
-const lifeOf = a => ({ minutes: a.minutes ?? 480, cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null });
+// 생활 정보: 게임 시간(분, 처음은 3월 1일 오전 8시), 현금(원), 가방(물건 목록), 서 있던 자리(장면·픽셀 위치, 없으면 처음 자리), 능력치
+// 능력치: 체력·배고픔·기분은 0~100 (100이 가장 좋음), 지능·근력·매력은 레벨(1부터). 아직 바뀌는 일은 없고 처음 값
+const STATS_START = { health: 100, hunger: 100, mood: 80, smarts: 1, strength: 1, charm: 1 };
+const lifeOf = a => ({ minutes: a.minutes ?? 480, cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null, stats: { ...STATS_START, ...a.stats } });
 const SCENE_NAMES = ['field', 'home', 'city'];   // town.js의 장면 이름 (튜토리얼 공간 = field·home)
 
 // ===== HTTP =====

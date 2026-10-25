@@ -16,7 +16,7 @@
   .view { position: relative; min-height: 0; }
   /* 조작 안내 창: 화면 가운데, 말풍선과 같은 픽셀 모양(흰 바탕 + 검은 계단 테두리 + 오른쪽·아래 회색 그늘) */
   @font-face { font-family: Galmuri14; font-display: swap; src: url(https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/Galmuri14.woff2) format("woff2"); }
-  .guide-wrap { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(20, 18, 30, .35); padding: 16px; }
+  .guide-wrap { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; background: rgba(20, 18, 30, .35); padding: 16px; }   /* 창은 기본 UI·버튼보다 위 */
   .guide-wrap[hidden] { display: none; }
   .guide {
     width: min(420px, 100%); box-sizing: border-box; padding: 22px 26px 20px; background: #fff; color: #000;
@@ -108,27 +108,54 @@
   .hud-bag:hover { background: #f1f0ec; }
   .hud-bag:focus-visible { outline: 3px dashed #f2c94c; outline-offset: 5px; }
   .hud-bag kbd { position: absolute; right: -10px; bottom: -10px; min-width: 24px; height: 24px; font-size: 13px; }
-  /* 가방 창: 가방 그림(파란 배낭)과 같은 색 — 남색 계단 테두리 + 파란 틀(위·왼쪽 하늘색, 아래·오른쪽 진한 파랑), 위에 걸친 제목 판, 오른쪽 위 노란 X(별 스티커 색), 움푹 들어간 칸. 처음 받은 가방은 3칸 */
-  .crate {
-    position: relative; padding: 30px 22px 16px; background: #5b8cf0; color: #ffffff;
+  /* 가방 창: 베이지 양피지 느낌 — 진한 갈색 계단 테두리 + 밝은 안쪽 띠, 위에 걸친 제목 판, 오른쪽 위 X
+     왼쪽부터 캐릭터(장비 칸 4개) | 자금 | 능력치 | 가방(쓸 수 있는 칸 + 잠긴 칸). 좁은 화면에서는 줄을 바꿔 쌓임 */
+  .inv {
+    position: relative; max-width: calc(100vw - 40px); box-sizing: border-box; padding: 30px 16px 16px; background: #c99a66; color: #4a2c18;
     font: 14px/1.5 Galmuri14, "Malgun Gothic", monospace; -webkit-font-smoothing: none;
-    box-shadow: 4px 0 #1e1b3a, -4px 0 #1e1b3a, 0 4px #1e1b3a, 0 -4px #1e1b3a, inset 4px 4px #8fe3f2, inset -4px -4px #4459d6;
+    box-shadow: 4px 0 #3b2416, -4px 0 #3b2416, 0 4px #3b2416, 0 -4px #3b2416, inset 4px 4px #e2bb86, inset -4px -4px #9a6a3e;
   }
-  .crate h2 {
+  .inv h2 {
     position: absolute; top: -16px; left: 50%; transform: translateX(-50%); margin: 0; padding: 3px 22px;
-    background: #4459d6; color: #ffffff; font: inherit; white-space: nowrap;
-    box-shadow: 3px 0 #1e1b3a, -3px 0 #1e1b3a, 0 3px #1e1b3a, 0 -3px #1e1b3a, inset 0 3px #5fcfe6;
+    background: #7a4a2a; color: #fbe8c8; font: inherit; white-space: nowrap;
+    box-shadow: 3px 0 #3b2416, -3px 0 #3b2416, 0 3px #3b2416, 0 -3px #3b2416, inset 0 3px #9a6238;
   }
   .crate-x {
     position: absolute; top: -16px; right: -16px; width: 34px; height: 34px; padding: 0; border: 0; cursor: pointer;
-    background: #f6d32b; color: #1e1b3a; font: 700 22px/1 Galmuri11, monospace;
-    box-shadow: 3px 0 #1e1b3a, -3px 0 #1e1b3a, 0 3px #1e1b3a, 0 -3px #1e1b3a, inset 3px 3px #fbe98a, inset -3px -3px #e88a1c;
+    background: #d9622b; color: #3b2416; font: 700 22px/1 Galmuri11, monospace;
+    box-shadow: 3px 0 #3b2416, -3px 0 #3b2416, 0 3px #3b2416, 0 -3px #3b2416, inset 3px 3px #f2914f, inset -3px -3px #a8431a;
   }
-  .crate-x:hover { background: #fbe05a; }
+  .crate-x:hover { background: #e8733a; }
   .crate-x:focus-visible { outline: 3px dashed #f2c94c; outline-offset: 5px; }
-  .bag-grid { display: grid; grid-template-columns: repeat(3, 48px); gap: 10px; justify-content: center; margin: 0 0 12px; }
-  .bag-grid span { height: 48px; background: #4a6fe0; box-shadow: 2px 0 #1e1b3a, -2px 0 #1e1b3a, 0 2px #1e1b3a, 0 -2px #1e1b3a, inset 4px 4px #3346b0, inset -2px -2px #6f9df4; }
-  .crate p { margin: 0; text-align: center; font-size: 13px; color: #ffffff; }
+  .inv-row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-height: calc(100vh - 110px); overflow-y: auto; padding: 4px; }   /* 화면이 낮으면 패널들만 스크롤 (제목 판·X는 그대로) */
+  .inv-panel {
+    display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 12px 12px; background: #f1d7ad;
+    box-shadow: 3px 0 #7a4a2a, -3px 0 #7a4a2a, 0 3px #7a4a2a, 0 -3px #7a4a2a, inset 3px 3px #fbe8c8, inset -3px -3px #d9b37e;
+  }
+  .inv-panel h3 { margin: 0; font: inherit; font-size: 13px; color: #7a4a2a; }
+  .inv p { margin: 0; text-align: center; font-size: 12px; }
+  .inv .soon { color: #a07a52; }
+  /* 칸(장비·가방): 움푹 들어간 갈색 네모 */
+  .slot {
+    width: 44px; height: 44px; display: grid; place-items: center; font-size: 10px; color: #a07a52; background: #d8b07e;
+    box-shadow: 2px 0 #7a4a2a, -2px 0 #7a4a2a, 0 2px #7a4a2a, 0 -2px #7a4a2a, inset 3px 3px #b88a58, inset -2px -2px #ecc898;
+  }
+  .slot.locked { background: #b48a5c; color: #7a5636; box-shadow: 2px 0 #7a4a2a, -2px 0 #7a4a2a, 0 2px #7a4a2a, 0 -2px #7a4a2a, inset 3px 3px #96703f; }
+  /* 캐릭터: 가운데 큰 캐릭터 그림, 양옆에 장비 칸 두 개씩 */
+  .inv-char .equip { display: grid; grid-template-columns: 44px auto 44px; gap: 10px; align-items: center; }
+  .inv-char .equip > div { display: grid; gap: 10px; }
+  #invChar { width: 96px; height: 108px; image-rendering: pixelated; background: #e8c999; box-shadow: inset 3px 3px #d9b37e; }
+  #invName { font-size: 14px; color: #4a2c18; }
+  /* 자금 */
+  .money-row { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #fbe8c8; box-shadow: inset 2px 2px #d9b37e; }
+  .money-row b { font: 22px/1.3 Galmuri11, Galmuri14, monospace; }
+  #invCoin { width: 30px; height: 30px; image-rendering: pixelated; }
+  /* 능력치: 위 셋은 막대(0~100), 아래 셋은 숫자(Lv) */
+  .stats { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; min-width: 170px; }
+  .stats li { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 8px; font-size: 12px; }
+  .stats .bar { height: 10px; background: #d8b07e; box-shadow: 2px 0 #7a4a2a, -2px 0 #7a4a2a, 0 2px #7a4a2a, 0 -2px #7a4a2a; }
+  .stats .bar i { display: block; height: 100%; }
+  .bag-grid { display: grid; grid-template-columns: repeat(4, 44px); gap: 8px; }
   .menu-btn { display: none; }
   .menu-btn {
     position: absolute; right: 18px; bottom: 18px; width: 36px; height: 36px; border: 0; background: #fff; color: #000; cursor: pointer;
@@ -196,11 +223,34 @@
   </div>
   <!-- 가방 창: 왼쪽 아래 가방 버튼이나 B로 열고, B·ESC·닫기로 닫음 -->
   <div class="guide-wrap" id="bagWrap" hidden>
-    <section class="crate" role="dialog" aria-modal="true" aria-labelledby="bagTitle">
+    <section class="inv" role="dialog" aria-modal="true" aria-labelledby="bagTitle">
       <h2 id="bagTitle">가방</h2>
       <button type="button" class="crate-x" id="bagClose" aria-label="가방 닫기">×</button>
-      <div class="bag-grid" id="bagGrid"></div>
-      <p id="bagEmpty">아직 가방이 비어 있어요</p>
+      <div class="inv-row">
+        <div class="inv-panel inv-char">
+          <h3>캐릭터</h3>
+          <div class="equip">
+            <div><span class="slot">모자</span><span class="slot">옷</span></div>
+            <canvas id="invChar" width="16" height="18"></canvas>
+            <div><span class="slot">신발</span><span class="slot">장신구</span></div>
+          </div>
+          <p id="invName"></p>
+        </div>
+        <div class="inv-panel inv-money">
+          <h3>자금</h3>
+          <div class="money-row"><canvas id="invCoin"></canvas><b id="invCash">0</b><span>원</span></div>
+          <p class="soon">통장 · 준비 중</p>
+        </div>
+        <div class="inv-panel inv-stats">
+          <h3>능력치</h3>
+          <ul class="stats" id="invStats"></ul>
+        </div>
+        <div class="inv-panel inv-bag">
+          <h3>가방</h3>
+          <div class="bag-grid" id="bagGrid"></div>
+          <p id="bagEmpty"></p>
+        </div>
+      </div>
     </section>
   </div>
   <!-- 메뉴 창: ESC(또는 ☰)로 열고 닫음. 이용방법으로 조작 방법을 다시 볼 수 있음 -->
@@ -301,10 +351,9 @@
     showWarn('이제 Ctrl + W를 누르면 창이 닫혀요', '게임 계속하기');
   };
   closeWrap.addEventListener('click', e => { const b = e.target.closest('[data-close]'); if (b) answer(b.dataset.close === 'yes'); });
-  // 가방 창: 처음 받은 가방은 3칸 (더 큰 가방이 생기면 늘릴 자리, 물건이 생기면 칸에 그림을 넣을 자리)
+  // 가방 창: 열 때 game.js가 캐릭터·자금·능력치·가방 칸을 채움('bagopen' 알림)
   const bag = $('bagWrap'), bagBtn = $('bagBtn');
-  $('bagGrid').innerHTML = '<span></span>'.repeat(3);
-  const openBag = () => { bag.hidden = false; $('bagClose').focus(); };
+  const openBag = () => { document.dispatchEvent(new Event('bagopen')); bag.hidden = false; $('bagClose').focus(); };
   const closeBag = () => { bag.hidden = true; game.focus(); };
   bagBtn.addEventListener('click', openBag);
   $('bagClose').addEventListener('click', closeBag);

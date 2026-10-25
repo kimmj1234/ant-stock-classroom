@@ -158,7 +158,7 @@ const onAuth = who => {
   if (!who) return location.replace('/#login');
   me.name = who.name;
   me.basicUI = !!who.basicUI;   // 안내원에게 기본 UI를 받았는지 → 받았으면 화면 테두리에 기본 UI
-  if (who.life) { clock.min = who.life.minutes; me.cash = who.life.cash; me.bag = who.life.bag; clock.ready = true; }
+  if (who.life) { clock.min = who.life.minutes; me.cash = who.life.cash; me.bag = who.life.bag; me.stats = who.life.stats; clock.ready = true; }
   showHud();
   // 서 있던 자리에서 이어서 시작. 튜토리얼을 이미 떠났으면 튜토리얼 쪽 자리는 무시하고 도시 입구로(다시 못 들어감)
   const pl = who.life?.place;
@@ -170,6 +170,28 @@ const onAuth = who => {
 };
 document.addEventListener('auth', e => onAuth(e.detail));
 if (window.authState) onAuth(window.authState.me);
+
+// ===== 가방 창 채우기 (play.html이 열 때 'bagopen'을 보냄) =====
+// 캐릭터: 지금 차림을 정면으로 크게 / 자금: 현금 / 능력치: 막대 셋 + 레벨 셋 / 가방: 쓸 수 있는 칸(처음 가방 3칸) + 잠긴 칸
+const BAG_SLOTS = 3, BAG_MAX = 12;
+const STAT_ROWS = [
+  ['health', '체력', '#e8454b'], ['hunger', '배고픔', '#f2a03d'], ['mood', '기분', '#f2c94c'],
+  ['smarts', '지능'], ['strength', '근력'], ['charm', '매력'],
+];
+document.addEventListener('bagopen', () => {
+  const c = $hud('invChar'), g = c.getContext('2d');
+  g.clearRect(0, 0, c.width, c.height); g.drawImage(sprite(me.look, 's', 0), 0, 0);
+  $hud('invName').textContent = me.name;
+  drawIcon('invCoin', 'coin');
+  $hud('invCash').textContent = (me.cash || 0).toLocaleString('ko-KR');
+  const st = me.stats || {};
+  $hud('invStats').innerHTML = STAT_ROWS.map(([k, name, color]) => color
+    ? `<li><span>${name}</span><span class="bar"><i style="width:${st[k] ?? 0}%;background:${color}"></i></span><span>${st[k] ?? 0}</span></li>`
+    : `<li><span>${name}</span><span></span><span>Lv ${st[k] ?? 1}</span></li>`).join('');
+  const items = me.bag || [];
+  $hud('bagGrid').innerHTML = Array.from({ length: BAG_MAX }, (_, i) => i < BAG_SLOTS ? `<span class="slot">${items[i]?.name || ''}</span>` : '<span class="slot locked" title="더 큰 가방이 필요해요">잠김</span>').join('');
+  $hud('bagEmpty').textContent = items.length ? `${items.length} / ${BAG_SLOTS}칸` : '아직 비어 있어요 · 3칸';
+});
 
 // ===== 입력: 방향키·WASD, 조이스틱 =====
 const held = new Set();
