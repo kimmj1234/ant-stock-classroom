@@ -12,7 +12,6 @@ let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). �
 const onAuth = who => {
   if (!who) return location.replace('/#login');
   me.name = who.name;
-  document.getElementById('who').textContent = who.name;
 };
 document.addEventListener('auth', e => onAuth(e.detail));
 if (window.authState) onAuth(window.authState.me);

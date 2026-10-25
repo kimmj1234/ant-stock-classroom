@@ -34,10 +34,12 @@ const api = async name => (await fetch('/api/' + name, { method: 'POST', headers
 // 로그인 상태가 바뀌면 메뉴를 바꾸고, 페이지(home.html)에도 'auth' 이벤트로 알려 줌 (detail = 내 정보 또는 null)
 function show(me) {
   const loggedIn = !!me;
-  link.innerHTML = pixelIcon(ICONS[loggedIn ? 'logout' : 'login']) + `<span>${loggedIn ? '로그아웃' : '로그인'}</span>`;
-  link.href = loggedIn ? '#' : '#login';
-  link.onclick = loggedIn ? async e => { e.preventDefault(); await api('logout').catch(() => {}); show(null); } : null;
-  link.hidden = false;
+  if (link) {   // 메뉴바가 없는 페이지(게임 화면)에서는 로그인 상태만 알려 줌
+    link.innerHTML = pixelIcon(ICONS[loggedIn ? 'logout' : 'login']) + `<span>${loggedIn ? '로그아웃' : '로그인'}</span>`;
+    link.href = loggedIn ? '#' : '#login';
+    link.onclick = loggedIn ? async e => { e.preventDefault(); await api('logout').catch(() => {}); show(null); } : null;
+    link.hidden = false;
+  }
   window.authState = { me };   // 페이지 스크립트가 나중에 붙어도 읽을 수 있게 남겨 둠(이벤트를 놓치는 경우 대비)
   document.dispatchEvent(new CustomEvent('auth', { detail: me }));
 }
