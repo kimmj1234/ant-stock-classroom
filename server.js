@@ -177,7 +177,10 @@ function fameProblem(giver, giverKey, toKey, today) {
   return null;
 }
 const lifeOf = a => ({ cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null, stats: { ...STATS_START, ...a.stats } });
-const SCENE_NAMES = ['field', 'home', 'city', 'h0', 'h1', 'h2', 'h3', 'h4', 'h5'];   // town.js의 장면 이름 (h0~h5 = 주택가 집 안)
+const SCENE_NAMES = ['field', 'home', 'city', 'h0', 'h1', 'h2', 'h3', 'h4', 'h5', 'mart'];   // town.js의 장면 이름 (h0~h5 = 주택가 집 안, mart = 마트 안)
+// 마트 상품: 아이디 → [이름, 값(원)]. 값·돈·가방 칸은 모두 서버가 정하고 확인함
+const ITEMS = { bread: ['빵', 2000], milk: ['우유', 1500], apple: ['사과', 1000], ramen: ['컵라면', 1200], kimbap: ['김밥', 3000], drink: ['음료수', 1000], snack: ['과자', 1500], umbrella: ['우산', 8000] };
+const BAG_SIZE = 3;   // 처음 받은 가방 칸 수
 const TUTORIAL_SCENES = ['field', 'home'];   // 튜토리얼 공간: 떠난 계정은 이 자리를 저장하지 않음
 // ===== 함께 돌아다니기(멀티플레이) =====
 // 접속한 사람마다(로그인 세션마다) 마지막 자리를 메모리에 두고, 각자 자리를 알릴 때(/api/move, 0.15초마다) 답장으로 같은 장면에 있는 다른 사람 목록을 돌려줌.
@@ -252,6 +255,17 @@ http.createServer(async (req, res) => {
       const others = [...online].filter(([t, p]) => t !== th && p.scene === b.scene)
         .map(([, p]) => ({ id: p.id, name: p.name, look: p.look, x: p.x, y: p.y, dir: p.dir, left: p.left, moving: p.moving, seat: p.seat }));
       return json(res, 200, { ok: true, others });
+    }
+    if (name === 'shop') return json(res, 200, { ok: true, items: Object.entries(ITEMS).map(([id, [n, price]]) => ({ id, name: n, price })), bagSize: BAG_SIZE });   // 마트 상품 목록
+    if (name === 'buy') {   // 물건 사기: { id } → 돈이 충분하고 가방에 빈칸이 있으면 돈을 빼고 가방에 넣음
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      const item = ITEMS[b.id], a = accounts[key], life = lifeOf(a);
+      if (!item || !Object.hasOwn(ITEMS, b.id)) return json(res, 400, { ok: false, msg: '없는 물건이에요.' });
+      if (life.bag.length >= BAG_SIZE) return json(res, 400, { ok: false, msg: '가방이 꽉 찼어요.' });
+      if (life.cash < item[1]) return json(res, 400, { ok: false, msg: `돈이 부족해요. (${item[1].toLocaleString('ko-KR')}원 필요)` });
+      a.cash = life.cash - item[1]; a.bag = [...life.bag, { id: b.id, name: item[0] }];
+      writeJSONFile(ACCOUNTS_FILE, accounts);
+      return json(res, 200, { ok: true, cash: a.cash, bag: a.bag });
     }
     if (name === 'upgrade') {   // 능력치 강화: 돈을 내고 지능·근력 1레벨 올림 (돈·레벨은 서버가 계산)
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });

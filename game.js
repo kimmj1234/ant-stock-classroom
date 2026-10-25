@@ -93,6 +93,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveP
 const ICON_PAL = {
   d: '#4a4d60', h: '#d9b56a',   // 태풍 먹구름, 황사 먼지
   y: '#f2c94c', o: '#e0902a', w: '#ffffff', g: '#7c7f96', u: '#3d7fd6', c: '#8fc3e6', k: '#2f2b38',
+  b: '#a8703f', t: '#e8c58a', r: '#e8454b', n: '#5dbb4a', m: '#f7f8fa', s: '#3d7fd6', e: '#1f2a1f',   // 상품 그림
   // 가방(파란 배낭)
   K: '#1e1b3a', B: '#5b8cf0', D: '#4459d6', C: '#5fcfe6', L: '#8fe3f2', W: '#ffffff', Y: '#f6d32b', O: '#e88a1c', P: '#f2a6cf', R: '#c8323a',
 };
@@ -103,6 +104,15 @@ const ICONS = {
   moon: ['...yyyy...', '..yyy.....', '.yyy......', '.yyy......', 'yyyy......', 'yyyy......', '.yyy......', '.yyyy.....', '..yyyyyy..', '...yyyy...'],
   storm: ['...ddd....', '..dkkkd...', '.dkkkkkdd.', 'dkkkkkkkkd', '.dddddddd.', '...y......', '..yy.u..u.', '...y..u...', '..y.u...u.', '.u...u....'],
   dust: ['h...h...h.', '..h.hhh.h.', '.h.hyyyh..', '..hyyyyyh.', 'h.hyyyyyh.', '..hyyyyyh.', '.h.hyyyh.h', '..h.hhh...', 'h.h...h..h', '...h...h..'],
+  // 마트 상품
+  bread: ['..........', '..bbbbbb..', '.bttttttb.', 'bttbttbttb', 'bttttttttb', 'bttttttttb', '.bbbbbbbb.', '..........', '..........', '..........'],
+  milk: ['...kkkk...', '..kmmmmk..', '.kmmmmmmk.', '.kssssssk.', '.kmmsmmmk.', '.kmmmmmmk.', '.kmsssmmk.', '.kmmmmmmk.', '.kkkkkkkk.', '..........'],
+  apple: ['....bn....', '.....n....', '..rrrrrr..', '.rrwrrrrr.', '.rrrrrrrr.', '.rrrrrrrr.', '.rrrrrrrr.', '..rrrrrr..', '...r..r...', '..........'],
+  ramen: ['..........', '.kkkkkkkk.', '.kwwwwwwk.', '.krrrrrrk.', '.krwwwwrk.', '.krrrrrrk.', '..krrrrk..', '..kwwwwk..', '..kkkkkk..', '..........'],
+  kimbap: ['..........', '..eeeeee..', '.eewwwwee.', '.ewyrnwwe.', '.ewwnywwe.', '.eewwwwee.', '..eeeeee..', '..........', '..........', '..........'],
+  drink: ['...kkkk...', '..kcccck..', '..kssssk..', '..kswwsk..', '..kssssk..', '..kssssk..', '..kswwsk..', '..kssssk..', '..kcccck..', '...kkkk...'],
+  snack: ['..........', '..oooooo..', '.oyyyyyyo.', '.oyrryyyo.', '.oyrryyyo.', '.oyyyyyyo.', '.oyyyyyyo.', '..oooooo..', '..........', '..........'],
+  umbrella: ['....k.....', '..ssssss..', '.ssssssss.', 'ssssssssss', 's..s..s..s', '....k.....', '....k.....', '....k.....', '..k.k.....', '...k......'],
   snow: ['...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', '.gggggggg.', '..........', '.c...c...c', 'ccc.ccc...', '.c...c...c', '..........'],
   coin: ['...oooo...', '..oyyyyo..', '.oyywwyyo.', 'oyywyyyyyo', 'oyyyyyyyyo', 'oyyyyyyyyo', 'oyyyyyyyyo', '.oyyyyyyo.', '..oyyyyo..', '...oooo...'],
   bag: [   // 파란 배낭: 손잡이, 별·고양이·웃는 얼굴 스티커, 하늘색 띠, 앞주머니 자물쇠, 하트 장식, 양옆 주머니
@@ -244,6 +254,32 @@ $hud('invStats').addEventListener('click', async e => {
   fillStats();
   $hud('invStats').querySelector(`[data-up="${btn.dataset.up}"]`)?.focus();
 });
+// ===== 마트 창: 상품 목록은 서버에서 받아(값은 서버가 정함) 줄마다 그림·이름·값·사기 버튼. 돈이 모자라거나 가방이 차면 버튼이 흐려짐 =====
+let shopItems = null, shopBagSize = BAG_SLOTS;
+function fillShop() {
+  const bagN = (me.bag || []).length;
+  $hud('shopCash').textContent = won(me.cash || 0);
+  $hud('shopBag').textContent = `가방 ${bagN} / ${shopBagSize}칸`;
+  $hud('shopList').innerHTML = shopItems.map(it => `<li><canvas id="shopIco-${it.id}"></canvas><span>${it.name}</span><span class="price">${won(it.price)}원</span><button type="button" data-buy="${it.id}" ${(me.cash || 0) < it.price || bagN >= shopBagSize ? 'disabled' : ''}>사기</button></li>`).join('');
+  shopItems.forEach(it => ICONS[it.id] && drawIcon('shopIco-' + it.id, it.id));
+}
+document.addEventListener('shopopen', async () => {
+  if (!shopItems) {
+    const r = await fetch('/api/shop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.json()).catch(() => null);
+    if (!r?.ok) return notify('마트 상품을 불러오지 못했어요.');
+    shopItems = r.items; shopBagSize = r.bagSize;
+  }
+  fillShop(); document.dispatchEvent(new Event('shopready'));
+});
+$hud('shopList').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-buy]');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  const r = await fetch('/api/buy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: btn.dataset.buy }) }).then(r => r.json()).catch(() => ({ ok: false, msg: '서버와 연결이 안 돼요.' }));
+  if (r.ok) { me.cash = r.cash; me.bag = r.bag; notify(`${r.bag[r.bag.length - 1].name}을(를) 샀어요! 가방에 넣었어요.`); } else notify(r.msg);
+  fillShop();
+  ($hud('shopList').querySelector(`[data-buy="${btn.dataset.buy}"]:not(:disabled)`) || $hud('shopList').querySelector('button:not(:disabled)') || $hud('shopClose')).focus();
+});
 document.addEventListener('bagopen', () => {
   const c = $hud('invChar'), g = c.getContext('2d');
   g.clearRect(0, 0, c.width, c.height); g.drawImage(sprite(me.look, 's', 0), 0, 0);
@@ -252,7 +288,9 @@ document.addEventListener('bagopen', () => {
   $hud('invCash').textContent = (me.cash || 0).toLocaleString('ko-KR');
   fillStats();
   const items = me.bag || [];
-  $hud('bagGrid').innerHTML = Array.from({ length: BAG_MAX }, (_, i) => i < BAG_SLOTS ? `<span class="slot">${items[i]?.name || ''}</span>` : '<span class="slot locked" title="더 큰 가방이 필요해요">잠김</span>').join('');
+  $hud('bagGrid').innerHTML = Array.from({ length: BAG_MAX }, (_, i) => i >= BAG_SLOTS ? '<span class="slot locked" title="더 큰 가방이 필요해요">잠김</span>'
+    : items[i] ? `<span class="slot" title="${items[i].name}"><canvas id="bagIco${i}"></canvas><small>${items[i].name}</small></span>` : '<span class="slot"></span>').join('');
+  items.slice(0, BAG_SLOTS).forEach((it, i) => ICONS[it.id] && drawIcon('bagIco' + i, it.id));
   $hud('bagEmpty').textContent = items.length ? `${items.length} / ${BAG_SLOTS}칸` : '아직 비어 있어요 · 3칸';
 });
 
@@ -329,6 +367,7 @@ function interact() {
   if (!sp) return;
   held.clear();
   if (sp.type === 'seat') return sitDown(sp);
+  if (sp.type === 'shop') return window.openShop();   // 마트 점원 앞: 물건 사기 창
   if (sp.type === 'door') return void (fade = { t0: performance.now(), sp, done: false });
   if (sp.type === 'exit' && !me.basicUI) return notify('안내소에서 기본 UI를 받아야 도시로 갈 수 있어요!');   // 기본 UI 없이는 못 떠남
   if (sp.type === 'exit') return window.askLeave(() => { fade = { t0: performance.now(), sp, done: false }; });   // 튜토리얼 떠나기: 확인 창에서 "떠나기"를 골라야 감
@@ -458,10 +497,10 @@ function drawName(p, cam) {
 // E 표시: 가까운 문·NPC 위에 자판 모양 "E" + 할 일 (들어가기·나가기·대화)
 function drawPrompt(sp, cam) {
   // NPC: 그 NPC 이름표 바로 위 / 도시로 떠나기: 내 캐릭터 이름표 바로 위 / 문: 정해 둔 자리(px, py)
-  const who = sp.type === 'npc' ? sp.npc : sp.type === 'exit' || sp.type === 'stand' ? me : null;
+  const who = sp.type === 'npc' || sp.type === 'shop' ? sp.npc : sp.type === 'exit' || sp.type === 'stand' ? me : null;
   const x = Math.round((who ? who.x : sp.px) * S - cam.x);
   const y = who ? Math.round(who.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8 - 32 : Math.round(sp.py * S - cam.y);
-  const label = { npc: '대화', exit: '도시로 떠나기', seat: '앉기', stand: '일어나기' }[sp.type] || (sp.out ? '나가기' : '들어가기');
+  const label = { npc: '대화', shop: '물건 사기', exit: '도시로 떠나기', seat: '앉기', stand: '일어나기' }[sp.type] || (sp.out ? '나가기' : '들어가기');
   ctx.font = '14px Galmuri14, "Malgun Gothic", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   const w = 26 + 6 + ctx.measureText(label).width + 10, viewW = cv.width / (devicePixelRatio || 1);
   const left = Math.max(8, Math.min(viewW - w - 8, x - Math.round(w / 2)));   // 화면 끝에서도 잘리지 않게

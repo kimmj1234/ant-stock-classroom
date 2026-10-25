@@ -30,7 +30,7 @@ function makeScene(name, ground, start, build) {
   const npc = (n, tx, ty) => {   // NPC: 칸 (tx, ty)에 서 있음(못 지나감), 가까이서 E → 대화
     const o = { ...n, x: (tx + 0.5) * TILE, y: (ty + 1) * TILE - 2, dir: 's', left: false, moving: false };
     sc.npcs.push(o); sc.solid.add(tx + ',' + ty);
-    spot({ type: 'npc', npc: o, x: o.x, y: o.y, px: o.x, py: o.y - 92, r: 42 });   // NPC는 옆에 붙어 설 수 없어서 말 거는 거리를 조금 넓게
+    spot({ type: n.shop ? 'shop' : 'npc', npc: o, x: o.x, y: o.y, px: o.x, py: o.y - 92, r: n.shop ? 72 : 42 });   // NPC는 옆에 붙어 설 수 없어서 말 거는 거리를 조금 넓게 (점원은 계산대 너머라 더 넓게)
   };
   build({ place, decal, deco, wallDeco, spot, npc });
   ground.forEach((row, y) => [...row].forEach((k, x) => { if (WALL_TILES.includes(k)) sc.solid.add(x + ',' + y); }));
@@ -141,6 +141,23 @@ function houseScene(k) {
   });
 }
 
+// 마트 안 (가로 20칸 × 세로 12칸): 바둑판 타일 · 위쪽 벽에 음료 냉장고와 과일·채소 매대 · 진열대 네 줄 · 오른쪽 계산대 너머 점원(E → 사기)
+// 문: 도시 마트 유리문(가운데) 앞 ↔ 마트 안 아래 가운데 현관 매트
+const MART_DOOR = { x: 20 * TILE + 96 * ART, y: 35 * TILE };   // 도시: 마트(20칸부터, 그림 가운데 96칸) 문 앞 보도 줄 위쪽 끝
+const MART_GROUND = ['wwwwwwwwwwwwwwwwwwww', 'wwwwwwwwwwwwwwwwwwww', 'wwwwwwwwwwwwwwwwwwww',
+  ...Array(8).fill('bmmmmmmmmmmmmmmmmmmb'), 'bbbbbbbbbddbbbbbbbbb'];
+function martScene() {
+  return makeScene('mart', MART_GROUND, { x: 10 * TILE, y: 10 * TILE }, ({ place, deco, spot, npc }) => {
+    for (const x of [1, 4, 7]) place('fridgecase', 0, x, 3, 3, 1);
+    place('produce', 0, 11, 3, 3, 1); place('produce', 2, 14, 3, 3, 1); place('plant', 0, 18, 3);
+    [[1, 5], [6, 5], [1, 7], [6, 7]].forEach(([x, y], k) => place('gshelf', k, x, y, 4, 1));
+    place('checkout', 0, 14, 8, 3, 1);
+    npc({ name: '점원', shop: true, look: { ...DEFAULT_LOOK, color: '#fff4dc', hat: { shape: 'cap', color: '#e8454b' } }, lines: [] }, 15, 7);
+    deco('cart', 17, 10); deco('cart', 18, 10);
+    spot({ type: 'door', out: true, x: 10 * TILE, y: 11 * TILE + 16, px: 10 * TILE, py: 11 * TILE - 40, to: 'city', at: { x: MART_DOOR.x, y: MART_DOOR.y + 26 } });
+  });
+}
+
 const SCENES = {
   // 튜토리얼 공간(처음 서는 곳): 가로 40칸 × 세로 24칸 잔디밭 + 가운데 주택(가로 6칸 × 세로 3줄). 문 앞에서 E → 집 안
   // l 흙길: 현관에서 내려와 처음 서는 곳을 지나 왼쪽 끝까지. 왼쪽 끝 표지판 앞에서 E → 떠날지 묻고, 떠나면 다시 못 돌아옴
@@ -174,7 +191,10 @@ const SCENES = {
       5: b => { place('office', 0, b.x0 + 1, b.y1 - 2, 6, 3); place('office', 1, b.x0 + 9, b.y1 - 2, 6, 3); place('bench', 0, b.x0 + 7, b.y1, 2, 1); },   // 회사 두 동
       6: b => { place('hospital', 0, b.x0, b.y1 - 2, 9, 3); place('ambulance', 0, b.x0 + 11, b.y1 - 1, 1, 2); place('bench', 0, b.x0 + 13, b.y1, 2, 1); },   // 병원 + 구급차
       8: b => { place('bank', 0, b.x0 + 1, b.y1 - 2, 8, 3); place('atm', 0, b.x0 + 11, b.y1); },   // 은행 + ATM
-      9: b => { place('mart', 0, b.x0 + 1, b.y1 - 2, 12, 3); for (const dx of [14, 15]) place('cart', dx, b.x0 + dx, b.y1); },   // 마트 + 카트
+      9: b => {   // 마트 + 카트, 가운데 유리문 앞에서 E → 마트 안
+        place('mart', 0, b.x0 + 1, b.y1 - 2, 12, 3); for (const dx of [14, 15]) place('cart', dx, b.x0 + dx, b.y1);
+        spot({ type: 'door', x: MART_DOOR.x, y: MART_DOOR.y + 10, px: MART_DOOR.x, py: MART_DOOR.y - 64, to: 'mart', at: { x: 10 * TILE, y: 10 * TILE } });
+      },
       10: b => {   // 전통시장: 노점 두 줄 + 가운데 입구 간판(밑으로 지나갈 수 있음)
         [0, 3, 6, 9, 12].forEach((dx, k) => place('stall', k, b.x0 + dx, b.y0 + 1, 3, 2));
         [0, 3, 12].forEach((dx, k) => place('stall', k + 2, b.x0 + dx, b.y1 - 1, 3, 2));
@@ -215,6 +235,7 @@ const SCENES = {
     for (let y = 2; y < 48; y += 6) if (y < 17 || y > 30) { place('lamp', 0, 36, y); place('lamp', 0, 43, y); }
   }), { marks: CITY.marks, zdir: CITY.zdir }),
   ...Object.fromEntries(HOME_LOTS.map((_, k) => ['h' + k, houseScene(k)])),   // 주택가 집 안 h0 ~ h5
+  mart: martScene(),   // 마트 안
   // 집 안: 가로 20칸 × 세로 12칸. w 벽지 벽(위 3줄), b 벽 윗면(테두리), f 나무 마루, r 러그, d 현관 매트(여기서 E → 밖으로)
   home: makeScene('home', [
     'wwwwwwwwwwwwwwwwwwww',
@@ -331,6 +352,9 @@ function tileImage(tx, ty) {
     }
     if (zdir === 'h') for (let y = 2; y < TILE; y += 8) { box(1, y, TILE - 2, 5, WHITE); box(1, y + 4, TILE - 2, 1, '#cfcfc8'); }   // 가로 대로 건너는 횡단보도: 가로 막대
     if (zdir === 'v') for (let x = 2; x < TILE; x += 8) { box(x, 1, 5, TILE - 2, WHITE); box(x + 4, 1, 1, TILE - 2, '#cfcfc8'); }
+  } else if (k === 'm') {   // 마트 바닥: 밝은 회색·흰 바둑판 타일
+    box(0, 0, TILE, TILE, '#e9ecef'); box(0, 0, 16, 16, '#f7f8fa'); box(16, 16, 16, 16, '#f7f8fa');
+    box(0, 15, TILE, 1, '#d6dbe0'); box(15, 0, 1, TILE, '#d6dbe0'); box(0, TILE - 1, TILE, 1, '#d6dbe0'); box(TILE - 1, 0, 1, TILE, '#d6dbe0');
   } else if (k === 'e') {   // 빈 부지: 다진 흙 + 자갈, 가끔 풀 한 포기 (건물이 들어설 자리)
     box(0, 0, TILE, TILE, '#c4b592');
     for (let i = 0; i < 10; i++) { const px = Math.floor(hash(tx, ty, i + 30) * 30), py = Math.floor(hash(tx, ty, i + 31) * 30); box(px, py, 2, 1, i % 3 ? '#ad9e7b' : '#d8cba9'); }
@@ -1151,6 +1175,43 @@ const ARTS = {
     for (const [x, y] of [[0, 6], [14, 6], [0, 30], [14, 30], [0, 38], [14, 38]]) box(x, y, 2, 6, '#1f1f24');
     box(1, 2, 14, 45, INK); box(2, 3, 12, 43, '#d8443f'); box(3, 8, 10, 4, '#2f3b55'); box(4, 4, 3, 2, '#3d7fd6'); box(9, 4, 3, 2, '#e8454b');
     box(5, 14, 6, 30, '#c9cfd6'); for (let y = 16; y < 44; y += 4) box(5, y, 6, 1, '#7c7f96');                   // 사다리
+    return c;
+  },
+  fridgecase() {   // 음료 냉장고(가로 3칸): 은색 틀 + 유리문 셋 + 칸마다 색색 병
+    const W = 48, H = 44, t = bTools(W, H), { box } = t;
+    box(0, 0, W, H, INK); box(1, 1, W - 2, H - 2, '#c9cfd6'); box(1, 1, W - 2, 4, '#3d7fd6'); t.center('음료', 24, -1, '#ffffff');
+    for (let d = 0; d < 3; d++) {
+      const x = 3 + d * 15;
+      box(x, 7, 13, 34, '#2f3b55');
+      for (let r = 0; r < 4; r++) for (let i = 0; i < 4; i++) box(x + 1 + i * 3, 9 + r * 8, 2, 6, ['#e8454b', '#f2c94c', '#5dbb4a', '#9fd0ee', '#f2a03d'][(d + r + i) % 5]);
+      box(x, 7, 2, 34, 'rgba(255,255,255,0.35)'); box(x + 11, 22, 1, 6, '#e6e9ec');
+    }
+    return t.c;
+  },
+  gshelf(v) {   // 진열대(가로 4칸): 세 칸 선반 위 색색 상자·봉지
+    const W = 64, H = 36, { c, box } = painter(W, H);
+    box(0, 0, W, H, INK); box(1, 1, W - 2, H - 2, '#d8dde3'); box(1, 1, W - 2, 3, ['#e8454b', '#4f8f5a', '#f2a03d', '#3d7fd6'][v % 4]);
+    const C = ['#e8454b', '#f2c94c', '#5dbb4a', '#3d7fd6', '#f2a03d', '#7b5bd6', '#f5a3b5', '#ffffff'];
+    for (let r = 0; r < 3; r++) {
+      const y = 6 + r * 10;
+      box(2, y + 8, W - 4, 2, '#9aa3ad');
+      for (let x = 3; x < W - 5; x += 5) box(x, y + 1 + (hash(x, r, v) < 0.3 ? 2 : 0), 4, 7 - (hash(x, r, v) < 0.3 ? 2 : 0), C[Math.floor(hash(x, r, v + 9) * 8)]);
+    }
+    return c;
+  },
+  produce(v) {   // 과일·채소 매대(가로 3칸): 나무 상자 셋
+    const W = 48, H = 28, { c, box } = painter(W, H);
+    box(0, 4, W, 24, INK); box(1, 5, W - 2, 22, '#a8774f'); box(1, 5, W - 2, 2, '#c99a62');
+    const G = [['#e8454b', '#c0392b'], ['#f2a03d', '#d07a1c'], ['#5dbb4a', '#3f8a37'], ['#f2c94c', '#c9951c'], ['#7b5bd6', '#5a3fb0']];
+    for (let i = 0; i < 3; i++) { const x = 3 + i * 15, [a, b] = G[(v + i) % 5]; box(x, 2, 13, 12, '#7a4e32'); for (let k = 0; k < 6; k++) box(x + 1 + (k % 3) * 4, 0 + Math.floor(k / 3) * 4 + (k % 2), 3, 3, k % 2 ? b : a); box(x + 2, 16, 9, 6, '#ffffff'); box(x + 3, 18, 7, 1, INK); }   // 상자 + 가격표
+    return c;
+  },
+  checkout() {   // 계산대(가로 3칸): 계산기(화면) + 검은 벨트 + 카드 단말기
+    const W = 48, H = 26, { c, box } = painter(W, H);
+    box(0, 8, W, 18, INK); box(1, 9, W - 2, 16, '#e6e9ec'); box(1, 9, W - 2, 2, '#ffffff'); box(1, 21, W - 2, 3, '#9aa3ad');
+    box(12, 11, 18, 6, '#2f2b38');                                                                                 // 벨트
+    box(33, 0, 12, 12, INK); box(34, 1, 10, 7, '#2f3b55'); box(35, 2, 8, 3, '#7fd1b9'); box(36, 9, 6, 2, '#9aa3ad');   // 계산기
+    box(3, 3, 6, 8, INK); box(4, 4, 4, 3, '#bfe3f5');                                                              // 카드 단말기
     return c;
   },
   bench() {   // 공원 벤치(2칸): 회색 쇠기둥 두 개에 나무 등받이 두 줄, 앞으로 넓은 앉는 판, 쇠다리. 검은 테두리
