@@ -82,7 +82,7 @@ const SCENES = {
     place('plant', 0, 1, 9); place('plant', 1, 18, 9);
     // 안내원 NPC: 처음 말을 걸면 기본 UI를 줌(gives, 마지막 말을 닫을 때 받음). 받은 뒤에는 after 대사
     npc({ name: '안내원 봄', look: { ...DEFAULT_LOOK, color: '#fff4dc', hat: { shape: 'sprout' } }, gives: 'basicUI', lines: [
-      '어서 와! 여기는 너의 첫 번째 집이야.',
+      '어서 와! 여기는 안내소야.',
       '이곳 "나의 두번째 인생"에서 살아가려면 꼭 필요한 게 하나 있어.',
       '자, 기본 UI를 줄게! 앞으로 살아가는 데 필요한 정보를 한눈에 볼 수 있을 거야.',
       '준비가 되면 집을 나가서 왼쪽 길 끝 표지판으로 가 봐. 도시로 떠날 수 있어!',
@@ -375,12 +375,12 @@ const ARTS = {
     return c;
   },
   // ===== 집 안 가구 (뒤 벽에 붙은 것은 위로 솟아 벽에 겹쳐 보임) =====
-  signpost() {   // 길 안내 표지판: 긴 나무 기둥, 위 가로대와 버팀목, 주황 화살표 판 두 개(← 도시, 집 →). 글씨는 큰 픽셀 글꼴
-    const W = 40, H = 76, { c, box, center } = painter(W, H);
+  signpost() {   // 길 안내 표지판: 긴 나무 기둥, 위 가로대와 버팀목, 주황 화살표 판 두 개(← 도시, 안내소 →). 글씨는 큰 픽셀 글꼴
+    const W = 46, H = 76, { c, box, center } = painter(W, H);
     const DK = '#5a3020', WOOD = '#9a5a34', LT = '#c07a48';
-    box(18, 0, 4, H, DK); box(19, 1, 2, H - 1, WOOD); box(19, 1, 1, H - 1, LT);                // 기둥
-    box(4, 4, 32, 4, DK); box(5, 5, 30, 2, WOOD); box(5, 5, 30, 1, LT);                         // 가로대
-    for (let i = 0; i < 8; i++) { box(8 + i, 8 + i, 2, 2, DK); box(30 - i, 8 + i, 2, 2, DK); }  // 버팀목
+    box(21, 0, 4, H, DK); box(22, 1, 2, H - 1, WOOD); box(22, 1, 1, H - 1, LT);                // 기둥
+    box(7, 4, 32, 4, DK); box(8, 5, 30, 2, WOOD); box(8, 5, 30, 1, LT);                         // 가로대
+    for (let i = 0; i < 8; i++) { box(11 + i, 8 + i, 2, 2, DK); box(33 - i, 8 + i, 2, 2, DK); }  // 버팀목
     // 화살표 판: 몸통 + 한쪽 끝이 뾰족함. 테두리 진한 주황, 안쪽 밝게, 윗줄 더 밝게
     const board = (y, x0, x1, left, fill, top, line, text, ink) => {
       for (let r = 0; r < 16; r++) {
@@ -390,8 +390,8 @@ const ARTS = {
       }
       center(text, (x0 + x1) / 2 + 1, y + 3, ink);
     };
-    board(18, 4, 37, true, '#f6c070', '#fde0a0', '#b8522a', '도시', '#4a1c0a');
-    board(40, 2, 35, false, '#ee9248', '#f8b878', '#a8431a', '집', '#3a1406');
+    board(18, 6, 41, true, '#f6c070', '#fde0a0', '#b8522a', '도시', '#4a1c0a');
+    board(40, 2, 41, false, '#ee9248', '#f8b878', '#a8431a', '안내소', '#3a1406');
     return c;
   },
   pine(v) {   // 원뿔 나무: 아래로 갈수록 세 층씩 넓어지는 잎(위·왼쪽 연두, 아래·오른쪽 진초록 얼룩), 밑동이 벌어진 줄기. v마다 얼룩이 조금 다름

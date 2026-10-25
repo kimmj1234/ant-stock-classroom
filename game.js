@@ -180,6 +180,7 @@ function interact() {
   if (!sp) return;
   held.clear();
   if (sp.type === 'door') return void (fade = { t0: performance.now(), sp, done: false });
+  if (sp.type === 'exit' && !me.basicUI) return notify('안내소에서 기본 UI를 받아야 도시로 갈 수 있어요!');   // 기본 UI 없이는 못 떠남
   if (sp.type === 'exit') return window.askLeave(() => { fade = { t0: performance.now(), sp, done: false }; });   // 튜토리얼 떠나기: 확인 창에서 "떠나기"를 골라야 감
   face(sp.npc, me.x - sp.npc.x, me.y - sp.npc.y);   // NPC가 나를 봄
   talk = { npc: sp.npc, i: 0 };

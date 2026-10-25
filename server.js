@@ -196,6 +196,7 @@ http.createServer(async (req, res) => {
     // guideSeen: 조작 안내 창을 닫았음 → 다음부터 안 띄움 / tutorialDone: 튜토리얼을 떠났음 → 다음부터 도시에서 시작 / basicUI: 기본 UI를 받았음
     if (name === 'guideSeen' || name === 'tutorialDone' || name === 'basicUI') {
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      if (name === 'tutorialDone' && !accounts[key].basicUI) return json(res, 403, { ok: false, msg: '안내소에서 기본 UI를 먼저 받아야 해요.' });   // 기본 UI 없이는 튜토리얼을 못 떠남
       if (!accounts[key][name]) { accounts[key][name] = true; writeJSONFile(ACCOUNTS_FILE, accounts); }
       return json(res, 200, { ok: true });
     }
