@@ -20,12 +20,40 @@
   @font-face { font-family: Galmuri11; font-display: swap; src: url(https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/Galmuri11.woff2) format("woff2"); }
   #game { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
   .view { position: relative; min-height: 0; }
-  .hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); margin: 0; padding: 6px 14px; border-radius: 999px; background: #000; color: #fff; font-size: 13px; pointer-events: none; white-space: nowrap; }
+  /* 조작 안내 창: 화면 가운데, 말풍선과 같은 픽셀 모양(흰 바탕 + 검은 계단 테두리 + 오른쪽·아래 회색 그늘) */
+  @font-face { font-family: Galmuri14; font-display: swap; src: url(https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/Galmuri14.woff2) format("woff2"); }
+  .guide-wrap { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(20, 18, 30, .35); padding: 16px; }
+  .guide-wrap[hidden] { display: none; }
+  .guide {
+    width: min(420px, 100%); box-sizing: border-box; padding: 22px 26px 20px; background: #fff; color: #000;
+    font: 14px/1.6 Galmuri14, "Malgun Gothic", monospace; -webkit-font-smoothing: none;
+    box-shadow: 4px 0 #000, -4px 0 #000, 0 4px #000, 0 -4px #000, inset -4px -4px #b8b8b8;   /* 네 모서리가 한 칸씩 깎인 픽셀 테두리 + 안쪽 그늘 */
+  }
+  .guide h2 { margin: 0 0 14px; font: inherit; font-size: 14px; text-align: center; }
+  .guide ul { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 10px; }
+  .guide li { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 12px; }
+  .guide .keys { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; }
+  .guide .soon { color: #777; }
+  /* 자판 모양 키 */
+  kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 5px; box-sizing: border-box; background: #f1f0ec; color: #000; font: inherit; font-size: 12px; box-shadow: 2px 0 #000, -2px 0 #000, 0 2px #000, 0 -2px #000, inset -2px -2px #c8c6c0; margin: 2px; }
+  .guide button {
+    display: block; margin: 0 auto; padding: 6px 26px; border: 0; background: #2f6fc6; color: #fff; font: inherit; cursor: pointer;
+    box-shadow: 3px 0 #000, -3px 0 #000, 0 3px #000, 0 -3px #000, inset -3px -3px #1f4f96;
+  }
+  .guide button:hover { background: #3d7fd6; }
+  .guide button:focus-visible { outline: 3px dashed #f2c94c; outline-offset: 6px; }
+  .guide .touch { display: none; }
+  /* 안내 다시 보기 버튼 (오른쪽 아래 작은 "?") */
+  .help {
+    position: absolute; right: 18px; bottom: 18px; width: 34px; height: 34px; border: 0; background: #fff; color: #000; cursor: pointer;
+    font: 16px Galmuri14, monospace; box-shadow: 3px 0 #000, -3px 0 #000, 0 3px #000, 0 -3px #000, inset -3px -3px #b8b8b8;
+  }
 
   /* 휴대폰·태블릿(손가락): 왼쪽 아래 조이스틱, 오른쪽 아래 E 버튼. 마우스 기기에서는 숨김 */
   .stick, .ebtn { display: none; }
   @media (pointer: coarse) {
-    .hint { display: none; }
+    .guide .keyboard { display: none; } .guide .touch { display: grid; }   /* 안내 창: 키보드 대신 조이스틱·E 버튼 설명 */
+    .help { right: 28px; bottom: auto; top: 18px; }
     .stick { display: block; position: absolute; left: 24px; bottom: 24px; width: 120px; height: 120px; border-radius: 50%; background: rgba(0, 0, 0, .12); border: 3px solid #000; touch-action: none; }
     .knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: #000; }
     .ebtn { display: grid; place-items: center; position: absolute; right: 28px; bottom: 40px; width: 76px; height: 76px; border-radius: 50%; border: 3px solid #000; background: #fff; font: bold 28px sans-serif; color: #000; touch-action: none; }
@@ -41,13 +69,49 @@
 </header>
 <main class="view">
   <canvas id="game" tabindex="0" aria-label="도시 화면. 방향키나 WASD로 움직이고 E로 상호작용"></canvas>
-  <p class="hint">방향키나 WASD로 움직이고, E 버튼으로 상호작용 · 숫자 키 0~9: 모자 · Q: 전신 스킨 (임시 미리 보기)</p>
   <div class="stick" id="stick" aria-hidden="true"><div class="knob" id="knob"></div></div>
   <button class="ebtn" id="ebtn" type="button" aria-label="상호작용">E</button>
+  <button class="help" id="help" type="button" aria-label="조작 안내 다시 보기">?</button>
+  <!-- 조작 안내 창: 들어오면 뜨고, 확인(또는 Enter·E·Esc·Space)으로 닫음 -->
+  <div class="guide-wrap" id="guideWrap">
+    <section class="guide" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+      <h2 id="guideTitle">조작 방법</h2>
+      <ul class="keyboard">
+        <li><span class="keys"><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd></span><span>움직이기</span></li>
+        <li><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>움직이기</span></li>
+        <li><span class="keys"><kbd>E</kbd></span><span>말 걸기·사용하기</span></li>
+        <li class="soon"><span class="keys"><kbd>0</kbd>~<kbd>9</kbd></span><span>모자 바꿔 보기 (임시)</span></li>
+        <li class="soon"><span class="keys"><kbd>Q</kbd></span><span>전신 스킨 바꿔 보기 (임시)</span></li>
+      </ul>
+      <ul class="touch">
+        <li><span class="keys">왼쪽 아래 조이스틱</span><span>움직이기 (많이 밀수록 빨리)</span></li>
+        <li><span class="keys"><kbd>E</kbd> 버튼</span><span>말 걸기·사용하기</span></li>
+        <li><span class="keys">화면 누르기</span><span>가로 전체화면</span></li>
+      </ul>
+      <button type="button" id="guideOk">확인</button>
+    </section>
+  </div>
 </main>
 <script src="/site.js"></script>
 <script src="/sprites.js"></script>
 <script src="/town.js"></script>
 <script src="/game.js"></script>
+<script>
+'use strict';
+// 조작 안내 창: 열려 있는 동안 Enter·E·Esc·Space는 창 닫기에만 씀(게임으로 안 넘어가게 먼저 가로챔)
+{
+  const wrap = document.getElementById('guideWrap'), ok = document.getElementById('guideOk');
+  const open = () => { wrap.hidden = false; ok.focus(); };
+  const close = () => { wrap.hidden = true; document.getElementById('game').focus(); };
+  ok.addEventListener('click', close);
+  document.getElementById('help').addEventListener('click', open);
+  addEventListener('keydown', e => {
+    if (wrap.hidden || !['Enter', 'Escape', ' ', 'e', 'E'].includes(e.key)) return;
+    e.preventDefault(); e.stopPropagation();
+    close();
+  }, true);
+  open();
+}
+</script>
 </body>
 </html>
