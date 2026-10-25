@@ -295,8 +295,11 @@ function drawShadows(ctx, S, cam) {
 // 간판 글씨는 픽셀 폰트(갈무리11). 글꼴이 늦게 오면 받은 뒤 다시 그림
 const artCache = new Map();
 document.fonts?.load('11px Galmuri11').then(() => artCache.clear()).catch(() => {});
+// 계절마다 모습이 바뀌는 물건: 지금 계절(ART_SEASON, 0 봄 ~ 3 겨울, game.js가 정함)별로 그림을 따로 저장
+let ART_SEASON = 0;
+const SEASONAL = new Set(['pine']);
 function thingArt(t) {
-  const key = t.type + t.v + '/' + t.w;
+  const key = t.type + t.v + '/' + t.w + (SEASONAL.has(t.type) ? '@' + ART_SEASON : '');
   if (!artCache.has(key)) artCache.set(key, ARTS[t.type](t.v, t.w));
   return artCache.get(key);
 }
@@ -401,24 +404,50 @@ const ARTS = {
     board(40, 2, 41, false, '#ee9248', '#f8b878', '#a8431a', '안내소', '#3a1406');
     return c;
   },
-  pine(v) {   // 원뿔 나무: 아래로 갈수록 세 층씩 넓어지는 잎(위·왼쪽 연두, 아래·오른쪽 진초록 얼룩), 밑동이 벌어진 줄기. v마다 얼룩이 조금 다름
-    const W = 28, H = 48, { c, box } = painter(W, H), cx = 13.5;
+  // 나무: 계절마다 모습이 바뀜 (같은 자리, 같은 모양의 나무가 철마다 옷을 갈아입음)
+  //   봄: 분홍 벚꽃(사이사이 연두 새잎) + 발밑에 떨어진 꽃잎 / 여름: 짙고 무성한 초록(조금 더 넓게)
+  //   가을: 단풍(빨강·주황)이나 은행(노랑) — 나무마다 번갈아 + 발밑에 떨어진 잎 / 겨울: 잎이 다 지고 줄기와 가지만
+  pine(v) {
+    const W = 28, H = 48, { c, box } = painter(W, H), cx = 13.5, season = ART_SEASON;
     const col = Array.from({ length: H }, () => Array(W).fill(null));
-    const LEAF = ['#d6e86a', '#a6d64e', '#6cc040', '#3fa23a', '#25803a'];
-    for (let y = 1; y < 36; y++) {   // 잎: 층마다(12줄) 끝으로 갈수록 살짝 더 넓어짐, 맨 아래는 둥글게
-      let hw = 0.8 + y * 0.33 + (y % 12 > 8 ? 1 : 0);
-      if (y > 32) hw -= (y - 32) * 1.5;
-      hw = Math.min(12.5, hw);
-      for (let x = 0; x < W; x++) {
-        const dx = x + 0.5 - cx;
-        if (Math.abs(dx) > hw) continue;
-        const t = 0.45 * ((y % 12) / 12) + 0.35 * ((dx + hw) / (2 * hw + 0.01)) + 0.3 * hash(x, y, v + 50) + y / 120;
-        col[y][x] = LEAF[Math.min(4, Math.floor(t * 4))];
+    const LEAVES = [
+      ['#fff0f5', '#fcd3e2', '#f5abc8', '#e483a8', '#c45f86'],   // 봄: 벚꽃
+      ['#c8e05a', '#8cc848', '#4fae3a', '#2f8f34', '#1d6e2c'],   // 여름: 짙은 초록
+      v % 2 ? ['#fff3a6', '#f7da4a', '#ecbc26', '#cf961a', '#a87414']    // 가을: 은행(노랑)
+            : ['#ffc27a', '#f6913c', '#e0602a', '#bf3f28', '#8c2a20'],   //       단풍(빨강·주황)
+    ];
+    const BARK = ['#c07a3a', '#8a4a20', '#6a2e12'];
+    const line = (x0, y0, x1, y1, w = 1) => {   // 가지: 두 점 사이를 칸으로 이음 (w = 굵기)
+      const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+      for (let i = 0; i <= n; i++) {
+        const x = Math.round(x0 + (x1 - x0) * i / n), y = Math.round(y0 + (y1 - y0) * i / n);
+        for (let k = 0; k < w; k++) if (col[y]?.[x + k] !== undefined) col[y][x + k] = k === 0 && w > 1 ? BARK[0] : BARK[1];
+      }
+    };
+    if (season === 3) {   // 겨울: 굵은 줄기에서 세 갈래 큰 가지 → 잔가지
+      line(13, 20, 13, 36, 3);
+      line(13, 24, 6, 12, 2); line(14, 22, 21, 10, 2); line(13, 20, 14, 5, 2);
+      line(6, 12, 3, 7); line(6, 12, 8, 5); line(21, 10, 24, 5); line(21, 10, 18, 4);
+      line(14, 5, 11, 1); line(14, 5, 17, 2); line(10, 18, 5, 16); line(17, 16, 23, 14); line(9, 15, 7, 11); line(19, 13, 21, 15);
+    } else {
+      const LEAF = LEAVES[season];
+      for (let y = 1; y < 36; y++) {   // 잎: 층마다(12줄) 끝으로 갈수록 살짝 더 넓어짐, 맨 아래는 둥글게
+        let hw = 0.8 + y * 0.33 + (y % 12 > 8 ? 1 : 0) + (season === 1 ? 0.6 : 0);   // 여름은 더 무성하게
+        if (y > 32) hw -= (y - 32) * 1.5;
+        hw = Math.min(season === 1 ? 13 : 12.5, hw);
+        for (let x = 0; x < W; x++) {
+          const dx = x + 0.5 - cx;
+          if (Math.abs(dx) > hw) continue;
+          const t = 0.45 * ((y % 12) / 12) + 0.35 * ((dx + hw) / (2 * hw + 0.01)) + 0.3 * hash(x, y, v + 50) + y / 120;
+          col[y][x] = LEAF[Math.min(4, Math.floor(t * 4))];
+          if (season === 0 && hash(x, y, v + 7) < 0.07) col[y][x] = '#8cc848';                       // 벚꽃 사이 새잎
+          if (season === 2 && hash(x, y, v + 7) < 0.06) col[y][x] = LEAVES[2][4];                      // 단풍·은행 사이 짙은 잎
+        }
       }
     }
     for (let y = 36; y < H - 1; y++) {   // 줄기 + 벌어진 밑동
       const hw = y > 43 ? 3 + (y - 43) : 2;
-      for (let x = Math.round(cx - hw); x < Math.round(cx + hw); x++) col[y][x] = x < cx - 1 ? '#c07a3a' : hash(x, y, 9) < 0.2 ? '#6a2e12' : '#8a4a20';
+      for (let x = Math.round(cx - hw); x < Math.round(cx + hw); x++) col[y][x] = x < cx - 1 ? BARK[0] : hash(x, y, 9) < 0.2 ? BARK[2] : BARK[1];
     }
     // 검은 테두리: 그림 바로 바깥 칸
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -426,6 +455,15 @@ const ARTS = {
       if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => col[y + b]?.[x + a] && col[y + b][x + a] !== 'edge')) col[y][x] = 'edge';
     }
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (col[y][x]) box(x, y, 1, 1, col[y][x] === 'edge' ? '#1d1d1d' : col[y][x]);
+    // 발밑에 떨어진 꽃잎(봄)·잎(가을): 테두리 없이 땅 위에 흩어짐
+    if (season === 0 || season === 2) {
+      const FALL = season === 0 ? ['#fcd3e2', '#f5abc8', '#fff0f5'] : LEAVES[2].slice(1, 4);
+      for (let i = 0; i < 14; i++) {
+        const x = Math.floor(hash(i, v, 33) * 24) + 2, y = H - 1 - Math.floor(hash(i, v, 34) * 3);
+        if (Math.abs(x + 0.5 - cx) < 7) continue;   // 줄기·밑동 자리는 비움
+        box(x, y, 1 + (i % 2), 1, FALL[i % 3]);
+      }
+    }
     return c;
   },
   bed() {   // 침대(2칸 × 3줄): 나무 머리판 + 베개 + 체크 이불

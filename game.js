@@ -522,6 +522,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (clock.ready && !document.querySelector('.guide-wrap:not([hidden])')) clock.min += dt * TIME_SPEED / 60;   // 게임 시간: 현실 1초에 게임 3초 (창이 떠 있으면 멈춤)
   updateHud();
+  ART_SEASON = today(clock.min).season;   // 나무처럼 계절마다 바뀌는 그림 (town.js)
   // 입력: 방향키 방향 그대로(위 = 화면 위쪽). 두 키를 같이 누르면(↑→ 등) 45도 대각선
   // 장면 바꾸기: 다 어두워지면 장면을 바꾸고 문 앞(안이면 현관 매트 앞)에 섬 → 다시 밝아짐
   if (fade && !fade.done && now - fade.t0 >= FADE) { useScene(fade.sp.to); me.x = fade.sp.at.x; me.y = fade.sp.at.y; me.dir = fade.sp.to === 'home' ? 'n' : fade.sp.to === 'city' ? 'e' : 's'; me.left = fade.sp.to === 'city'; fade.done = true; saveProgress(); }   // 도시 입구에서는 왼쪽(도시 쪽)을 봄
