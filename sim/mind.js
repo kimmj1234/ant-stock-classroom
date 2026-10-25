@@ -96,6 +96,7 @@ function reviewGoal(ctx, n, age, remember, pay) {
 const GOAL_NAME = { job: '취직', house: '내 집 마련', travel: '여행', love: '연애', promotion: '승진', health: '건강' };
 // 목표가 돈 쓰는 법에 주는 무게 (아끼는 정도에 곱함)
 const thrift = n => (n.goal?.k === 'house' ? 1.6 : n.goal?.k === 'travel' ? 1.3 : 1) * (1 + emo(n, 'fear') / 80);
+const roOf = s => { const j = (s.charCodeAt(s.length - 1) - 0xac00) % 28; return s + (s && j > 0 && j !== 8 ? '으로' : '로'); };   // 받침에 맞는 '(으)로'
 function goalLine(n, bal) {
   const g = n.goal;
   if (!g) return null;
@@ -103,7 +104,7 @@ function goalLine(n, bal) {
   return {
     job: '요즘 취직 준비 중이에요. 이번엔 꼭 붙고 싶어요.',
     house: `내 집 마련하려고 아끼는 중이에요. 목표의 ${pct}%쯤 모았어요.`,
-    travel: `돈 모아서 ${g.place}로 여행 가려고요. 지금 ${pct}%쯤 모았어요.`,
+    travel: `돈 모아서 ${roOf(g.place || '')} 여행 가려고요. 지금 ${pct}%쯤 모았어요.`,
     love: '좋은 사람 만나고 싶어요. 그래서 요즘 사람 많은 데 자주 나가요.',
     promotion: '승진하고 싶어서 퇴근하고 공부하고 있어요.',
     health: '건강 챙기려고 요즘 꾸준히 운동해요.',
