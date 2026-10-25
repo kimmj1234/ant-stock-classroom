@@ -268,6 +268,24 @@ function drawSky(cam, W, H, dt, now) {
   if (gloom) fill(`rgba(70, 78, 100, ${gloom})`);
   if (dusk) fill(`rgba(255, 130, 50, ${dusk})`);
   if (night) fill(`rgba(16, 20, 56, ${night})`);
+  // 불빛: 어두운 만큼 창문·등이 노랗게 켜지고 둘레가 은은하게 밝음 (어둠 위에 그려서 밤에 또렷함)
+  const lit = out ? night / 0.55 : 0;
+  if (lit > 0.05) {
+    const k = S * ART;
+    for (const t of THINGS) {
+      const L = LIGHTS[t.type];
+      if (!L) continue;
+      const img = thingArt(t), ox = t.x * S - cam.x - img.width * k / 2, oy = t.y * S - cam.y - img.height * k;
+      for (const [x, y, w, h] of L) {
+        const cx = ox + (x + w / 2) * k, cy = oy + (y + h / 2) * k, r = Math.max(w, h) * k * 1.6;
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        g.addColorStop(0, `rgba(255, 200, 110, ${0.28 * lit})`); g.addColorStop(1, 'rgba(255, 200, 110, 0)');
+        ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+        ctx.fillStyle = `rgba(255, 214, 120, ${0.9 * lit})`; ctx.fillRect(Math.round(ox + x * k), Math.round(oy + y * k), w * k, h * k);
+        ctx.fillStyle = `rgba(255, 240, 190, ${0.9 * lit})`; ctx.fillRect(Math.round(ox + x * k), Math.round(oy + y * k), w * k, k);   // 위쪽 한 줄은 더 밝게
+      }
+    }
+  }
   // 비·눈 알갱이 (화면 넓이에 맞춰 개수를 정함)
   const kind = out && (t.wx === 'rain' || t.wx === 'snow') ? t.wx : null;
   const want = kind ? Math.round(W * H / (kind === 'rain' ? 5000 : 8000)) : 0;

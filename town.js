@@ -256,7 +256,12 @@ function tileImage(tx, ty) {
 
 // ----- 그림자: 바닥을 다 그린 뒤, 물건보다 먼저 그림 (빛은 왼쪽 위) -----
 const SHADE = 'rgba(32, 26, 52, 0.22)';
-const BIG = new Set(['cafe', 'shop', 'villa', 'house']);   // 표지판처럼 가는 것은 아래에서 그림자 없음
+const BIG = new Set(['cafe', 'shop', 'villa', 'house']);
+// 밤에 불이 켜지는 곳: 물건 그림 안의 [x, y, 가로, 세로] (그림 칸 단위). 창문은 창살 사이 유리 네 칸씩
+const LIGHTS = {
+  house: [16, 66].flatMap(wx => [[wx, 53, 6, 6], [wx + 8, 53, 6, 6], [wx, 61, 6, 6], [wx + 8, 61, 6, 6]])
+    .concat([[44, 60, 8, 4], [46, 47, 4, 3]]),   // 문 위 작은 창, 처마 밑 등
+};   // 표지판처럼 가는 것은 아래에서 그림자 없음
 function drawShadows(ctx, S, cam) {
   ctx.fillStyle = SHADE;
   for (const t of THINGS) {
