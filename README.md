@@ -121,7 +121,8 @@ node server.js
 
 | 구분 | 어디에 | 값 |
 |---|---|---|
-| 계정 | `data/accounts.json` | 닉네임, 소금·비밀번호 해시 또는 구글 고유 번호, 조작 안내를 봤는지(`guideSeen`), 튜토리얼을 떠났는지(`tutorialDone`), 기본 UI를 받았는지(`basicUI`), 게임 시간(`minutes`)·서 있던 자리(`place`)·현금(`cash`)·가방(`bag`) |
+| 계정 | `data/accounts.json` | 닉네임, 소금·비밀번호 해시 또는 구글 고유 번호, 조작 안내를 봤는지(`guideSeen`), 튜토리얼을 떠났는지(`tutorialDone`), 기본 UI를 받았는지(`basicUI`), 서 있던 자리(`place`)·현금(`cash`)·가방(`bag`)·능력치(`stats`)·인기도 준 기록(`fameDay`·`fameTo`) |
+| 세계 시간 | `data/world.json` | 세계가 처음 열린 현실 시각(`epoch`)과 그때의 게임 시각(`start`) — 모든 사람이 같은 게임 시간을 씀 |
 | 로그인 | `data/sessions.json` | 로그인 쿠키 값의 해시 → 계정 |
 
 `data/` 폴더는 GitHub에 올리지 않습니다. 52단계에서 예전 계정·게임 기록은 `data/backup-20261025/`로 옮겨 두었습니다(사이트에서는 쓰지 않음, 필요 없으면 폴더째 지워도 됨).
