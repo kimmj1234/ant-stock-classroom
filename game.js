@@ -40,14 +40,40 @@ setInterval(saveClock, 20000);
 addEventListener('pagehide', () => saveClock(true));
 
 // ===== 기본 UI 그림: 픽셀 아이콘 (글자 한 칸 = 픽셀 한 칸) =====
-const ICON_PAL = { y: '#f2c94c', o: '#e0902a', w: '#ffffff', g: '#7c7f96', u: '#3d7fd6', c: '#8fc3e6', k: '#2f2b38', n: '#a8774f', N: '#7a4e32' };
+const ICON_PAL = {
+  y: '#f2c94c', o: '#e0902a', w: '#ffffff', g: '#7c7f96', u: '#3d7fd6', c: '#8fc3e6', k: '#2f2b38',
+  // 가방(파란 배낭)
+  K: '#1e1b3a', B: '#5b8cf0', D: '#4459d6', C: '#5fcfe6', L: '#8fe3f2', W: '#ffffff', Y: '#f6d32b', O: '#e88a1c', P: '#f2a6cf', R: '#c8323a',
+};
 const ICONS = {
   sun: ['y...y...y.', '.y..y..y..', '..oooooo..', '..oyyyyo..', 'yyoyyyyoyy', '..oyyyyo..', '..oyyyyo..', '..oooooo..', '.y..y..y..', 'y...y...y.'],
   cloud: ['..........', '..........', '...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', 'gwwwwwwwwg', '.gggggggg.', '..........', '..........'],
   rain: ['...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', '.gggggggg.', '..........', '.u..u..u..', 'u..u..u...', '..........', '.u..u..u..'],
   snow: ['...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', '.gggggggg.', '..........', '.c...c...c', 'ccc.ccc...', '.c...c...c', '..........'],
   coin: ['...oooo...', '..oyyyyo..', '.oyywwyyo.', 'oyywyyyyyo', 'oyyyyyyyyo', 'oyyyyyyyyo', 'oyyyyyyyyo', '.oyyyyyyo.', '..oyyyyo..', '...oooo...'],
-  bag: ['....kkkk....', '...k....k...', '...k....k...', '.kkkkkkkkkk.', 'knnnnnnnnnnk', 'knNNNNNNNNnk', 'knnnnyynnnnk', 'knnnnyynnnnk', 'knnnnnnnnnnk', 'knnnnnnnnnnk', 'kNNNNNNNNNNk', '.kkkkkkkkkk.'],
+  bag: [   // 파란 배낭: 손잡이, 별·고양이·웃는 얼굴 스티커, 하늘색 띠, 앞주머니 자물쇠, 하트 장식, 양옆 주머니
+    '........KKKKKKKK........',
+    '.......KCLLLLLLCK.......',
+    '.......KCWWWWWWCK.......',
+    '......KKKKBBBBKKKK......',
+    '.....KCLBBBBBBBBBDK.....',
+    '....KCBBBYBBBBBBBBDK....',
+    '....KCBOYYYOBPBBPBDK....',
+    '....KCBBYYYBBPPPPBDK....',
+    '....KCBBOBOBBPKPKBDK....',
+    '....KCBBBBBBBPPPPBDK....',
+    '..KKKCBBYYYBBBBBBBDKKK..',
+    '.KDDKCBYKYKYBBBBBBDKDDK.',
+    '.KDDKCBBYKYBBBBBBBDKDDK.',
+    '.KDDKCCCCCCCCCCCCCDKDDK.',
+    '.KDDKCBBBBBKKBBKBBDKDDK.',
+    '.KDDKCDDDDDYYDDKDDDKDDK.',
+    '.KDDKCBBBBBOORRBRRDKDDK.',
+    '.KDDKCBBBBBBBRRRRRDKDDK.',
+    '.KDDKCDBBBBBBBRRRBDKDDK.',
+    '..KKKCDDDDDDDDDRDDDKKK..',
+    '....KKKKKKKKKKKKKKKK....',
+  ],
 };
 function drawIcon(id, name) {
   const c = document.getElementById(id), rows = ICONS[name], g = c.getContext('2d');
