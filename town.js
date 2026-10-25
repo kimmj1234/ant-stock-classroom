@@ -42,9 +42,15 @@ const SCENES = {
   field: makeScene('field', Array.from({ length: 24 }, (_, y) => [...'g'.repeat(40)].map((k, x) => ((y === 14 || y === 15) && x <= 20) || ((y === 12 || y === 13) && (x === 19 || x === 20)) ? 'l' : k).join('')),
     { x: 20 * TILE, y: 15 * TILE }, ({ place, spot }) => {
     place('house', 0, 17, 9, 6, 3);
+    // 길가 벤치 두 개 (2칸)
+    place('bench', 0, 9, 12, 2, 1); place('bench', 0, 25, 12, 2, 1);
+    // 원뿔 나무: 맵 가장자리와 빈 풀밭에 흩어 둠 (길·집·처음 서는 곳은 비움)
+    [[3, 3], [7, 1], [11, 5], [14, 2], [27, 2], [31, 5], [35, 2], [38, 7], [33, 10], [37, 13], [29, 17], [34, 20], [38, 22],
+      [24, 21], [18, 20], [12, 19], [6, 21], [2, 18], [8, 17], [15, 22], [4, 8]]
+      .forEach(([x, y], i) => place('pine', i % 3, x, y));
     spot({ type: 'door', x: 20 * TILE, y: 12 * TILE + 10, px: 20 * TILE, py: 12 * TILE - 98, to: 'home', at: { x: 10 * TILE, y: 10 * TILE } });
-    place('signpost', 0, 1, 13);
-    spot({ type: 'exit', x: 0.5 * TILE, y: 15 * TILE, px: 1.5 * TILE, py: 12 * TILE - 30, to: 'city', at: { x: 37 * TILE, y: 15 * TILE } });
+    place('signpost', 0, 2, 13);
+    spot({ type: 'exit', x: 0.5 * TILE, y: 15 * TILE, px: 2.5 * TILE, py: 11 * TILE - 40, to: 'city', at: { x: 37 * TILE, y: 15 * TILE } });
   }),
   // 도시 입구: 튜토리얼을 떠나면 오는 곳(다음부터는 여기서 시작). 오른쪽 끝에서 흙길이 들어옴. 도시는 앞으로 하나씩 지음
   city: makeScene('city', Array.from({ length: 24 }, (_, y) => (y === 14 || y === 15 ? 'g'.repeat(20) + 'l'.repeat(20) : 'g'.repeat(40))), { x: 37 * TILE, y: 15 * TILE }, () => {}),
@@ -369,12 +375,50 @@ const ARTS = {
     return c;
   },
   // ===== 집 안 가구 (뒤 벽에 붙은 것은 위로 솟아 벽에 겹쳐 보임) =====
-  signpost() {   // 나무 표지판: 왼쪽을 가리키는 화살표 판 "도시"
-    const W = 30, H = 34, { c, box, center } = painter(W, H);
-    box(13, 12, 4, 22, INK); box(14, 12, 2, 22, '#8a5a3b');                                   // 기둥
-    box(4, 2, 25, 15, INK); box(1, 6, 3, 7, INK); box(0, 8, 1, 3, INK);                       // 판 + 화살표 끝
-    box(5, 3, 23, 13, '#c99a62'); box(2, 7, 3, 5, '#c99a62'); box(1, 9, 1, 1, '#c99a62'); box(5, 3, 23, 1, '#dcb37f');
-    center('도시', 17, 3, '#3a2a1e');
+  signpost() {   // 길 안내 표지판: 긴 나무 기둥, 위 가로대와 버팀목, 주황 화살표 판 두 개(← 도시, 집 →). 글씨는 큰 픽셀 글꼴
+    const W = 40, H = 76, { c, box, center } = painter(W, H);
+    const DK = '#5a3020', WOOD = '#9a5a34', LT = '#c07a48';
+    box(18, 0, 4, H, DK); box(19, 1, 2, H - 1, WOOD); box(19, 1, 1, H - 1, LT);                // 기둥
+    box(4, 4, 32, 4, DK); box(5, 5, 30, 2, WOOD); box(5, 5, 30, 1, LT);                         // 가로대
+    for (let i = 0; i < 8; i++) { box(8 + i, 8 + i, 2, 2, DK); box(30 - i, 8 + i, 2, 2, DK); }  // 버팀목
+    // 화살표 판: 몸통 + 한쪽 끝이 뾰족함. 테두리 진한 주황, 안쪽 밝게, 윗줄 더 밝게
+    const board = (y, x0, x1, left, fill, top, line, text, ink) => {
+      for (let r = 0; r < 16; r++) {
+        const tip = Math.min(r, 15 - r, 4), a = left ? x0 - tip : x0, b = left ? x1 : x1 + tip;
+        box(a, y + r, b - a + 1, 1, line);
+        if (r > 0 && r < 15) box(a + 1, y + r, b - a - 1, 1, r === 1 ? top : fill);
+      }
+      center(text, (x0 + x1) / 2 + 1, y + 3, ink);
+    };
+    board(18, 4, 37, true, '#f6c070', '#fde0a0', '#b8522a', '도시', '#4a1c0a');
+    board(40, 2, 35, false, '#ee9248', '#f8b878', '#a8431a', '집', '#3a1406');
+    return c;
+  },
+  pine(v) {   // 원뿔 나무: 아래로 갈수록 세 층씩 넓어지는 잎(위·왼쪽 연두, 아래·오른쪽 진초록 얼룩), 밑동이 벌어진 줄기. v마다 얼룩이 조금 다름
+    const W = 28, H = 48, { c, box } = painter(W, H), cx = 13.5;
+    const col = Array.from({ length: H }, () => Array(W).fill(null));
+    const LEAF = ['#d6e86a', '#a6d64e', '#6cc040', '#3fa23a', '#25803a'];
+    for (let y = 1; y < 36; y++) {   // 잎: 층마다(12줄) 끝으로 갈수록 살짝 더 넓어짐, 맨 아래는 둥글게
+      let hw = 0.8 + y * 0.33 + (y % 12 > 8 ? 1 : 0);
+      if (y > 32) hw -= (y - 32) * 1.5;
+      hw = Math.min(12.5, hw);
+      for (let x = 0; x < W; x++) {
+        const dx = x + 0.5 - cx;
+        if (Math.abs(dx) > hw) continue;
+        const t = 0.45 * ((y % 12) / 12) + 0.35 * ((dx + hw) / (2 * hw + 0.01)) + 0.3 * hash(x, y, v + 50) + y / 120;
+        col[y][x] = LEAF[Math.min(4, Math.floor(t * 4))];
+      }
+    }
+    for (let y = 36; y < H - 1; y++) {   // 줄기 + 벌어진 밑동
+      const hw = y > 43 ? 3 + (y - 43) : 2;
+      for (let x = Math.round(cx - hw); x < Math.round(cx + hw); x++) col[y][x] = x < cx - 1 ? '#c07a3a' : hash(x, y, 9) < 0.2 ? '#6a2e12' : '#8a4a20';
+    }
+    // 검은 테두리: 그림 바로 바깥 칸
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (col[y][x]) continue;
+      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => col[y + b]?.[x + a] && col[y + b][x + a] !== 'edge')) col[y][x] = 'edge';
+    }
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (col[y][x]) box(x, y, 1, 1, col[y][x] === 'edge' ? '#1d1d1d' : col[y][x]);
     return c;
   },
   bed() {   // 침대(2칸 × 3줄): 나무 머리판 + 베개 + 체크 이불
@@ -579,11 +623,14 @@ const ARTS = {
     box(5, 2, 6, 12, INK); box(6, 3, 4, 10, '#c4c4cc'); box(6, 3, 1, 10, '#e2e2e8'); box(6, 5, 4, 2, '#f2c94c');
     return c;
   },
-  bench() {
-    const { c, box } = painter(32, 20);
-    box(1, 2, 30, 7, INK); for (let y = 3; y < 8; y += 2) box(2, y, 28, 1, '#c9944f'); box(2, 4, 28, 1, '#a8773a');
-    box(1, 10, 30, 5, INK); box(2, 11, 28, 3, '#d9a45c'); box(2, 13, 28, 1, '#a8773a');
-    for (const x of [3, 26]) { box(x, 15, 3, 5, INK); box(x + 1, 15, 1, 4, '#5b6070'); }
+  bench() {   // 공원 벤치(2칸): 회색 쇠기둥 두 개에 나무 등받이 두 줄, 앞으로 넓은 앉는 판, 쇠다리. 검은 테두리
+    const W = 32, H = 26, { c, box } = painter(W, H);
+    const K = '#141414', G = '#5b6470', GL = '#8a96a2', W1 = '#9a5a22', WL = '#c98a3a', WD = '#5e3412';
+    for (const x of [6, 22]) { box(x, 0, 4, 15, K); box(x + 1, 1, 2, 14, G); box(x + 1, 1, 1, 14, GL); }   // 등받이 기둥
+    for (const y of [3, 8]) { box(1, y, 30, 4, K); box(2, y + 1, 28, 2, W1); box(2, y + 1, 28, 1, WL); box(7, y + 1, 2, 2, WD); box(23, y + 1, 2, 2, WD); }   // 등받이 판
+    box(3, 13, 26, 1, K); box(1, 14, 30, 1, K); box(0, 15, 32, 4, K);                              // 앉는 판 테두리
+    box(4, 14, 24, 1, WL); box(1, 15, 30, 1, WL); box(1, 16, 30, 1, W1); box(1, 17, 30, 1, WD);
+    for (const x of [5, 23]) { box(x, 19, 4, 7, K); box(x + 1, 19, 2, 6, G); box(x + 1, 19, 1, 6, GL); }   // 다리
     return c;
   },
   bin() {

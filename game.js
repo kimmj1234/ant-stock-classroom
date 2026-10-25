@@ -267,7 +267,9 @@ function drawName(p, cam) {
 }
 // E 표시: 가까운 문·NPC 위에 자판 모양 "E" + 할 일 (들어가기·나가기·대화)
 function drawPrompt(sp, cam) {
-  const x = Math.round(sp.px * S - cam.x), y = Math.round(sp.py * S - cam.y);
+  // NPC: 이름표(drawName과 같은 높이) 바로 위 / 문·표지판: 정해 둔 자리(px, py)
+  const x = Math.round(sp.px * S - cam.x);
+  const y = sp.type === 'npc' ? Math.round(sp.npc.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8 - 32 : Math.round(sp.py * S - cam.y);
   const label = sp.type === 'npc' ? '대화' : sp.type === 'exit' ? '도시로 떠나기' : sp.to === 'field' ? '나가기' : '들어가기';
   ctx.font = '14px Galmuri14, "Malgun Gothic", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   const w = 26 + 6 + ctx.measureText(label).width + 10, left = x - Math.round(w / 2);
