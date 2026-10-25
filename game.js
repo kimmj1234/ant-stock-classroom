@@ -71,7 +71,7 @@ function today(min) {
   return {
     year, season, month, date, wx, ...sunTimes(day),
     wxName: wx === 'rain' && JANGMA(doyOf(day)) ? '장마' : WX_NAME[wx],
-    time: `${h < 12 ? '오전' : '오후'} ${(h + 11) % 12 + 1}:${String(m % 60).padStart(2, '0')}`,
+    time: `${String(h).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`,   // 24시간제 (자정 00:00, 정오 12:00)
   };
 }
 // 진행 저장: 게임 시간 + 서 있던 자리(장면·위치). 바뀐 게 있을 때만 보냄 → 새로고침(F5)해도 그 자리에서 이어서 시작
