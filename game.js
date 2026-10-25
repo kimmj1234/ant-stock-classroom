@@ -392,8 +392,9 @@ function drawSky(cam, W, H, dt, now) {
   }
 }
 
-// 발밑 네모(가로 ±6, 세로 -4~0 픽셀)가 지나갈 수 없는 칸(나무·집)에 걸리는지
+// 발밑 네모(가로 ±6, 세로 -4~0 픽셀)가 지나갈 수 없는 칸(나무·집)이나 NPC에 걸리는지
 function blockedAt(x, y) {
+  if (NPCS.some(n => Math.abs(x - n.x) < 30 && Math.abs(y - n.y) < 12)) return true;   // NPC 몸·이름표와 겹쳐 서지 않게
   for (const px of [x - 6, x + 6]) for (const py of [y - 4, y]) if (blockedTile(Math.floor(px / TILE), Math.floor(py / TILE))) return true;
   return false;
 }

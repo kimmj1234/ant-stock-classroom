@@ -151,9 +151,9 @@ function googleName(b) {
   return { ok: true, token: startSession(key), created: true, msg: `'${name}' 계정을 새로 만들었어요.` };
 }
 const nameCheck = b => { const bad = nameProblem(b.name); return bad ? { ok: false, msg: bad } : { ok: true, msg: '사용할 수 있는 닉네임이에요.' }; };   // 입력하는 동안 화면이 물어봄
-const AUTH = { login, google: googleLogin, googleName, nameCheck };
-// 생활 정보: 게임 시간(분, 처음은 1일 오전 6시), 현금(원), 가방(물건 목록)
-const lifeOf = a => ({ minutes: a.minutes ?? 360, cash: a.cash ?? 50000, bag: a.bag || [] });   // 로그인 전에 부르는 API
+const AUTH = { login, google: googleLogin, googleName, nameCheck };   // 로그인 전에 부르는 API
+// 생활 정보: 게임 시간(분, 처음은 1일 오전 8시 — 6시는 아직 새벽이라 어두움), 현금(원), 가방(물건 목록)
+const lifeOf = a => ({ minutes: a.minutes ?? 480, cash: a.cash ?? 50000, bag: a.bag || [] });
 
 // ===== HTTP =====
 function readBody(req) {

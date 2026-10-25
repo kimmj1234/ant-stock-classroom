@@ -29,7 +29,7 @@ function makeScene(name, ground, start, build) {
   const npc = (n, tx, ty) => {   // NPC: 칸 (tx, ty)에 서 있음(못 지나감), 가까이서 E → 대화
     const o = { ...n, x: (tx + 0.5) * TILE, y: (ty + 1) * TILE - 2, dir: 's', left: false, moving: false };
     sc.npcs.push(o); sc.solid.add(tx + ',' + ty);
-    spot({ type: 'npc', npc: o, x: o.x, y: o.y, px: o.x, py: o.y - 92 });
+    spot({ type: 'npc', npc: o, x: o.x, y: o.y, px: o.x, py: o.y - 92, r: 42 });   // NPC는 옆에 붙어 설 수 없어서 말 거는 거리를 조금 넓게
   };
   build({ place, decal, deco, wallDeco, spot, npc });
   ground.forEach((row, y) => [...row].forEach((k, x) => { if (WALL_TILES.includes(k)) sc.solid.add(x + ',' + y); }));
@@ -103,10 +103,10 @@ useScene('field');
 
 const blockedTile = (tx, ty) => !inMap(tx, ty) || SOLID.has(tx + ',' + ty);   // 맵 밖·물건·벽 자리는 못 지나감
 const thingsAround = () => THINGS;
-// (x, y) 픽셀 근처(30픽셀 안)에 E로 할 수 있는 곳이 있으면 그중 가장 가까운 것
+// (x, y) 픽셀 근처(보통 30픽셀, NPC는 42픽셀 안)에 E로 할 수 있는 곳이 있으면 그중 가장 가까운 것
 function nearSpot(x, y) {
-  let best = null, bd = 30;
-  for (const sp of SPOTS) { const d = Math.hypot(sp.x - x, sp.y - y); if (d < bd) { bd = d; best = sp; } }
+  let best = null, bd = Infinity;
+  for (const sp of SPOTS) { const d = Math.hypot(sp.x - x, sp.y - y); if (d < (sp.r || 30) && d < bd) { bd = d; best = sp; } }
   return best;
 }
 

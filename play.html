@@ -53,7 +53,7 @@
   .menu-list p { margin: 0; font-size: 12px; text-align: center; }
   /* 메뉴 버튼 (작은 "☰"): 휴대폰·태블릿에만. ESC 키가 없으니 이것으로 메뉴를 엶 (PC는 ESC) */
   /* 시작 창·Ctrl+W 확인 창의 안내 글 / 예·아니오 두 칸 */
-  .start-text { margin: 0 0 18px; text-align: center; font-size: 13px; line-height: 1.7; }
+  .start-text { margin: 0 0 18px; text-align: center; font-size: 13px; line-height: 1.7; word-break: keep-all; }
   .menu-list.yesno { grid-template-columns: 1fr 1fr; gap: 16px; }
   .menu.wide { width: min(380px, 100%); }
   /* 창 모드 안내 띠: 화면 위쪽 가운데, 노란 바탕 + 검은 계단 테두리 + 버튼 */
@@ -141,6 +141,7 @@
   @media (pointer: coarse) {
     .hud-cash { right: 84px; }             /* 오른쪽 위 ☰ 버튼 옆 */
     .hud-bag { bottom: 176px; left: 28px; } /* 조이스틱 위 */
+    .hud-bag kbd { display: none; }        /* 자판이 없으니 B 표시도 숨김 */
     .guide .keyboard { display: none; } .guide .touch { display: grid; }   /* 안내 창: 키보드 대신 조이스틱·E 버튼 설명 */
     .menu-btn { display: block; right: 28px; bottom: auto; top: 18px; }
     .stick { display: block; position: absolute; left: 24px; bottom: 24px; width: 120px; height: 120px; border-radius: 50%; background: rgba(0, 0, 0, .12); border: 3px solid #000; touch-action: none; }
@@ -228,12 +229,16 @@
         <li><span class="keys"><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd></span><span>움직이기</span></li>
         <li><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>움직이기</span></li>
         <li><span class="keys"><kbd>E</kbd></span><span>말 걸기·사용하기</span></li>
+        <li><span class="keys"><kbd>B</kbd></span><span>가방 열기 (기본 UI를 받은 뒤)</span></li>
+        <li><span class="keys"><kbd>ESC</kbd></span><span>메뉴</span></li>
         <li class="soon"><span class="keys"><kbd>0</kbd>~<kbd>9</kbd></span><span>모자 바꿔 보기 (임시)</span></li>
         <li class="soon"><span class="keys"><kbd>Q</kbd></span><span>전신 스킨 바꿔 보기 (임시)</span></li>
       </ul>
       <ul class="touch">
         <li><span class="keys">왼쪽 아래 조이스틱</span><span>움직이기 (많이 밀수록 빨리)</span></li>
         <li><span class="keys"><kbd>E</kbd> 버튼</span><span>말 걸기·사용하기</span></li>
+        <li><span class="keys">가방 버튼</span><span>가방 열기 (기본 UI를 받은 뒤)</span></li>
+        <li><span class="keys">☰ 버튼</span><span>메뉴</span></li>
         <li><span class="keys">화면 누르기</span><span>가로 전체화면</span></li>
       </ul>
       <button type="button" id="guideOk">확인</button>
