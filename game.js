@@ -546,7 +546,7 @@ function drawSky(cam, W, H, dt, now) {
   if (lit > 0.05) {
     const k = S * ART;
     for (const t of THINGS) {
-      const L = LIGHTS[t.type];
+      const L = typeof LIGHTS[t.type] === 'function' ? LIGHTS[t.type](t.v) : LIGHTS[t.type];
       if (!L) continue;
       const img = thingArt(t), ox = t.x * S - cam.x - img.width * k / 2, oy = t.y * S - cam.y - img.height * k;
       for (const [x, y, w, h] of L) {

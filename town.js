@@ -35,6 +35,18 @@ function makeScene(name, ground, start, build) {
   return sc;
 }
 
+// ===== 주택가 집 (가로 4칸 × 세로 2줄, 키 4칸) =====
+// 지붕 모양: gable 뾰족한 박공지붕 / hip 위가 평평한 모임지붕 / flat 2층 평지붕(옥상 난간, tank면 물탱크)
+// 문 자리: l 왼쪽 · c 가운데 · r 오른쪽 → 창문은 나머지 자리에 (2층이면 2층에는 세 자리 모두)
+const HOMES = [
+  { roof: 'gable', roofC: '#b5503c', wall: '#f3e6c8', door: 'c', doorC: '#9a6b45' },
+  { roof: 'flat', wall: '#dcdde2', door: 'l', doorC: '#3d6fb0', tank: true },
+  { roof: 'hip', roofC: '#3d6fb0', wall: '#cfe8dc', door: 'r', doorC: '#8a5a3b' },
+  { roof: 'gable', roofC: '#4f8f5a', wall: '#f3d3d8', door: 'l', doorC: '#7a4a2a' },
+  { roof: 'flat', wall: '#b86a4e', brick: true, door: 'r', doorC: '#5a3a28' },
+  { roof: 'hip', roofC: '#4a4d5c', wall: '#f7f5ee', door: 'c', doorC: '#9a6b45' },
+];
+const HOME_SLOTS = { l: 6, c: 25, r: 44 };   // 창문·문 한 칸(14칸 너비)의 왼쪽 끝
 // ===== 도시 맵 틀 =====
 // 가로 80칸 × 세로 48칸. 도로 목록만 적으면 보도·차도·횡단보도·차선·정지선을 저절로 깔아 줌
 //   대로(4차선, 보도 2칸): 가운데 가로(22~25줄)·세로(38~41칸) / 골목(2차선, 보도 1칸): 가로 10·36줄, 세로 16·62칸
@@ -84,7 +96,14 @@ function cityPlan(W, H, roads) {
 }
 const CITY = cityPlan(80, 48, CITY_ROADS);
 const CITY_PARK = 7;   // 공원이 될 블록 번호 (오른쪽 가운데 위, 도시 입구 옆)
-CITY.ground = CITY.ground.map((row, y) => [...row].map((k, x) => { const b = CITY.blocks[CITY_PARK]; return x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1 ? 'g' : k; }).join(''));
+const CITY_HOMES = 0;  // 주택가 블록 번호 (왼쪽 위)
+const inBlock = (b, x, y) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
+CITY.ground = CITY.ground.map((row, y) => [...row].map((k, x) => {
+  if (inBlock(CITY.blocks[CITY_PARK], x, y)) return 'g';
+  const hb = CITY.blocks[CITY_HOMES];
+  if (inBlock(hb, x, y)) return y === hb.y0 + 4 ? '.' : 'g';   // 주택가: 잔디 마당 + 윗줄 집 앞 골목길(옆 보도와 이어짐)
+  return k;
+}).join(''));
 
 const SCENES = {
   // 튜토리얼 공간(처음 서는 곳): 가로 40칸 × 세로 24칸 잔디밭 + 가운데 주택(가로 6칸 × 세로 3줄). 문 앞에서 E → 집 안
@@ -114,6 +133,16 @@ const SCENES = {
     let n = 0;
     CITY.blocks.forEach((b, i) => {
       const cx = Math.floor((b.x0 + b.x1) / 2), cy = Math.floor((b.y0 + b.y1) / 2);
+      if (i === CITY_HOMES) {   // 주택가: 집 6채 (윗줄은 골목길을, 아랫줄은 큰길 보도를 바라봄) + 집 사이 울타리 나무 + 문 옆 우편함
+        n++;
+        [[0, 2], [5, 2], [10, 2], [0, 7], [5, 7], [10, 7]].forEach(([dx, dy], k) => {
+          const x = b.x0 + dx, y = b.y0 + dy;
+          place('home', k, x, y, 4, 2);
+          place('mailbox', k, x + { l: 2, c: 0, r: 1 }[HOMES[k].door], y + 2, 1, 1, false);   // 문 옆 칸
+        });
+        for (const x of [4, 9, 14]) for (const y of [2, 3, 7, 8]) place('hedge', 0, b.x0 + x, b.y0 + y);
+        return;
+      }
       place('lotsign', i === CITY_PARK ? LOT_NAMES.length - 1 : n++, cx - 1, cy, 3, 1);
       if (i !== CITY_PARK) return;
       const KINDS = ['cherry', 'maple', 'ginkgo', 'pine'];
@@ -351,7 +380,13 @@ const BIG = new Set(['cafe', 'shop', 'villa', 'house']);
 // 밤에 불이 켜지는 곳: 물건 그림 안의 [x, y, 가로, 세로] (그림 칸 단위). 창문은 창살 사이 유리 네 칸씩
 // 바깥 하늘이 보이는 유리: 물건 그림 안의 [x, y, 가로, 세로] (집 안 창문은 창살 사이 네 칸) → 시간·날씨에 맞춰 색이 바뀜
 const SKY_GLASS = { wwin: [[6, 4, 9, 9], [17, 4, 9, 9], [6, 15, 9, 9], [17, 15, 9, 9]] };
+function homeWindows(v) {   // [x, y, 가로, 세로] — 그림과 밤 불빛이 같이 씀
+  const h = HOMES[v % HOMES.length], free = Object.keys(HOME_SLOTS).filter(k => k !== h.door).map(k => HOME_SLOTS[k]);
+  if (h.roof === 'flat') return [...Object.values(HOME_SLOTS).map(x => [x, 14, 14, 12]), ...free.map(x => [x, 36, 14, 12])];
+  return free.map(x => [x, 33, 14, 12]);
+}
 const LIGHTS = {
+  home: v => homeWindows(v).map(([x, y, w, h]) => [x + 1, y + 1, w - 2, h - 2]),
   house: [16, 66].flatMap(wx => [[wx, 53, 6, 6], [wx + 8, 53, 6, 6], [wx, 61, 6, 6], [wx + 8, 61, 6, 6]])
     .concat([[44, 60, 8, 4], [46, 47, 4, 3]]),   // 문 위 작은 창, 처마 밑 등
 };   // 표지판처럼 가는 것은 아래에서 그림자 없음
@@ -794,6 +829,58 @@ const ARTS = {
     box(0, 0, W, 19, INK); box(1, 1, W - 2, 17, '#f6d32b'); box(1, 17, W - 2, 1, '#d9a91c');
     for (let x = 1; x < W - 1; x += 6) box(x, 1, 3, 3, INK);
     center(LOT_NAMES[v] || '', W / 2, 6, '#2f2b38');
+    return c;
+  },
+  home(v) {   // 주택가 집 (HOMES[v] 모양·색)
+    const W = 64, H = 64, { c, box } = painter(W, H), h = HOMES[v % HOMES.length];
+    const dk = shadeHex(h.wall, 0.86), wallTop = h.roof === 'flat' ? 6 : 26;
+    // 벽
+    box(2, wallTop, W - 4, 60 - wallTop, INK); box(3, wallTop, W - 6, 59 - wallTop, h.wall);
+    if (h.brick) for (let y = wallTop + 3; y < 59; y += 4) for (let x = 3 + ((y >> 2) % 2) * 4; x < W - 3; x += 8) box(x, y, 1, 3, dk);   // 벽돌 줄눈
+    else for (let y = wallTop + 4; y < 59; y += 5) box(3, y, W - 6, 1, dk);                                                                 // 판자 줄
+    box(W - 7, wallTop, 4, 59 - wallTop, dk);                                                                                                 // 오른쪽 그늘
+    // 지붕
+    if (h.roof === 'flat') {
+      box(1, 4, W - 2, 5, INK); box(2, 5, W - 4, 3, shadeHex(h.wall, 0.75)); box(2, 5, W - 4, 1, shadeHex(h.wall, 1.1));   // 옥상 난간
+      box(3, 30, W - 6, 2, shadeHex(h.wall, 0.7));                                                                          // 층 사이 띠
+      if (h.tank) { box(44, 0, 14, 6, INK); box(45, 0, 12, 5, '#d8dde3'); box(45, 0, 12, 1, '#f2f4f6'); box(47, 2, 8, 1, '#aab3bd'); }   // 물탱크
+    } else {
+      const top = 4, bottom = 26, peak = h.roof === 'gable';
+      for (let y = top; y < bottom; y++) {
+        const t = (y - top) / (bottom - top - 1), inset = Math.round((peak ? 31 : 14) * (1 - t)), w = W - inset * 2;
+        if (w <= 0) continue;
+        box(inset, y, w, 1, INK);
+        if (w > 2) box(inset + 1, y, w - 2, 1, (y - top) % 4 === 0 ? shadeHex(h.roofC, 0.8) : (y - top) % 4 === 1 ? shadeHex(h.roofC, 1.18) : h.roofC);
+        if (w > 4) box(inset + w - 3, y, 2, 1, shadeHex(h.roofC, 0.8));
+      }
+      box(0, bottom, W, 2, INK); box(2, bottom + 2, W - 4, 1, '#5a4a40');   // 처마
+      if (peak) { box(28, 14, 8, 8, INK); box(29, 15, 6, 6, '#8fc3e6'); box(31, 15, 2, 6, '#f4f1ea'); }   // 다락 창
+    }
+    // 창문 (창틀 + 유리 + 십자 창살 + 창턱)
+    for (const [x, y, w, hh] of homeWindows(v)) {
+      box(x - 1, y - 1, w + 2, hh + 2, INK); box(x, y, w, hh, '#8fc3e6'); box(x, y, w, 3, '#d4ecfa');
+      box(x + (w >> 1) - 1, y, 2, hh, '#f4f1ea'); box(x, y + (hh >> 1), w, 1, '#f4f1ea'); box(x - 2, y + hh + 1, w + 4, 2, '#f4f1ea');
+    }
+    // 문 (작은 차양 + 문짝 + 손잡이)
+    const dx = HOME_SLOTS[h.door];
+    box(dx - 2, 36, 18, 3, INK); box(dx - 1, 36, 16, 2, '#6b7080');
+    box(dx, 40, 14, 20, INK); box(dx + 1, 41, 12, 19, h.doorC); box(dx + 1, 41, 12, 1, shadeHex(h.doorC, 1.25));
+    box(dx + 3, 44, 8, 5, shadeHex(h.doorC, 0.8)); box(dx + 10, 51, 2, 2, '#f2c94c');
+    // 기단 + 계단
+    box(1, 59, W - 2, 3, INK); box(2, 59, W - 4, 2, '#b9b2a4');
+    box(dx - 2, 60, 18, 4, INK); box(dx - 1, 60, 16, 3, '#c9c2b4'); box(dx - 1, 60, 16, 1, '#e2dccf');
+    return c;
+  },
+  hedge() {   // 울타리 나무: 둥글게 다듬은 늘푸른 덤불
+    const { c, box } = painter(16, 16);
+    box(1, 3, 14, 12, INK); box(3, 1, 10, 2, INK); box(2, 3, 12, 11, '#3f8a37'); box(3, 2, 10, 2, '#4f9e45');
+    for (const [x, y] of [[4, 4], [9, 5], [6, 8], [11, 9], [3, 10]]) box(x, y, 2, 2, '#6cbf55');
+    box(2, 12, 12, 2, '#2f6e2a');
+    return c;
+  },
+  mailbox() {   // 빨간 우편함 (기둥 위)
+    const { c, box } = painter(10, 16);
+    box(4, 7, 2, 9, INK); box(1, 1, 8, 7, INK); box(2, 2, 6, 5, '#d8443f'); box(2, 2, 6, 1, '#f07a6a'); box(3, 4, 4, 1, '#8c2a20');
     return c;
   },
   bench() {   // 공원 벤치(2칸): 회색 쇠기둥 두 개에 나무 등받이 두 줄, 앞으로 넓은 앉는 판, 쇠다리. 검은 테두리
