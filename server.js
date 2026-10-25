@@ -176,8 +176,18 @@ function fameProblem(giver, giverKey, toKey, today) {
   if (last && daysBetween(last, today) < 30) return '같은 사람에게는 30일에 한 번만 줄 수 있어요.';
   return null;
 }
-const lifeOf = a => ({ cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null, stats: { ...STATS_START, ...a.stats } });
-const SCENE_NAMES = ['field', 'home', 'city', 'h0', 'h1', 'h2', 'h3', 'h4', 'h5', 'mart'];   // town.js의 장면 이름 (h0~h5 = 주택가 집 안, mart = 마트 안)
+const lifeOf = a => ({ cash: a.cash ?? 50000, bag: a.bag || [], place: a.place || null, stats: { ...STATS_START, ...a.stats }, region: a.region || '한가람' });
+const SCENE_NAMES = ['field', 'home', 'city', 'h0', 'h1', 'h2', 'h3', 'h4', 'h5', 'mart', 'byeolha', 'danbi', 'nuribeol'];   // town.js의 장면 이름 (h0~h5 = 주택가 집 안, mart = 마트 안, 나머지는 다른 지역)
+// 갈 수 있는 지역: 이름 → { 장면, 지도 칸 좌표(country.js와 같음), 도착 자리 = 그 지역 터미널 문 앞(town.js terminalAt) }
+const REGIONS = {
+  한가람: { scene: 'city', x: 64, y: 74, at: [2272, 1146] },
+  별하항: { scene: 'byeolha', x: 30, y: 36, at: [1056, 634] },
+  단비: { scene: 'danbi', x: 82, y: 92, at: [992, 1050] },
+  누리벌: { scene: 'nuribeol', x: 58, y: 16, at: [1248, 506] },
+};
+const SCENE_REGION = { city: '한가람', mart: '한가람', h0: '한가람', h1: '한가람', h2: '한가람', h3: '한가람', h4: '한가람', h5: '한가람', byeolha: '별하항', danbi: '단비', nuribeol: '누리벌' };
+// 버스 요금: 기본 1,000원 + 지도 거리 1칸에 90원 (100원 단위)
+const fareOf = (from, to) => Math.round((1000 + Math.hypot(REGIONS[from].x - REGIONS[to].x, REGIONS[from].y - REGIONS[to].y) * 90) / 100) * 100;
 // 마트 상품: 아이디 → [이름, 값(원)]. 값·돈·가방 칸은 모두 서버가 정하고 확인함
 const ITEMS = { bread: ['빵', 2000], milk: ['우유', 1500], apple: ['사과', 1000], ramen: ['컵라면', 1200], kimbap: ['김밥', 3000], drink: ['음료수', 1000], snack: ['과자', 1500], umbrella: ['우산', 8000] };
 const BAG_SIZE = 3;   // 처음 받은 가방 칸 수
@@ -256,6 +266,17 @@ http.createServer(async (req, res) => {
         .map(([, p]) => ({ id: p.id, name: p.name, look: p.look, x: p.x, y: p.y, dir: p.dir, left: p.left, moving: p.moving, seat: p.seat }));
       return json(res, 200, { ok: true, others });
     }
+    if (name === 'routes' || name === 'travel') {   // 고속버스: routes = 지금 지역에서 갈 수 있는 곳과 요금 / travel { to } = 요금을 내고 그 지역 터미널로
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      const a = accounts[key], life = lifeOf(a), here = life.region;
+      if (name === 'routes') return json(res, 200, { ok: true, here, routes: Object.keys(REGIONS).filter(n => n !== here).map(n => ({ name: n, fare: fareOf(here, n) })) });
+      if (!Object.hasOwn(REGIONS, b.to) || b.to === here) return json(res, 400, { ok: false, msg: '갈 수 없는 곳이에요.' });
+      const fare = fareOf(here, b.to), dest = REGIONS[b.to];
+      if (life.cash < fare) return json(res, 400, { ok: false, msg: `돈이 부족해요. (${fare.toLocaleString('ko-KR')}원 필요)` });
+      a.cash = life.cash - fare; a.region = b.to; a.place = { scene: dest.scene, x: dest.at[0], y: dest.at[1] };
+      writeJSONFile(ACCOUNTS_FILE, accounts);
+      return json(res, 200, { ok: true, cash: a.cash, region: b.to, place: a.place, fare });
+    }
     if (name === 'shop') return json(res, 200, { ok: true, items: Object.entries(ITEMS).map(([id, [n, price]]) => ({ id, name: n, price })), bagSize: BAG_SIZE });   // 마트 상품 목록
     if (name === 'buy') {   // 물건 사기: { id } → 돈이 충분하고 가방에 빈칸이 있으면 돈을 빼고 가방에 넣음
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
@@ -295,6 +316,7 @@ http.createServer(async (req, res) => {
       // 자리: 아는 장면 + 0~5000 사이 숫자만. 튜토리얼을 떠난 계정은 도시 쪽 자리만 받음(다시 못 돌아가게)
       const inRange = v => Number.isFinite(v) && v >= 0 && v <= 5000;
       if (!p || !SCENE_NAMES.includes(p.scene) || !inRange(p.x) || !inRange(p.y)) return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });
+      if (SCENE_REGION[p.scene] && SCENE_REGION[p.scene] !== lifeOf(a).region) return json(res, 409, { ok: false, msg: '그 지역에 가려면 표를 사야 해요.' });
       if (!(a.tutorialDone && TUTORIAL_SCENES.includes(p.scene))) { a.place = { scene: p.scene, x: Math.round(p.x), y: Math.round(p.y) }; writeJSONFile(ACCOUNTS_FILE, accounts); }
       return json(res, 200, { ok: true });
     }

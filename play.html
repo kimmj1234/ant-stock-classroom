@@ -185,6 +185,10 @@
   .shop-list button:disabled { background: #a89276; cursor: default; box-shadow: 2px 0 #7a4a2a, -2px 0 #7a4a2a, 0 2px #7a4a2a, 0 -2px #7a4a2a; }
   .shop-list button:focus-visible { outline: 3px dashed #f2c94c; outline-offset: 3px; }
   @media (max-width: 640px) { .shop-list { grid-template-columns: 1fr; } }
+  /* 고속버스 표 창: 줄마다 도착지(특색) · 요금 · 가기 */
+  .travel-list li { grid-template-columns: 1fr auto auto; }
+  .travel-list small { display: block; font-size: 13px; color: #7a4a2a; }
+  .map-info { margin: 8px 0 0; text-align: center; font-size: 16px; min-height: 24px; }
   /* 능력치 강화 버튼(돈으로 1레벨): 작은 초록 버튼, 돈이 모자라면 흐리게 */
   .stats button {
     border: 0; padding: 3px 8px; font: inherit; font-size: 12px; color: #fff; background: #4f8f3a; cursor: pointer; white-space: nowrap;
@@ -266,8 +270,18 @@
     <section class="inv" role="dialog" aria-modal="true" aria-labelledby="mapTitle">
       <h2 id="mapTitle">한울 전국 지도</h2>
       <button type="button" class="crate-x" id="mapClose" aria-label="지도 닫기">×</button>
-      <canvas id="mapBig" role="img" aria-label="한울 나라 지도. 지금 있는 곳은 한가람, 나머지 지역은 준비 중"></canvas>
-      <p class="map-legend"><span><i style="background:#e8454b"></i>지금 있는 곳 (한가람)</span><span><i style="background:#ffffff"></i>갈 수 있는 곳</span><span><i style="background:#a9a6b8"></i>준비 중</span></p>
+      <canvas id="mapBig" role="img" aria-label="한울 나라 지도. 도시를 누르면 그 지역의 특색이 나와요"></canvas>
+      <p class="map-info" id="mapInfo"></p>
+      <p class="map-legend"><span><i style="background:#e8454b"></i>지금 있는 곳</span><span><i style="background:#ffffff"></i>갈 수 있는 곳</span><span><i style="background:#a9a6b8"></i>준비 중</span></p>
+    </section>
+  </div>
+  <!-- 고속버스 표 창: 터미널 문 앞에서 E로 열고, ESC·닫기로 닫음 -->
+  <div class="guide-wrap" id="travelWrap" hidden>
+    <section class="inv" role="dialog" aria-modal="true" aria-labelledby="travelTitle">
+      <h2 id="travelTitle">고속버스 승차권</h2>
+      <button type="button" class="crate-x" id="travelClose" aria-label="승차권 창 닫기">×</button>
+      <div class="shop-top"><span>가진 돈 <b id="travelCash">0</b>원</span><span id="travelHere">출발: 한가람</span></div>
+      <ul class="shop-list travel-list" id="travelList"></ul>
     </section>
   </div>
   <!-- 마트 창: 마트 점원 앞에서 E로 열고, ESC·닫기로 닫음 -->
@@ -420,23 +434,36 @@
     box.style.zoom = Math.max(1, Math.min(Math.sqrt(W * H / 2 / (w * h)), W * 0.94 / w, H * 0.9 / h));
   };
   const shop = $('shopWrap');
-  addEventListener('resize', () => { for (const w of [bag, shop]) if (!w.hidden) fitWin(w); });
+  addEventListener('resize', () => { for (const w of [bag, shop, $('travelWrap')]) if (!w.hidden) fitWin(w); });
   const openBag = () => { document.dispatchEvent(new Event('bagopen')); bag.hidden = false; fitWin(bag); $('bagClose').focus(); };
   // 마트 창: game.js가 점원 앞 E에서 엶(상품 줄을 채운 뒤 'shopready')
   const closeShop = () => { shop.hidden = true; game.focus(); };
   window.openShop = () => { shop.hidden = false; document.dispatchEvent(new Event('shopopen')); };
   document.addEventListener('shopready', () => { fitWin(shop); (shop.querySelector('.shop-list button:not(:disabled)') || $('shopClose')).focus(); });
   $('shopClose').addEventListener('click', closeShop);
+  // 고속버스 표 창: game.js가 터미널 문 앞 E에서 엶(행선지를 채운 뒤 'travelready')
+  const travelW = $('travelWrap');
+  const closeTravel = window.closeTravel = () => { travelW.hidden = true; game.focus(); };
+  window.openTravel = () => { travelW.hidden = false; document.dispatchEvent(new Event('travelopen')); };
+  document.addEventListener('travelready', () => { fitWin(travelW); (travelW.querySelector('.shop-list button:not(:disabled)') || $('travelClose')).focus(); });
+  $('travelClose').addEventListener('click', closeTravel);
   const closeBag = () => { bag.hidden = true; game.focus(); };
   // 전국 지도: 작은 지도(오른쪽 아래)는 늘 보이고, 큰 지도는 화면 높이에 맞춰 키움 (country.js)
   const mapWrap = $('mapWrap');
+  // 지금 있는 지역 = 지금 장면의 region (집 안·마트는 한가람)
+  const hereName = () => SCENE.region || '한가람';
+  let mapK = 2;
   const mapLoop = () => {
-    if (!$('hud').hidden) COUNTRY.draw($('mapMini'), { k: 1.1 });
-    if (!mapWrap.hidden) COUNTRY.draw($('mapBig'), { k: Math.max(2, Math.min((innerWidth * 0.9 - 80) / COUNTRY.W, (innerHeight * 0.88 - 150) / COUNTRY.H)), labels: true });
+    const here = hereName();
+    if ($('mapHere').textContent !== here) { $('mapHere').textContent = here; document.title = '나의 두번째 인생 — ' + here; }
+    if (!$('hud').hidden) COUNTRY.draw($('mapMini'), { k: 1.1, here });
+    if (!mapWrap.hidden) { mapK = Math.max(2, Math.min((innerWidth * 0.9 - 80) / COUNTRY.W, (innerHeight * 0.88 - 180) / COUNTRY.H)); COUNTRY.draw($('mapBig'), { k: mapK, labels: true, here }); }
     requestAnimationFrame(mapLoop);
   };
+  const showInfo = name => { const c = COUNTRY.CITIES.find(c => c[0] === name); $('mapInfo').textContent = `${name} — ${COUNTRY.INFO[name] || ''}${name === hereName() ? ' (지금 있는 곳)' : c?.[3] ? ' · 터미널에서 갈 수 있어요' : ' · 준비 중'}`; };
+  $('mapBig').addEventListener('click', e => { const r = e.currentTarget.getBoundingClientRect(), c = COUNTRY.cityAt((e.clientX - r.left) / r.width * COUNTRY.W, (e.clientY - r.top) / r.height * COUNTRY.H); if (c) showInfo(c[0]); });
   requestAnimationFrame(mapLoop);
-  const openMap = () => { mapWrap.hidden = false; $('mapClose').focus(); };
+  const openMap = () => { mapWrap.hidden = false; showInfo(hereName()); $('mapClose').focus(); };
   const closeMap = () => { mapWrap.hidden = true; game.focus(); };
   $('mapBtn').addEventListener('click', openMap);
   $('mapClose').addEventListener('click', closeMap);
@@ -520,10 +547,11 @@
       else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); document.activeElement?.click(); }
       return;
     }
-    if (!shop.hidden) {   // 마트 창: ESC로 닫음, ↑↓(W/S)로 상품 고르고 E·Enter·Space로 사기
+    const listWin = [shop, travelW].find(w => !w.hidden);
+    if (listWin) {   // 마트 창·표 창: ESC로 닫음, ↑↓(W/S)로 고르고 E·Enter·Space로 누름
       e.stopPropagation();
-      const btns = [...shop.querySelectorAll('.shop-list button:not(:disabled)'), $('shopClose')], i = btns.indexOf(document.activeElement);
-      if (e.key === 'Escape') { e.preventDefault(); closeShop(); }
+      const btns = [...listWin.querySelectorAll('.shop-list button:not(:disabled)'), listWin.querySelector('.crate-x')], i = btns.indexOf(document.activeElement);
+      if (e.key === 'Escape') { e.preventDefault(); listWin === shop ? closeShop() : closeTravel(); }
       else if (['ArrowDown', 's', 'S'].includes(e.key)) { e.preventDefault(); btns[(i + 1) % btns.length].focus(); }
       else if (['ArrowUp', 'w', 'W'].includes(e.key)) { e.preventDefault(); btns[(i - 1 + btns.length) % btns.length].focus(); }
       else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); document.activeElement?.click(); }

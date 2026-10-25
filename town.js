@@ -12,7 +12,7 @@ let SCENE, COLS, ROWS, MAP_W, MAP_H, GROUND, THINGS, SOLID, SPOTS, NPCS, START;
 const inMap = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
 const tileAt = (x, y) => (inMap(x, y) ? GROUND[y][x] : null);
 const isRoad = k => k === 'R' || k === 'Z';
-const WALL_TILES = 'wb';                // 벽 칸은 저절로 못 지나감
+const WALL_TILES = 'wbSav';             // 벽·물(S)·논(a)·밭(v) 칸은 저절로 못 지나감
 
 // 장면 만들기: build({ place, decal, deco, wallDeco, spot, npc })로 물건을 놓음
 //   place(종류, 색번호, x, y, 가로칸, 세로줄, 막힘) — (x, y) = 왼쪽 위 칸. 그림은 차지한 칸의 아래 가운데에 세움
@@ -62,7 +62,7 @@ const CITY_ROADS = [
   { dir: 'h', at: 10, n: 2, sw: 1 }, { dir: 'h', at: 36, n: 2, sw: 1 },
   { dir: 'v', at: 16, n: 2, sw: 1 }, { dir: 'v', at: 62, n: 2, sw: 1 },
 ];
-const LOT_NAMES = ['주택가', '아파트', '상가', '카페거리', '학교', '회사', '병원', '은행', '마트', '시장', '주차장', '회사', '회사', '체육관', '회사', '공원'];
+const LOT_NAMES = ['주택가', '아파트', '상가', '카페거리', '학교', '회사', '병원', '은행', '마트', '시장', '버스터미널', '회사', '회사', '체육관', '회사', '공원'];
 function cityPlan(W, H, roads) {
   const g = Array.from({ length: H }, () => Array(W).fill('e'));
   const inBand = (r, x, y, pad) => { const p = r.dir === 'h' ? y : x; return p >= r.at - pad && p < r.at + r.n + pad; };
@@ -101,6 +101,21 @@ function cityPlan(W, H, roads) {
   return { ground: g.map(row => row.join('')), marks, zdir, blocks };
 }
 const CITY = cityPlan(80, 48, CITY_ROADS);
+// 지역 이름 (지역 표지판 그림 번호). 장면마다 region에 적어 두면 지도가 "지금 있는 곳"으로 씀
+const REGION_NAMES = ['한가람', '별하항', '단비', '누리벌'];
+// 지역 맵: 도로 목록으로 틀을 깔고(cityPlan), paint(x, y, 원래 칸)로 칸마다 바닥을 정함 (바다·논·공장 마당 등)
+function regionPlan(W, H, roads, paint) {
+  const p = cityPlan(W, H, roads);
+  p.ground = p.ground.map((row, y) => [...row].map((k, x) => paint(x, y, k)).join(''));
+  return p;
+}
+// 고속버스터미널: (x, y) 왼쪽 위 칸에 가로 10칸 · 앞(아래) 유리문 앞에서 E → 표 사기 창. 서버(server.js REGIONS)의 도착 자리 = 문 앞
+function terminalAt(place, spot, x, y) {
+  place('terminal', 0, x, y, 10, 3);
+  const dx = x * TILE + 80 * ART, fy = (y + 3) * TILE;
+  spot({ type: 'terminal', x: dx, y: fy + 10, px: dx, py: fy - 70, r: 36 });
+  return { x: dx, y: fy + 26 };
+}
 const CITY_PARK = 7;   // 공원이 될 블록 번호 (오른쪽 가운데 위, 도시 입구 옆)
 const CITY_HOMES = 0;  // 주택가 블록 번호 (왼쪽 위)
 // 블록 바닥: g 잔디 · . 보도(광장) · e 흙 운동장 · p 주차장 (블록 번호 → 바닥)
@@ -162,6 +177,118 @@ function martScene() {
   });
 }
 
+// ===== 다른 지역 (가로 48칸 × 세로 34칸). 지역마다 고속버스터미널이 있고, 그 지역 산업이 한눈에 보이게 =====
+// 별하항(북서쪽 항구 · 수산업): 아래쪽은 모래사장과 바다, 나무 부두 셋(맨 오른쪽 방파제 끝에 등대), 바다 위 고깃배
+//   위쪽: 왼쪽 어부 마을(집 넷) + 해안도로 앞 수산시장 / 오른쪽 상가·카페 + 터미널과 버스 정류장
+const BYEOLHA = regionPlan(48, 34, [{ dir: 'h', at: 21, n: 2, sw: 1 }, { dir: 'v', at: 24, n: 2, sw: 1 }], (x, y, k) => {
+  if (y >= 24) {
+    const pier = ((x === 6 || x === 7) && y <= 31) || ((x === 18 || x === 19) && y <= 30) || ((x === 44 || x === 45) && y <= 32);
+    return pier ? 'o' : y <= 25 ? 'n' : 'S';
+  }
+  if (k !== 'e') return k;
+  if (x <= 22) return y === 3 || y >= 14 ? '.' : 'g';   // 어부 마을: 잔디 + 집 앞 골목 + 수산시장 앞마당
+  return x >= 39 && y >= 13 ? 'p' : '.';                 // 상가 광장 + 버스 서는 곳
+});
+function byeolhaScene() {
+  let arrive;
+  const sc = makeScene('byeolha', BYEOLHA.ground, { x: 0, y: 0 }, ({ place, deco, spot, npc }) => {
+    [1, 6, 11, 16].forEach((x, k) => place('home', (k + 2) % 6, x, 1, 4, 2));
+    [[2, 8, 'pine'], [8, 11, 'pine'], [14, 7, 'maple'], [20, 10, 'pine'], [4, 12, 'cherry']].forEach(([x, y, t], k) => place(t, k + 50, x, y));
+    place('fishmarket', 0, 2, 15, 14, 3);
+    [3, 6, 9, 12, 15].forEach((x, k) => deco('fishcrate', x, 18, k));
+    place('townsign', 1, 27, 1, 3, 1);
+    [28, 30, 32, 34].forEach((x, k) => place('shop', k + 1, x, 5, 2, 2));
+    place('cafe', 2, 37, 5, 3, 2);
+    place('ginkgo', 52, 44, 3); place('maple', 53, 46, 9);
+    arrive = terminalAt(place, spot, 28, 16);
+    [40, 42, 44].forEach((x, k) => place('bus', k, x, 15, 1, 3));
+    // 바다: 부두 옆 고깃배, 방파제 끝 등대, 부두 위 생선 상자
+    [[8, 27, 0], [3, 28, 1], [15, 27, 2], [20, 28, 3], [33, 27, 1], [39, 29, 0]].forEach(([x, y, v]) => place('boat', v, x, y, 2, 3));
+    place('lighthouse', 0, 44, 31, 2, 1);
+    deco('fishcrate', 6, 24, 1); deco('fishcrate', 19, 25, 2);
+    place('bench', 0, 11, 23, 2, 1); place('bench', 0, 34, 23, 2, 1);
+    for (const x of [2, 9, 15, 30, 38, 46]) place('lamp', 0, x, 20);
+    npc({ name: '어부 김씨', look: { ...DEFAULT_LOOK, color: '#e8eef5', hat: { shape: 'cap', color: '#2f6fc6' } }, lines: [
+      '어서 와! 여기는 항구 마을 별하항이야. 우리는 고기잡이로 먹고 살지.',
+      '날이 좋으면 새벽에 배를 띄워서 고등어랑 오징어를 잡아.',
+      '근데 비가 많이 오거나 바람이 세면 배를 못 띄워. 그런 날엔 생선이 귀해져서 값이 확 오르지.',
+      '해안도로 앞 수산시장에 가면 오늘 잡은 생선을 볼 수 있어!',
+    ] }, 7, 28);
+  });
+  return Object.assign(sc, { start: arrive, marks: BYEOLHA.marks, zdir: BYEOLHA.zdir, region: '별하항' });
+}
+
+// 단비(내륙 공업도시 · 전자·화학): 가운데 4차선 산업도로 위로 큰 공장 둘(한빛전자·새봄화학 단비공장)과 화학 탱크·화물차
+//   아래: 왼쪽 직원 아파트·가게 / 오른쪽 터미널 + 물류창고·컨테이너·화물차
+const DANBI = regionPlan(48, 34, [{ dir: 'h', at: 16, n: 4, sw: 2 }, { dir: 'v', at: 22, n: 2, sw: 1 }], (x, y, k) => {
+  if (k !== 'e') return k;
+  if (y <= 13) return 'c';                                     // 공장 마당
+  if (x <= 20) return y === 24 || y === 33 ? '.' : 'g';         // 직원 아파트 단지
+  return x >= 37 ? 'c' : '.';                                  // 물류 마당 / 터미널 앞 광장
+});
+function danbiScene() {
+  let arrive;
+  const sc = makeScene('danbi', DANBI.ground, { x: 0, y: 0 }, ({ place, deco, spot, npc }) => {
+    place('factory', 0, 1, 8, 12, 3);
+    [14, 16, 18].forEach((x, k) => place('containers', k, x, 4, 2, 1));
+    [15, 17].forEach((x, k) => place('truck', k, x, 9, 1, 3));
+    place('factory', 1, 26, 8, 12, 3);
+    [39, 42, 45].forEach((x, k) => place('chemtank', k, x, 7, 3, 2));
+    [16, 18].forEach((x, k) => place('shop', k + 4, x, 22, 2, 2));
+    place('apt', 0, 0, 29, 7, 4); place('apt', 1, 8, 29, 7, 4);
+    [[2, 26, 'pine'], [6, 25, 'maple'], [11, 26, 'ginkgo'], [18, 28, 'pine']].forEach(([x, y, t], k) => place(t, k + 60, x, y));
+    place('townsign', 2, 26, 23, 3, 1);
+    arrive = terminalAt(place, spot, 26, 29);
+    place('warehouse', 0, 38, 24, 8, 3);
+    [38, 40, 42, 44].forEach((x, k) => place('containers', k + 1, x, 30, 2, 1));
+    place('truck', 2, 46, 28, 1, 3);
+    for (const x of [2, 8, 14, 28, 34, 40, 46]) { place('lamp', 0, x, 14); place('lamp', 0, x, 21); }
+    npc({ name: '반장 박씨', look: { ...DEFAULT_LOOK, color: '#f3efe6', hat: { shape: 'cap', color: '#f2a03d' } }, lines: [
+      '여기는 공업도시 단비야. 큰 공장들이 밤낮없이 돌아가지.',
+      '왼쪽은 한빛전자, 오른쪽은 새봄화학 공장이야. 본사는 둘 다 한가람에 있어.',
+      '공장에서 새 기술을 만들어 내거나 물건이 잘 팔리면 그 회사 주가가 오르고, 사고가 나면 떨어지지.',
+      '만든 물건은 터미널 옆 물류창고에서 화물차에 실려 전국으로 나가.',
+    ] }, 20, 12);
+  });
+  return Object.assign(sc, { start: arrive, marks: DANBI.marks, zdir: DANBI.zdir, region: '단비' });
+}
+
+// 누리벌(북쪽 넓은 평야 · 농업): 가운데 시골 도로, 세로로 흐르는 수로(나무 다리 둘)
+//   위: 왼쪽 농가 마을(집·빨간 헛간·사일로·트랙터·곤포) + 논 / 수로 건너 비닐하우스와 터미널
+//   아래: 넓은 논(허수아비) + 수로 건너 밭
+const NURIBEOL = regionPlan(48, 34, [{ dir: 'h', at: 16, n: 2, sw: 1 }], (x, y, k) => {
+  if (k !== 'e') return k;                                      // 도로·보도 (수로 위는 다리)
+  if (x === 30 || x === 31) return y === 7 || y === 26 ? 'o' : 'S';   // 수로 + 나무 다리
+  if (y <= 14) {
+    if (x <= 13) return y === 3 || (x === 12 && y >= 3) ? 'l' : 'g';   // 농가 마을: 집 앞 흙길 → 도로
+    if (x <= 29) return y === 7 || y === 14 || x === 14 || x === 21 ? 'l' : 'a';
+    return y === 7 || y === 14 || x === 32 ? 'l' : y <= 10 ? 'e' : 'g';
+  }
+  if (x <= 29) return y === 19 || y === 26 || y === 33 || x === 9 || x === 19 ? 'l' : 'a';
+  return y === 19 || y === 26 || y === 33 || x === 32 || x === 39 ? 'l' : 'v';
+});
+function nuribeolScene() {
+  let arrive;
+  const sc = makeScene('nuribeol', NURIBEOL.ground, { x: 0, y: 0 }, ({ place, deco, spot, npc }) => {
+    place('home', 0, 1, 1, 4, 2); place('home', 3, 6, 1, 4, 2);
+    place('barn', 0, 1, 8, 5, 3); place('silo', 0, 7, 9, 2, 2); place('tractor', 0, 9, 11, 2, 1);
+    [[2, 12], [3, 12], [5, 13], [8, 13]].forEach(([x, y]) => deco('haybale', x, y));
+    place('pine', 70, 5, 6); place('maple', 71, 10, 6); place('ginkgo', 72, 0, 13);
+    place('townsign', 3, 9, 13, 3, 1);
+    [[33, 1], [38, 1], [43, 1], [33, 8], [38, 8], [43, 8]].forEach(([x, y]) => place('greenhouse', 0, x, y, 4, 2));
+    arrive = terminalAt(place, spot, 34, 12);
+    [[17, 3], [25, 10], [4, 22], [14, 29], [24, 23], [43, 30]].forEach(([x, y]) => deco('scarecrow', x, y));
+    for (const x of [4, 12, 20, 26, 46]) { place('lamp', 0, x, 15); place('lamp', 0, x, 18); }
+    npc({ name: '농부 이씨', look: { ...DEFAULT_LOOK, color: '#f7efe0', hat: { shape: 'cap', color: '#c9951c' } }, lines: [
+      '어서 와, 여기는 들판 마을 누리벌이야. 나라에서 쌀이 제일 많이 나는 곳이지.',
+      '봄에 논에 물을 대고 모를 심어. 여름엔 벼가 푸르게 자라고, 가을이 되면 논이 금빛으로 바뀌어.',
+      '비가 너무 안 오면 가뭄이 들고, 너무 많이 오면 벼가 쓰러져. 그런 해에는 쌀값이 오르지.',
+      '수로 건너 비닐하우스에서는 겨울에도 채소를 키워.',
+    ] }, 20, 8);
+  });
+  return Object.assign(sc, { start: arrive, marks: NURIBEOL.marks, zdir: NURIBEOL.zdir, region: '누리벌' });
+}
+
 const SCENES = {
   // 튜토리얼 공간(처음 서는 곳): 가로 40칸 × 세로 24칸 잔디밭 + 가운데 주택(가로 6칸 × 세로 3줄). 문 앞에서 E → 집 안
   // l 흙길: 현관에서 내려와 처음 서는 곳을 지나 왼쪽 끝까지. 왼쪽 끝 표지판 앞에서 E → 떠날지 묻고, 떠나면 다시 못 돌아옴
@@ -198,7 +325,7 @@ const SCENES = {
         [0, 3, 12].forEach((dx, k) => place('stall', k + 2, b.x0 + dx, b.y1 - 1, 3, 2));
         place('marketgate', 0, b.x0 + 6, b.y1, 6, 1, false);
       },
-      11: b => { for (let dx = 1; dx < 15; dx += 2) { if (hash(dx, 1, 7) < 0.75) place('car', Math.floor(hash(dx, 2, 7) * 4), b.x0 + dx, b.y0 + 1, 1, 2); if (hash(dx, 3, 7) < 0.6) place('car', Math.floor(hash(dx, 4, 7) * 4), b.x0 + dx, b.y0 + 4, 1, 2); } place('psign', 0, b.x0, b.y1); },   // 주차장: 차가 듬성듬성
+      11: b => { terminalAt(place, spot, b.x0 + 1, b.y1 - 2); [0, 1, 2].forEach(k => place('bus', k, b.x0 + 11 + k, b.y1 - 4, 1, 3)); },   // 고속버스터미널 + 서 있는 버스
       12: b => { place('office', 2, b.x0 + 1, b.y0 + 4, 6, 3); place('office', 3, b.x0 + 8, b.y0 + 4, 6, 3); place('bench', 0, b.x0 + 6, b.y0 + 7, 2, 1); },   // 회사 두 동 (대한건설·푸른식품)
       13: b => { place('office', 4, b.x0 + 2, b.y0 + 4, 6, 3); place('office', 5, b.x0 + 10, b.y0 + 4, 6, 3); place('bench', 0, b.x0 + 8, b.y0 + 7, 2, 1); },   // 회사 두 동 (별빛제약·바다해운)
       14: b => { place('gym', 0, b.x0 + 3, b.y0 + 2, 10, 3); place('hoop', 0, b.x1 - 1, b.y0 + 6); },   // 체육관 + 농구대
@@ -231,9 +358,10 @@ const SCENES = {
     // 대로 보도에 가로등: 6칸마다 (교차로·횡단보도·골목 근처는 비움)
     for (let x = 2; x < 80; x += 6) if ((x < 33 || x > 46) && !(x >= 14 && x <= 19) && !(x >= 60 && x <= 65)) { if (x !== 26) place('lamp', 0, x, 20); place('lamp', 0, x, 27); }   // (26, 20)은 회사 앞 벤치 자리라 비움
     for (let y = 2; y < 48; y += 6) if (y < 17 || y > 30) { place('lamp', 0, 36, y); place('lamp', 0, 43, y); }
-  }), { marks: CITY.marks, zdir: CITY.zdir }),
+  }), { marks: CITY.marks, zdir: CITY.zdir, region: '한가람' }),
   ...Object.fromEntries(HOME_LOTS.map((_, k) => ['h' + k, houseScene(k)])),   // 주택가 집 안 h0 ~ h5
   mart: martScene(),   // 마트 안
+  byeolha: byeolhaScene(), danbi: danbiScene(), nuribeol: nuribeolScene(),   // 다른 지역: 별하항(항구) · 단비(공업) · 누리벌(농촌)
   // 집 안: 가로 20칸 × 세로 12칸. w 벽지 벽(위 3줄), b 벽 윗면(테두리), f 나무 마루, r 러그, d 현관 매트(여기서 E → 밖으로)
   home: makeScene('home', [
     'wwwwwwwwwwwwwwwwwwww',
@@ -308,7 +436,7 @@ const GRASS = {   // [바탕, 풀결 어두운 색, 풀결 밝은 색, 풀 무�
   melt: ['#a8a07a', '#8f8762', '#bdb592', '#857c58'],
   snow: ['#eef2f8', '#d6dfec', '#ffffff', '#c9d4e4'],
 };
-const SEASONAL_TILES = 'gl';   // 계절 모습이 있는 바닥
+const SEASONAL_TILES = 'glav';   // 계절 모습이 있는 바닥 (잔디·흙길·논·밭)
 function tileImage(tx, ty) {
   const k = tileAt(tx, ty);
   if (k === null) return null;
@@ -319,9 +447,10 @@ function tileImage(tx, ty) {
   const zdir = (k === 'Z' && SCENE.zdir?.get(tx + ',' + ty)) || '';
   // 집 안: 벽지는 맨 위·맨 아래 줄(몰딩·걸레받이), 러그는 가장자리, 벽 윗면은 안쪽 방향이 그림에 들어감
   const nb = ch => [tileAt(tx, ty - 1) !== ch, tileAt(tx, ty + 1) !== ch, tileAt(tx - 1, ty) !== ch, tileAt(tx + 1, ty) !== ch].map(Number).join('');
+  const edge = test => [[0, -1], [0, 1], [-1, 0], [1, 0]].map(([dx, dy]) => { const n = tileAt(tx + dx, ty + dy); return +(n !== null && test(n)); }).join('');   // 물·논·부두: 위·아래·왼쪽·오른쪽 이웃이 조건에 맞으면 1 (맵 밖은 0)
   const grassy = (dx, dy) => +(tileAt(tx + dx, ty + dy) === 'g');   // 흙길: 잔디와 닿는 쪽만 가장자리(맵 끝으로는 그대로 이어짐)
   const inner = k === 'w' ? (tileAt(tx, ty + 1) !== 'w' ? 'base' : tileAt(tx, ty - 1) !== 'w' ? 'top' : '') : k === 'r' ? nb('r') : k === 'b' ? nb('b')
-    : k === 'l' ? [grassy(0, -1), grassy(0, 1), grassy(-1, 0), grassy(1, 0)].join('') : '';
+    : k === 'l' ? [grassy(0, -1), grassy(0, 1), grassy(-1, 0), grassy(1, 0)].join('') : k === 'S' ? edge(n => n !== 'S') : k === 'a' ? edge(n => n !== 'a') : k === 'o' ? edge(n => n === 'S') : '';
   const look = SEASONAL_TILES.includes(k) ? GROUND_LOOK : '';
   const key = [k, v, curb, marks.join('+'), zdir, inner, look].join('|');
   if (tileCache.has(key)) return tileCache.get(key);
@@ -423,6 +552,54 @@ function tileImage(tx, ty) {
     box(0, 0, TILE, TILE, '#55555e');
     for (const [px, py] of [[7, 9], [21, 18], [12, 26]]) box(px, py, 1, 1, '#61616a');
     box(0, 0, 2, TILE, WHITE); if (tileAt(tx + 1, ty) !== 'p') box(TILE - 2, 0, 2, TILE, WHITE);   // 주차 칸 흰 선
+  } else if (k === 'S') {   // 물(바다·수로): 파란 물 + 물결, 땅과 닿는 쪽은 하얀 물거품
+    box(0, 0, TILE, TILE, '#3f86c8');
+    for (let i = 0; i < 3; i++) { const x = Math.floor(hash(tx, ty, i + 70) * 22), y = 4 + i * 10 + Math.floor(hash(tx, ty, i + 80) * 4); box(x, y, 8, 1, '#6aa8de'); box(x + 2, y + 1, 5, 1, '#5698d4'); }
+    const [up, down, left, right] = [...inner].map(Number);
+    if (up) { box(0, 0, TILE, 3, '#d9eef9'); box(0, 3, TILE, 1, '#9fcbee'); }
+    if (down) { box(0, TILE - 3, TILE, 3, '#d9eef9'); box(0, TILE - 4, TILE, 1, '#9fcbee'); }
+    if (left) { box(0, 0, 3, TILE, '#d9eef9'); box(3, 0, 1, TILE, '#9fcbee'); }
+    if (right) { box(TILE - 3, 0, 3, TILE, '#d9eef9'); box(TILE - 4, 0, 1, TILE, '#9fcbee'); }
+  } else if (k === 'n') {   // 모래사장: 밝은 모래 + 알갱이, 가끔 조개껍데기
+    box(0, 0, TILE, TILE, '#ead39c');
+    for (let i = 0; i < 8; i++) box(Math.floor(hash(tx, ty, i + 90) * 30), Math.floor(hash(tx, ty, i + 100) * 30), 2, 1, i % 2 ? '#d9bf82' : '#f4e3b5');
+    if (v === 2) { box(20, 18, 4, 3, '#f7efe6'); box(21, 19, 2, 1, '#e8a6a0'); }
+  } else if (k === 'o') {   // 나무 부두: 세로 널빤지 + 못, 물 쪽 가장자리엔 기둥 그림자
+    box(0, 0, TILE, TILE, '#a8774f');
+    for (let x = 0; x < TILE; x += 8) { box(x, 0, 1, TILE, '#7a5236'); box(x + 1, 0, 1, TILE, '#c99a62'); box(x + 3, (v * 5 + x) % 24 + 3, 2, 1, '#5a3a28'); }
+    const [up, down, left, right] = [...inner].map(Number);   // 1 = 물과 닿는 쪽
+    if (left) box(0, 0, 3, TILE, '#5a3a28');
+    if (right) box(TILE - 3, 0, 3, TILE, '#5a3a28');
+    if (down) box(0, TILE - 3, TILE, 3, '#5a3a28');
+  } else if (k === 'c') {   // 공장 마당 콘크리트: 회색 판 + 이음줄 + 기름 얼룩
+    box(0, 0, TILE, TILE, '#b9bcc0'); box(0, 0, TILE, 1, '#a7abb0'); box(0, 0, 1, TILE, '#a7abb0'); box(16, 0, 1, TILE, '#aeb2b7');
+    if (v === 1) { box(8, 12, 9, 6, '#a3a7ac'); box(10, 11, 5, 8, '#a3a7ac'); }
+    if (v === 4) for (let i = 0; i < 3; i++) box(20 + i * 3, 22, 2, 2, '#c9ccd0');
+  } else if (k === 'a') {   // 논: 계절마다 (봄 물 대고 모내기 · 여름 푸른 벼 · 가을 누런 벼 · 겨울 그루터기 · 눈) + 논둑
+    const L = { spring: ['#7ab8d8', '#7fbf5a', '#5a9a4e'], summer: ['#5aa63c', '#6fbf4a', '#4a8f30'], autumn: ['#d9b440', '#ecc858', '#b8902a'],
+      winter: ['#a89a6a', '#8a7a4a', '#bdb08a'], melt: ['#a89a6a', '#8a7a4a', '#eef2f8'], snow: ['#eef2f8', '#c9b08a', '#ffffff'] }[look] || ['#5aa63c', '#6fbf4a', '#4a8f30'];
+    box(0, 0, TILE, TILE, L[0]);
+    for (let y = 3; y < TILE; y += 6) for (let x = 2 + (y % 12 ? 0 : 3); x < TILE - 1; x += 6) {
+      if (look === 'spring') { box(x, y, 1, 2, L[1]); box(x + 1, y, 1, 1, L[2]); }   // 모
+      else if (look === 'summer' || look === 'autumn') { box(x, y - 2, 3, 4, L[1]); box(x + 1, y + 1, 1, 2, L[2]); }   // 벼 포기
+      else box(x, y, 1, 2, L[1]);                                                                                   // 그루터기
+    }
+    if (look === 'melt' && v < 3) box(4 + v * 6, 10, 10, 5, L[2]);
+    const [up, down, left, right] = [...inner].map(Number);   // 논둑: 이웃이 논이 아니면 흙둑 + 풀
+    const dyke = look === 'snow' ? '#e2e6ee' : '#8a7a4a', top = look === 'snow' ? '#ffffff' : '#79b85f';
+    if (up) { box(0, 0, TILE, 3, dyke); box(0, 0, TILE, 1, top); }
+    if (down) box(0, TILE - 3, TILE, 3, dyke);
+    if (left) { box(0, 0, 3, TILE, dyke); box(0, 0, 1, TILE, top); }
+    if (right) box(TILE - 3, 0, 3, TILE, dyke);
+  } else if (k === 'v') {   // 밭: 갈색 고랑 줄 + 계절 작물 (봄 새싹 · 여름 배추 · 가을 배추·호박 · 겨울 빈 고랑 · 눈)
+    const snow = look === 'snow';
+    box(0, 0, TILE, TILE, snow ? '#eef2f8' : '#7a5236');
+    for (let y = 6; y < TILE; y += 8) { box(0, y, TILE, 3, snow ? '#d6dfec' : '#664530'); if (!snow) box(0, y - 1, TILE, 1, '#8a6040'); }
+    for (let y = 1; y < TILE; y += 8) for (let x = 3; x < TILE; x += 8) {
+      if (look === 'spring') { box(x + 1, y + 1, 2, 2, '#7fbf5a'); }
+      else if (look === 'summer' || (look === 'autumn' && (x + y + v) % 3)) { box(x, y, 6, 5, '#4a8f30'); box(x + 1, y, 4, 3, '#6fbf4a'); box(x + 2, y + 1, 2, 1, '#a6dc7a'); }
+      else if (look === 'autumn') { box(x, y + 1, 6, 4, '#c9682a'); box(x + 1, y + 1, 4, 1, '#e8873d'); box(x + 2, y, 1, 1, '#4a8f30'); }
+    }
   } else if (k === 'q') {   // 광장 돌바닥: 큰 회색 돌을 엇갈려 깜
     box(0, 0, TILE, TILE, '#b9b2a4');
     for (const [x, y, w] of [[0, 0, 20], [21, 0, 11], [0, 11, 9], [10, 11, 22], [0, 22, 15], [16, 22, 16]]) { box(x, y, w - 1, 10, '#d8d1c3'); box(x, y, w - 1, 1, '#e8e2d5'); }
@@ -457,7 +634,7 @@ function tileImage(tx, ty) {
 
 // ----- 그림자: 바닥을 다 그린 뒤, 물건보다 먼저 그림 (빛은 왼쪽 위) -----
 const SHADE = 'rgba(32, 26, 52, 0.22)';
-const BIG = new Set(['cafe', 'shop', 'villa', 'house', 'home', 'apt', 'office', 'school', 'hospital', 'bank', 'mart', 'gym']);
+const BIG = new Set(['cafe', 'shop', 'villa', 'house', 'home', 'apt', 'office', 'school', 'hospital', 'bank', 'mart', 'gym', 'terminal', 'fishmarket', 'factory', 'warehouse', 'barn']);
 // 밤에 불이 켜지는 곳: 물건 그림 안의 [x, y, 가로, 세로] (그림 칸 단위). 창문은 창살 사이 유리 네 칸씩
 // 바깥 하늘이 보이는 유리: 물건 그림 안의 [x, y, 가로, 세로] (집 안 창문은 창살 사이 네 칸) → 시간·날씨에 맞춰 색이 바뀜
 const SKY_GLASS = { wwin: [[6, 4, 9, 9], [17, 4, 9, 9], [6, 15, 9, 9], [17, 15, 9, 9]] };
@@ -1133,6 +1310,179 @@ const ARTS = {
     for (const [x, y] of [[1, 6], [13, 6], [1, 22], [13, 22]]) box(x, y, 2, 5, '#1f1f24');
     box(2, 2, 12, 29, INK); box(3, 3, 10, 27, '#f7f8fa'); box(3, 15, 10, 2, '#e8454b');
     box(4, 8, 8, 4, '#2f3b55'); box(6, 19, 4, 8, '#e8454b'); box(4, 21, 8, 4, '#e8454b'); box(5, 13, 3, 1, '#e8454b'); box(8, 13, 3, 1, '#3d7fd6');
+    return c;
+  },
+  // ===== 지역(별하항·단비·누리벌)과 터미널 그림 =====
+  terminal() {   // 고속버스터미널(가로 10칸): 파란 지붕 띠 · "고속버스터미널" 간판 · 양옆 유리창 · 가운데 유리문(바닥까지)
+    const W = 160, H = 72, t = bTools(W, H), { box } = t;
+    box(0, 4, W, 8, INK); box(1, 5, W - 2, 6, '#2f6fc6'); box(1, 5, W - 2, 1, '#6fa8ec');
+    t.wall(4, 12, W - 8, 56, '#eef1f5');
+    t.sign(36, 15, 88, '고속버스터미널', '#2f6fc6', '#ffffff');
+    for (const x of [12, 30, 118, 136]) t.glass(x, 36, 12, 16, '#bfe3f5', true);
+    box(56, 32, 48, 4, INK); box(57, 33, 46, 2, '#9aa3ad');                                                      // 현관 차양
+    t.glass(64, 38, 32, 29, '#bfe3f5', true); box(79, 38, 2, 29, '#9aa3ad');
+    t.base(68);
+    return t.c;
+  },
+  bus(v) {   // 버스 (위에서 본 모습, 세로 3칸)
+    const { c, box } = painter(16, 48), body = ['#2f6fc6', '#3f9a5a', '#e8a33d'][v % 3];
+    for (const y of [8, 36]) { box(0, y, 1, 6, '#1f1f24'); box(15, y, 1, 6, '#1f1f24'); }
+    box(1, 1, 14, 46, INK); box(2, 2, 12, 44, body); box(2, 2, 2, 44, shadeHex(body, 1.15)); box(12, 2, 2, 44, shadeHex(body, 0.8));
+    box(3, 2, 10, 4, '#2f3b55'); box(4, 3, 3, 1, '#8fb3de');                                                     // 앞유리
+    for (let y = 9; y < 42; y += 6) { box(2, y, 1, 4, '#bfe3f5'); box(13, y, 1, 4, '#bfe3f5'); }                // 옆 창
+    box(5, 16, 6, 12, '#d8dde3'); box(5, 16, 6, 1, '#ffffff');                                                    // 지붕 에어컨
+    box(3, 1, 2, 1, '#fff6cf'); box(11, 1, 2, 1, '#fff6cf'); box(3, 46, 2, 1, '#e8454b'); box(11, 46, 2, 1, '#e8454b');
+    return c;
+  },
+  boat(v) {   // 고깃배 (위에서 본 모습, 가로 2칸 × 세로 3칸): 뾰족한 뱃머리 · 흰 조타실 · 뒤쪽 초록 그물
+    const { c, box } = painter(32, 48), hull = ['#e8454b', '#3d7fd6', '#f2f2ee', '#2f9e5a'][v % 4];
+    for (let y = 1; y < 47; y++) {
+      const half = y < 16 ? Math.round(2 + y * 0.8) : 14;
+      box(16 - half, y, half * 2, 1, INK);
+      if (y > 1 && y < 46) { box(17 - half, y, half * 2 - 2, 1, hull); if (half > 3) box(19 - half, y, half * 2 - 6, 1, '#b98a5a'); }   // 뱃전 + 나무 갑판
+    }
+    box(10, 20, 12, 12, INK); box(11, 21, 10, 10, '#f7f7f2'); box(11, 21, 10, 2, '#ffffff'); box(13, 23, 6, 2, '#2f3b55');   // 조타실
+    box(15, 12, 2, 8, INK); box(17, 12, 5, 3, '#e8454b');                                                         // 깃대 + 깃발
+    box(7, 36, 18, 8, '#3f7a3a'); for (let x = 8; x < 24; x += 3) box(x, 37, 1, 6, '#5a9a4e');                    // 그물
+    box(4, 46, 24, 1, 'rgba(255,255,255,.6)');
+    return c;
+  },
+  fishmarket() {   // 수산시장(가로 14칸): 파란 줄무늬 둥근 지붕 · "별하수산시장" · 앞이 트인 가게 여섯(얼음 위 생선)
+    const W = 224, H = 80, t = bTools(W, H), { box } = t;
+    for (let y = 0; y < 18; y++) { const inset = Math.round(14 * (1 - y / 17) ** 2); box(inset, y + 2, W - inset * 2, 1, INK); if (y > 0) box(inset + 1, y + 2, W - inset * 2 - 2, 1, y % 4 < 2 ? '#3d7fd6' : '#5a90de'); }
+    t.wall(4, 20, W - 8, 54, '#eef1f5');
+    t.sign(64, 23, 96, '별하수산시장', '#ffffff', '#2f6fc6', '#2f6fc6');
+    const FISH = ['#9aa3ad', '#e8a33d', '#e8454b', '#7fb6e6', '#c9cfd6'];
+    for (let i = 0; i < 6; i++) {
+      const x = 10 + i * 35;
+      box(x - 1, 41, 32, 33, INK); box(x, 42, 30, 32, '#3a3a44'); t.lit(x, 42, 30, 14);                           // 가게 안 (밤엔 불빛)
+      for (let s = 0; s < 30; s += 6) box(x + s, 42, 3, 4, i % 2 ? '#3d7fd6' : '#e8454b'), box(x + s + 3, 42, 3, 4, '#ffffff');   // 차양
+      box(x, 60, 30, 14, '#c9cfd6'); box(x, 60, 30, 4, '#e8f6fd');                                                  // 얼음 진열대
+      for (let j = 0; j < 4; j++) { box(x + 2 + j * 7, 59, 5, 3, FISH[(i + j) % 5]); box(x + 6 + j * 7, 60, 1, 1, INK); }
+    }
+    t.base(74);
+    return t.c;
+  },
+  lighthouse() {   // 등대(가로 2칸): 빨강·흰 줄무늬 탑 · 꼭대기 불 켜지는 등실 · 아래 문
+    const { c, box, lit } = painter(32, 104);
+    for (let y = 18; y < 96; y++) { const h = Math.round(6 + (y - 18) * 0.05); box(15 - h, y, h * 2 + 2, 1, INK); box(16 - h, y, h * 2, 1, Math.floor((y - 18) / 12) % 2 ? '#e8454b' : '#f7f7f2'); box(16 + h - 3, y, 3, 1, 'rgba(0,0,0,.12)'); }
+    box(6, 16, 20, 3, INK); box(7, 17, 18, 1, '#9aa3ad');                                                          // 난간
+    box(9, 6, 14, 11, INK); box(10, 7, 12, 9, '#fff3b0'); box(15, 7, 2, 9, '#c9a62c'); lit(10, 7, 12, 9);          // 등실
+    box(10, 2, 12, 5, INK); box(11, 3, 10, 3, '#e8454b'); box(15, 0, 2, 2, INK);                                    // 지붕
+    box(13, 84, 6, 12, INK); box(14, 85, 4, 11, '#5a3a28');
+    box(4, 96, 24, 8, INK); box(5, 97, 22, 6, '#9aa3ad'); box(5, 97, 22, 1, '#c9cfd6');
+    return c;
+  },
+  fishcrate(v) {   // 생선 상자 (얼음 + 생선)
+    const { c, box } = painter(16, 12);
+    box(0, 2, 16, 10, INK); box(1, 3, 14, 8, ['#3d7fd6', '#e8454b', '#f2a03d'][v % 3]); box(2, 3, 12, 3, '#e8f6fd');
+    box(3, 3, 4, 2, '#9aa3ad'); box(9, 4, 4, 2, '#e8a33d'); box(1, 7, 14, 1, 'rgba(0,0,0,.18)');
+    return c;
+  },
+  factory(v) {   // 공장(가로 12칸): 톱니 지붕(채광창) · 높은 굴뚝 · 회사 이름 간판 · 큰 셔터 문 셋
+    const W = 192, H = 104, t = bTools(W, H), { box } = t;
+    const [name, wall, acc] = [['한빛전자 단비공장', '#dfe5ec', '#2f4a6b'], ['새봄화학 단비공장', '#efe6dc', '#6b2f2f']][v % 2];
+    box(164, 0, 16, 40, INK); box(165, 1, 14, 39, '#b9b2a4'); box(165, 1, 14, 4, '#e8454b'); box(165, 10, 14, 3, '#e8454b'); box(176, 1, 3, 39, '#9f988a');   // 굴뚝
+    for (let i = 0; i < 4; i++) {
+      const x = 4 + i * 40;
+      for (let r = 0; r < 20; r++) { const w = Math.round(36 * (r / 19)); box(x + 36 - w, 14 + r, w + 1, 1, INK); if (r > 0) box(x + 37 - w, 14 + r, Math.max(0, w - 1), 1, '#9aa3ad'); }
+      box(x + 36, 14, 4, 20, INK); box(x + 37, 15, 2, 19, '#bfe3f5');                                              // 채광창
+    }
+    t.wall(2, 34, W - 4, 66, wall); box(3, 35, W - 6, 4, acc);
+    t.sign(24, 42, 144, name, '#ffffff', acc, acc);
+    for (let x = 10; x < W - 12; x += 14) t.glass(x, 62, 10, 6, '#bfe3f5', hash(x, 62, v) < 0.5);
+    for (const x of [14, 76, 138]) { box(x, 73, 40, 27, INK); box(x + 1, 74, 38, 26, '#c9cfd6'); for (let y = 77; y < 100; y += 3) box(x + 1, y, 38, 1, '#aeb5be'); box(x + 1, 74, 38, 2, '#f2c94c'); }   // 셔터 문
+    t.base(100);
+    return t.c;
+  },
+  chemtank(v) {   // 화학 저장 탱크(가로 3칸): 둥근 흰 탱크 · 회사 색 띠 · 사다리
+    const { c, box } = painter(48, 60);
+    for (let r = 0; r < 9; r++) { const h = Math.round(19 * Math.sqrt(1 - ((8 - r) / 9) ** 2)); box(24 - h - 1, 4 + r, h * 2 + 2, 1, INK); box(24 - h, 4 + r, h * 2, 1, '#ffffff'); }
+    box(4, 12, 40, 44, INK); box(5, 12, 38, 43, '#f1f1ee'); box(34, 12, 9, 43, '#d8d8d2');
+    box(5, 28, 38, 5, ['#6b2f2f', '#2f4a6b'][v % 2]);
+    box(9, 13, 1, 42, INK); for (let y = 15; y < 54; y += 4) box(9, y, 4, 1, INK);
+    box(2, 54, 44, 6, INK); box(3, 55, 42, 4, '#9aa3ad');
+    return c;
+  },
+  containers(v) {   // 컨테이너 두 개 쌓음(가로 2칸)
+    const { c, box } = painter(32, 34), C = ['#e8454b', '#3d7fd6', '#2f9e5a', '#f2a03d'];
+    const one = (x, y, w, col) => { box(x, y, w, 14, INK); box(x + 1, y + 1, w - 2, 12, col); for (let i = x + 3; i < x + w - 2; i += 3) box(i, y + 1, 1, 12, shadeHex(col, 0.82)); box(x + 1, y + 1, w - 2, 1, shadeHex(col, 1.2)); };
+    one(0, 19, 32, C[v % 4]); one(2, 5, 28, C[(v + 2) % 4]);
+    return c;
+  },
+  truck(v) {   // 화물차 (위에서 본 모습, 세로 3칸): 앞 운전석 + 흰 짐칸
+    const { c, box } = painter(16, 48), cab = ['#2f6fc6', '#e8454b', '#3f9a5a'][v % 3];
+    for (const y of [6, 34, 40]) { box(0, y, 1, 5, '#1f1f24'); box(15, y, 1, 5, '#1f1f24'); }
+    box(2, 1, 12, 11, INK); box(3, 2, 10, 9, cab); box(4, 3, 8, 3, '#2f3b55');
+    box(1, 12, 14, 35, INK); box(2, 13, 12, 33, '#e6e9ec'); box(2, 13, 12, 1, '#ffffff'); box(2, 27, 12, 4, cab);
+    return c;
+  },
+  warehouse() {   // 물류창고(가로 8칸): 골함석 벽 · 주황 간판 · 셔터 둘
+    const W = 128, H = 64, t = bTools(W, H), { box } = t;
+    box(0, 4, W, 10, INK); box(1, 5, W - 2, 8, '#9aa3ad'); box(1, 5, W - 2, 2, '#c9cfd6');
+    t.wall(2, 14, W - 4, 46, '#c9cfd6'); for (let x = 5; x < W - 6; x += 4) box(x, 15, 1, 44, '#b8bec6');
+    t.sign(34, 18, 60, '물류창고', '#f2a03d', '#ffffff');
+    for (const x of [12, 76]) { box(x, 36, 40, 24, INK); box(x + 1, 37, 38, 23, '#e6e9ec'); for (let y = 40; y < 60; y += 3) box(x + 1, y, 38, 1, '#c9cfd6'); }
+    t.base(60);
+    return t.c;
+  },
+  barn() {   // 빨간 헛간(가로 5칸): 꺾인 지붕 · 흰 테두리 · X 무늬 큰 문 · 건초 창
+    const W = 80, H = 76, t = bTools(W, H), { box } = t;
+    for (let r = 0; r < 28; r++) { const h = r < 12 ? Math.round(12 + r * 1.8) : Math.round(33 + (r - 12) * 0.3); box(40 - h - 1, r + 2, h * 2 + 2, 1, INK); if (r > 0) box(40 - h, r + 2, h * 2, 1, r % 3 ? '#8a2f2a' : '#7a2824'); }
+    t.wall(4, 30, W - 8, 42, '#b5423a'); box(4, 30, W - 8, 2, '#ffffff');
+    box(34, 33, 12, 9, INK); box(35, 34, 10, 7, '#f2c94c'); t.lit(35, 34, 10, 7);                                 // 건초 창
+    box(24, 46, 32, 26, INK); box(25, 47, 30, 25, '#ffffff'); box(27, 49, 26, 23, '#b5423a');
+    for (let i = 0; i < 23; i++) { box(27 + Math.round(i * 26 / 23), 49 + i, 2, 1, '#ffffff'); box(51 - Math.round(i * 26 / 23), 49 + i, 2, 1, '#ffffff'); }
+    t.base(72, '#8a7a6a');
+    return t.c;
+  },
+  greenhouse() {   // 비닐하우스(가로 4칸): 둥근 흰 비닐 · 갈비뼈 같은 틀 · 안에 초록 작물
+    const { c, box } = painter(64, 40);
+    for (let r = 0; r <= 30; r++) {
+      const h = Math.round(31 * Math.sqrt(Math.max(0, 1 - ((30 - r) / 30) ** 2)));
+      box(32 - h - 1, 4 + r, h * 2 + 2, 1, INK); if (h > 1) box(32 - h, 4 + r, h * 2, 1, r > 18 ? '#cfe3c8' : '#eef3f5');
+    }
+    for (let x = 6; x < 60; x += 8) box(x, 8, 1, 26, '#c3ccd2');
+    for (let x = 4; x < 60; x += 5) box(x, 28, 3, 4, '#5a9a4e');
+    box(26, 22, 12, 13, INK); box(27, 23, 10, 12, '#4f7f45');
+    box(0, 35, 64, 5, '#8a6a4a');
+    return c;
+  },
+  silo() {   // 곡식 사일로(가로 2칸): 둥근 은빛 탑 · 띠 · 사다리
+    const { c, box } = painter(32, 84);
+    for (let r = 0; r < 8; r++) { const h = Math.round(12 * Math.sqrt(1 - ((7 - r) / 8) ** 2)); box(16 - h - 1, 2 + r, h * 2 + 2, 1, INK); box(16 - h, 2 + r, h * 2, 1, '#e6e9ec'); }
+    box(4, 10, 24, 70, INK); box(5, 10, 22, 69, '#c9cfd6'); box(21, 10, 6, 69, '#aeb5be');
+    for (let y = 18; y < 78; y += 10) box(5, y, 22, 1, '#9aa3ad');
+    box(8, 12, 1, 66, INK); for (let y = 14; y < 78; y += 4) box(8, y, 3, 1, INK);
+    box(2, 78, 28, 6, '#8a7a6a');
+    return c;
+  },
+  tractor() {   // 트랙터(옆모습, 가로 2칸)
+    const { c, box } = painter(32, 30);
+    box(14, 2, 12, 12, INK); box(15, 3, 10, 9, '#bfe3f5'); box(15, 3, 10, 2, '#e8f6fd');                       // 운전석
+    box(4, 12, 24, 9, INK); box(5, 13, 22, 7, '#3f9a3a'); box(5, 13, 22, 2, '#5ab84e'); box(7, 4, 2, 9, INK);     // 몸통 + 배기관
+    box(17, 15, 14, 14, INK); box(18, 16, 12, 12, '#2f2b38'); box(22, 20, 4, 4, '#f2c94c');                    // 뒷바퀴
+    box(2, 21, 9, 9, INK); box(3, 22, 7, 7, '#2f2b38'); box(5, 24, 3, 3, '#f2c94c');                            // 앞바퀴
+    return c;
+  },
+  haybale() {   // 곤포 사일리지(흰 비닐로 싼 볏짚 덩어리)
+    const { c, box } = painter(16, 14);
+    box(1, 1, 14, 13, INK); box(2, 2, 12, 11, '#f2f2ee'); box(2, 2, 12, 2, '#ffffff'); box(11, 2, 3, 11, '#d8d8d2');
+    return c;
+  },
+  scarecrow() {   // 허수아비
+    const { c, box } = painter(16, 32);
+    box(7, 8, 2, 24, '#8a5a3b'); box(1, 13, 14, 2, '#8a5a3b');
+    box(4, 11, 8, 10, INK); box(5, 12, 6, 8, '#d8443f');
+    box(4, 2, 8, 8, INK); box(5, 3, 6, 6, '#e8c58a'); box(6, 5, 1, 1, INK); box(9, 5, 1, 1, INK);
+    box(2, 0, 12, 3, INK); box(3, 1, 10, 1, '#c9951c');
+    return c;
+  },
+  townsign(v) {   // 지역 이름 나무 표지판(가로 3칸)
+    const { c, box, center } = painter(48, 34);
+    for (const x of [8, 37]) { box(x, 16, 3, 18, INK); box(x + 1, 16, 1, 18, '#8a5a3b'); }
+    box(0, 0, 48, 19, INK); box(1, 1, 46, 17, '#8a5a3b'); box(3, 3, 42, 13, '#f4e7c8');
+    center(REGION_NAMES[v] || '', 24, 4, '#4a2c18');
     return c;
   },
   fridgecase() {   // 음료 냉장고(가로 3칸): 은색 틀 + 유리문 셋 + 칸마다 색색 병

@@ -280,6 +280,29 @@ $hud('shopList').addEventListener('click', async e => {
   fillShop();
   ($hud('shopList').querySelector(`[data-buy="${btn.dataset.buy}"]:not(:disabled)`) || $hud('shopList').querySelector('button:not(:disabled)') || $hud('shopClose')).focus();
 });
+// ===== 고속버스 표 창: 행선지와 요금은 서버가 정함. 표를 사면 돈을 내고 그 지역 터미널 앞으로 (화면이 어두워졌다 밝아짐) =====
+let routes = [];
+function fillTravel(here) {
+  $hud('travelCash').textContent = won(me.cash || 0);
+  $hud('travelHere').textContent = '출발: ' + here;
+  $hud('travelList').innerHTML = routes.map(r => `<li><span><b>${r.name}</b><small>${COUNTRY.INFO[r.name] || ''}</small></span><span class="price">${won(r.fare)}원</span><button type="button" data-go="${r.name}" ${(me.cash || 0) < r.fare ? 'disabled' : ''}>가기</button></li>`).join('');
+}
+const post = (name, body) => fetch('/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(r => r.json()).catch(() => ({ ok: false, msg: '서버와 연결이 안 돼요.' }));
+document.addEventListener('travelopen', async () => {
+  const r = await post('routes');
+  if (!r.ok) { window.closeTravel(); return notify(r.msg); }
+  routes = r.routes; fillTravel(r.here); document.dispatchEvent(new Event('travelready'));
+});
+$hud('travelList').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-go]');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  const r = await post('travel', { to: btn.dataset.go });
+  if (!r.ok) { notify(r.msg); return fillTravel(SCENE.region || '한가람'); }
+  me.cash = r.cash; window.closeTravel();
+  notify(`${r.region}행 고속버스를 탔어요! (${won(r.fare)}원)`);
+  fade = { t0: performance.now(), sp: { to: r.place.scene, at: { x: r.place.x, y: r.place.y }, face: 's' }, done: false };
+});
 document.addEventListener('bagopen', () => {
   const c = $hud('invChar'), g = c.getContext('2d');
   g.clearRect(0, 0, c.width, c.height); g.drawImage(sprite(me.look, 's', 0), 0, 0);
@@ -368,6 +391,7 @@ function interact() {
   held.clear();
   if (sp.type === 'seat') return sitDown(sp);
   if (sp.type === 'shop') return window.openShop();   // 마트 점원 앞: 물건 사기 창
+  if (sp.type === 'terminal') return window.openTravel();   // 터미널 문 앞: 고속버스 표 사기 창
   if (sp.type === 'door') return void (fade = { t0: performance.now(), sp, done: false });
   if (sp.type === 'exit' && !me.basicUI) return notify('안내소에서 기본 UI를 받아야 한가람으로 갈 수 있어요!');   // 기본 UI 없이는 못 떠남
   if (sp.type === 'exit') return window.askLeave(() => { fade = { t0: performance.now(), sp, done: false }; });   // 튜토리얼 떠나기: 확인 창에서 "떠나기"를 골라야 감
@@ -516,7 +540,7 @@ function drawPrompt(sp, cam) {
   const who = sp.type === 'npc' || sp.type === 'shop' ? sp.npc : sp.type === 'exit' || sp.type === 'stand' ? me : null;
   const x = Math.round((who ? who.x : sp.px) * S - cam.x);
   const y = who ? Math.round(who.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8 - 32 : Math.round(sp.py * S - cam.y);
-  const label = { npc: '대화', shop: '물건 사기', exit: '한가람으로 떠나기', seat: '앉기', stand: '일어나기' }[sp.type] || (sp.out ? '나가기' : '들어가기');
+  const label = { npc: '대화', shop: '물건 사기', terminal: '표 사기', exit: '한가람으로 떠나기', seat: '앉기', stand: '일어나기' }[sp.type] || (sp.out ? '나가기' : '들어가기');
   ctx.font = '14px Galmuri14, "Malgun Gothic", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   const w = 26 + 6 + ctx.measureText(label).width + 10, viewW = cv.width / (devicePixelRatio || 1);
   const left = Math.max(8, Math.min(viewW - w - 8, x - Math.round(w / 2)));   // 화면 끝에서도 잘리지 않게
