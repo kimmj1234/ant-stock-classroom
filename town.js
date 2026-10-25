@@ -187,7 +187,7 @@ const SCENES = {
       3: b => { [0, 5, 10].forEach((dx, k) => place('cafe', k, b.x0 + dx, b.y0 + 3, 3, 2)); [1, 3, 6, 8, 11, 13].forEach((dx, k) => place('patio', k, b.x0 + dx, b.y0 + 6)); },   // 카페거리: 카페 셋 + 야외 파라솔 자리
       4: b => { place('school', 0, b.x0, b.y1 - 2, 10, 3); place('goal', 0, b.x0 + 11, b.y0 + 1, 3, 1); place('flagpole', 0, b.x0 + 10, b.y1); },   // 학교 + 운동장 골대 + 국기 게양대
       5: b => { place('office', 0, b.x0 + 1, b.y1 - 2, 6, 3); place('office', 1, b.x0 + 9, b.y1 - 2, 6, 3); place('bench', 0, b.x0 + 7, b.y1, 2, 1); },   // 회사 두 동
-      6: b => { place('hospital', 0, b.x0, b.y1 - 2, 9, 3); place('ambulance', 0, b.x0 + 11, b.y1 - 1, 1, 2); place('bench', 0, b.x0 + 13, b.y1, 2, 1); },   // 병원 + 구급차
+      6: b => { place('hospital', 0, b.x0, b.y1 - 2, 9, 3); place('bench', 0, b.x0 + 13, b.y1, 2, 1); },   // 병원 + 벤치
       8: b => { place('bank', 0, b.x0 + 1, b.y1 - 2, 8, 3); place('atm', 0, b.x0 + 11, b.y1); },   // 은행 + ATM
       9: b => {   // 마트 + 카트, 가운데 유리문 앞에서 E → 마트 안
         place('mart', 0, b.x0 + 1, b.y1 - 2, 12, 3); for (const dx of [14, 15]) place('cart', dx, b.x0 + dx, b.y1);
