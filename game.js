@@ -8,10 +8,10 @@ const SPEED = 240;                      // 화면에서 1초에 걷는 거리(px
 const me = { name: '', x: START.x, y: START.y, look: DEFAULT_LOOK, dir: 'se', left: false, moving: false };   // dir: 보는 방향(sprites.js의 s·se·e·ne·n), left: 좌우 뒤집기
 let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). 매 프레임 화면이 맵으로 꽉 차게 정함
 
-// ===== 게임 시간: 현실 1시간 = 게임 3시간 (현실 20초 = 게임 1분, 게임 하루 = 현실 8시간) — 모든 사람이 같은 세계 시간 =====
+// ===== 게임 시간: 현실 1시간 = 게임 하루 (현실 2.5초 = 게임 1분, 현실 30분 = 게임 12시간) — 모든 사람이 같은 세계 시간 =====
 // 서버가 정한 세계 시각을 접속할 때 받아서(/api/me의 world), 그 뒤로는 이 컴퓨터의 시계로 흘려 보냄 → 모두 같은 시각·날씨. 창을 열어도 멈추지 않음
 // 달력은 실제와 같음: 게임 하루 = 달력 하루, 1년 365일, 처음은 3월 1일 오전 8시. 계절은 달로 정함(봄 3~5월, 여름 6~8월, 가을 9~11월, 겨울 12~2월)
-const TIME_SPEED = 3;   // 현실 1초에 게임 3초 (달력·날씨·요일은 world.js)
+const TIME_SPEED = 24;   // 현실 1초에 게임 24초 (서버 WORLD_SPEED와 같음) (달력·날씨·요일은 world.js)
 const SEASONS = [['봄', '#f5a3b5'], ['여름', '#7ed36a'], ['가을', '#f2a03d'], ['겨울', '#bfe3f5']];
 // ===== 한국(서울) 같은 계절: 해 뜨고 지는 시각, 날씨, 기온 =====
 // 게임 날짜마다 "1년 중 며칠째"(1월 1일 = 0)를 구해서, 그날의 서울 해·날씨·기온을 씀. 게임 0일째 = 3월 1일(59)
@@ -35,7 +35,7 @@ const clock = { min: 480, base: 480, baseAt: 0, sent: '', ready: false };   // b
 function today(min) {
   const day = Math.floor(min / DAY), year = Math.floor(day / 365) + 1, [month, date] = monthDay(doyOf(day));
   const season = [3, 3, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3][month - 1];   // 1·2월 겨울, 3~5월 봄, 6~8월 여름, 9~11월 가을, 12월 겨울
-  const wx = weatherOf(day), m = Math.floor(min % DAY), h = Math.floor(m / 60);   // 시각은 1분 단위 (현실 20초마다 바뀜)
+  const wx = weatherOf(day), m = Math.floor(min % DAY), h = Math.floor(m / 60);   // 시각은 1분 단위 (현실 2.5초마다 바뀜)
   return {
     year, season, month, date, wx, ...sunTimes(day), weekday: WEEKDAYS[weekdayOf(day)],
     wxName: wx === 'rain' && JANGMA(doyOf(day)) ? '장마' : WX_NAME[wx],
@@ -1024,7 +1024,7 @@ function face(p, vx, vy) {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (clock.ready) clock.min = clock.base + (now - clock.baseAt) / 1000 * TIME_SPEED / 60;   // 세계 시간: 받은 시각 + 지난 현실 시간 × 3
+  if (clock.ready) clock.min = clock.base + (now - clock.baseAt) / 1000 * TIME_SPEED / 60;   // 세계 시간: 받은 시각 + 지난 현실 시간 × 24
   updateHud();
   // 계절마다 바뀌는 그림 (town.js): 나무, 잔디·흙길(눈 오는 날은 눈이 쌓이고, 다음 날까지 녹다 남은 눈)
   const td = today(clock.min), tday = Math.floor(clock.min / DAY);

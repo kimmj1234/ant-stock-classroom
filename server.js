@@ -154,11 +154,16 @@ const nameCheck = b => { const bad = nameProblem(b.name); return bad ? { ok: fal
 const AUTH = { login, google: googleLogin, googleName, nameCheck };   // 로그인 전에 부르는 API
 // ===== 세계 시간: 모든 사람이 같은 게임 시간을 씀 (서버가 정함) =====
 // 세계가 처음 열린 순간(epoch, 현실 시각)과 그때의 게임 시각(start = 3월 1일 08:00)을 data/world.json에 저장해 두고,
-// 지금 게임 시각 = start + 지난 현실 시간 × 3 (현실 20초 = 게임 1분). 서버가 꺼져 있어도 현실 시간을 따라 계속 흐름
+// 지금 게임 시각 = start + 지난 현실 시간 × 24 (현실 1시간 = 게임 하루, 현실 2.5초 = 게임 1분). 서버가 꺼져 있어도 현실 시간을 따라 계속 흐름
 const WORLD_FILE = path.join(DATA_DIR, 'world.json');
 const world = readJSONFile(WORLD_FILE) || { epoch: Date.now(), start: 480 };
 if (!fs.existsSync(WORLD_FILE)) writeJSONFile(WORLD_FILE, world);
-const worldMinutes = (t = Date.now()) => world.start + (t - world.epoch) * 3 / 60000;
+const WORLD_SPEED = 24;   // 현실 1초에 게임 24초 (게임 쪽은 game.js의 TIME_SPEED와 같아야 함)
+if ((world.speed || 3) !== WORLD_SPEED) {   // 빠르기를 바꾸면 지금 시각에서 이어서 흐르게 기준을 다시 잡음 (시각이 튀지 않음)
+  const t = Date.now(); world.start += (t - world.epoch) * (world.speed || 3) / 60000; world.epoch = t; world.speed = WORLD_SPEED;
+  writeJSONFile(WORLD_FILE, world);
+}
+const worldMinutes = (t = Date.now()) => world.start + (t - world.epoch) * WORLD_SPEED / 60000;
 
 // ===== 주식 시장 (economy.js): 2초마다 세계 시각까지 게임 분을 진행. 시세·뉴스는 data/market.json =====
 const { marketOpen, nextOpen } = require('./world.js');
