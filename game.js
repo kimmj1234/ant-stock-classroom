@@ -28,17 +28,19 @@ function today(min) {
   const m = Math.floor(min % DAY / 10) * 10, h = Math.floor(m / 60);
   return { year, season, date: day % SEASON_DAYS + 1, wx, time: `${h < 12 ? '오전' : '오후'} ${(h + 11) % 12 + 1}:${String(m % 60).padStart(2, '0')}` };
 }
-// 진행 저장: 게임 시간 + 서 있던 자리(장면·위치). 바뀐 게 있을 때만 보냄 → 새로고침해도 그 자리에서 이어서 시작
-const saveProgress = beacon => {
+// 진행 저장: 게임 시간 + 서 있던 자리(장면·위치). 바뀐 게 있을 때만 보냄 → 새로고침(F5)해도 그 자리에서 이어서 시작
+// 보내는 때: 걷다가 멈춘 순간, 문으로 장면을 바꾼 순간, 5초마다, 페이지를 떠나거나 탭을 가릴 때
+// keepalive: 새로고침·창 닫기로 페이지가 사라지는 중에도 요청이 끝까지 감
+const saveProgress = () => {
   if (!clock.ready) return;
   const body = JSON.stringify({ minutes: Math.floor(clock.min), place: { scene: SCENE.name, x: Math.round(me.x), y: Math.round(me.y) } });
   if (body === clock.sent) return;
   clock.sent = body;
-  if (beacon) navigator.sendBeacon('/api/progress', new Blob([body], { type: 'application/json' }));
-  else fetch('/api/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).catch(() => {});
+  fetch('/api/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
 };
-setInterval(saveProgress, 20000);
-addEventListener('pagehide', () => saveProgress(true));
+setInterval(saveProgress, 5000);
+addEventListener('pagehide', saveProgress);
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveProgress(); });
 
 // ===== 기본 UI 그림: 픽셀 아이콘 (글자 한 칸 = 픽셀 한 칸) =====
 const ICON_PAL = {
@@ -428,6 +430,7 @@ function frame(now) {
   let vx = busy ? 0 : stick.x + held.has('R') - held.has('L'), vy = busy ? 0 : stick.y + held.has('D') - held.has('U');
   const len = Math.hypot(vx, vy);
   if (len > 1) { vx /= len; vy /= len; }   // 대각선도 같은 빠르기
+  if (me.moving && len <= 0.1) saveProgress();   // 걷다가 멈추면 바로 저장
   me.moving = len > 0.1;
   if (me.moving) {
     face(me, vx, vy);
