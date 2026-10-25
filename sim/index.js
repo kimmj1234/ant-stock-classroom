@@ -9,8 +9,10 @@ const { createWork } = require('./work.js');
 const { createEvents } = require('./events.js');
 const { createSociety } = require('./society.js');
 const { REGIONS } = require('./data.js');
+const belief = require('./belief.js');
 
-function createSim({ file, read, write, toMarket = () => {}, quote = () => null, rumors = () => [] }) {
+function createSim({ file, read, write, toMarket = () => {}, quote = () => null, rumors = () => [], order = () => {}, hot = () => [] }) {
+  belief.connect({ quote, order, rumors, hot });   // 믿음·투자 모듈이 시세를 보고 주문을 냄
   const kernel = createKernel({ file, read, write });
   const people = createPeople(), work = createWork(), events = createEvents({ toMarket }), society = createSociety();
   // 사회 모듈 상태를 다른 모듈이 먼저 읽으므로 사회를 먼저 만들어 둠(init 순서), 매일 돌리는 순서는 사람 → 일 → 사건 → 사회

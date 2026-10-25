@@ -173,7 +173,7 @@ market.advance(worldMinutes());
 setInterval(() => market.advance(worldMinutes()), 2000);
 // ===== 세계 시뮬레이션 (sim/): 사람·일·사건·사회. 2초마다 세계 시각까지 진행(한 번에 최대 40ms), 지역·나라 사건은 주식 뉴스로도 =====
 const { createSim } = require('./sim/index.js');
-const sim = createSim({ file: path.join(DATA_DIR, 'sim.json'), read: readJSONFile, write: writeJSONFile, toMarket: (min, n) => market.ingest(min, n), quote: id => market.quote(id), rumors: () => market.rumors() });
+const sim = createSim({ file: path.join(DATA_DIR, 'sim.json'), read: readJSONFile, write: writeJSONFile, toMarket: (min, n) => market.ingest(min, n), quote: id => market.quote(id), rumors: () => market.rumors(), order: (id, won) => market.order(id, won), hot: () => market.hot() });
 sim.advance(worldMinutes());
 setInterval(() => { sim.advance(worldMinutes()); market.setMacro(sim.macro()); }, 2000);   // 회사 사정(직원 사기)·경기를 시장에 알려 줌 (실적·금리 계획의 근거)
 process.on('SIGINT', () => { sim.kernel.save(); process.exit(0); });   // 끌 때 마지막 상태 저장

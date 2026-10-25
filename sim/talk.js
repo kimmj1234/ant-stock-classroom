@@ -6,6 +6,7 @@ const { hash, weatherOf, DAY } = require('../world.js');
 const { OCC } = require('./data.js');
 const brain = require('./brain.js');
 const mind = require('./mind.js');
+const belief = require('./belief.js');
 
 const jong = s => { const c = s.charCodeAt(s.length - 1) - 0xac00; return c >= 0 && c <= 11171 ? c % 28 : 0; };
 const ro = s => s + (jong(s) && jong(s) !== 8 ? '으로' : '로'), eun = s => s + (jong(s) ? '은' : '는'), ira = s => s + (jong(s) ? '이' : '');
@@ -140,8 +141,10 @@ function makeTalk({ S, n, min, age, empName, ageOf, news, quote, met, doing, rum
     rumors.slice().sort((a, b) => a.release - b.release).filter((p, i) => hash(n.id, p.id, 62) < 0.6 || i === 0).slice(0, 2).forEach(p => { const l = reporterLine(p, p.kind === 'rate' ? (hash(n.id, p.id, 63) < 0.75 ? p.q : 0) : feel(p, 0.9), min); if (l) lines.push(l); });
   } else if (myCo && !kid) {
     const p = rumors.filter(p => p.co === myCo).sort((a, b) => a.release - b.release)[0];
-    if (p) lines.push(tone === 'blunt' && F(30) < 0.5 ? '회사 일은 함부로 말 못 해요. 보안이라서요.' : insiderLine(p, feel(p, 0.6), min));
+    if (p) lines.push(tone === 'blunt' && F(30) < 0.5 ? '회사 일은 함부로 말 못 해요. 보안이라서요.' : insiderLine(p, feel(p, 0.6), min) + (n.port?.[myCo] ? ' 그래서 저도 우리 회사 주식 좀 샀어요.' : ''));
   }
+  // 들은 소문(누구에게서·몇 다리) · 산 주식과 수익
+  if (!kid) for (const l of belief.talkLines(n, myCo)) lines.push(l);
   // 주제 (그 사람에게 맞는 것만, 순서는 사람마다 고정)
   const topics = [];
   if (job) topics.push(() => job.weather?.includes(wx) ? '오늘은 날씨 때문에 일을 공쳤어요. 그만큼 벌이도 줄었고요.' : n.stress > 70 ? '요즘 일이 너무 많아서 좀 지쳤어요.' : today(WORK[n.occ] || ['일은 그럭저럭 할 만해요.'], 3));

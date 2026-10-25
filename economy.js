@@ -90,13 +90,14 @@ const CONTRACTS = { 건설: '해외 공항 공사', 조선: '대형 화물선 �
 const BETA = { IT: 1.3, 게임: 1.4, 전자: 1.2, 금융: 1.1, 건설: 1.1, 통신: 0.6, 식품: 0.5, 관광: 0.9 };   // 시장 전체 분위기를 얼마나 따라가는지
 const BASE_INDEX = Object.fromEntries(COMPANIES.map(c => [c.id, c.price]));
 const clampQ = v => Math.max(-1, Math.min(1, v));
+const IMPACT = 400000000;   // 순매수 4억 원 ≈ 가격 +100% 압력 (400만 원 ≈ 1%)
 const RELEASE_AT = 10 * 60;   // 발표 시각 10:00 (실적은 장 열기 전 08:00)
 
 // ===== 상태 (data/market.json): 회사마다 지금 가격·전날 종가·오늘 시가·고가·저가·오늘 1분 가격들·지난 종가들 + 반영 중인 뉴스 + 뉴스 목록 =====
 function createMarket(file, read, write) {
   const fresh = () => ({ lastMin: null, stocks: Object.fromEntries(COMPANIES.map(c => [c.id, { price: c.price, prev: c.price, open: c.price, high: c.price, low: c.price, hist: [], daily: [] }])), pending: [], news: [] });
   const st = read(file) || fresh();
-  st.plans ||= []; st.planN ||= 1;
+  st.plans ||= []; st.planN ||= 1; st.flow ||= {}; st.dayFlow ||= {};   // NPC 주문: 아직 가격에 반영 안 된 돈 · 오늘 순매수
   let macro = { health: {}, demand: 1 };   // 세계 시뮬레이션이 알려 주는 회사 사정(직원 사기)·경기
   for (const c of COMPANIES) st.stocks[c.id] ||= fresh().stocks[c.id];   // 새로 상장한 회사
   let dirty = false, savedAt = 0;
@@ -124,13 +125,16 @@ function createMarket(file, read, write) {
   function runPlans(min) {
     for (const p of st.plans) {
       const c = BY_ID[p.co], v = Math.abs(p.q);
+      if (p.co && p.p0 == null) p.p0 = st.stocks[p.co].price;   // 계획이 생길 때 가격 (발표 날 기준)
       if (p.announce && !p.announced && min >= p.announce) { p.announced = true; p.bump = rand(1, 2.5); addNews(min, { text: `${c.name}, 이틀 뒤 ${eul(p.item)} 공개한다고 예고… 기대감`, fx: { [p.co]: p.bump } }); }
       if (p.done || min < p.release) continue;
       p.done = true;
-      const sell = (p.bump || 0) * 0.8;   // 예고 때 오른 만큼은 발표 날 빠짐
-      if (p.kind === 'product') addNews(min, { text: p.q > 0.4 ? `${c.name} ${p.item} 대박 조짐… 첫날 주문 폭주` : p.q > 0 ? `${c.name} ${p.item} 출시, 반응 무난` : p.q > -0.4 ? `${c.name} ${p.item} 출시했지만 반응 미지근` : `${c.name} ${p.item} 혹평 쏟아져… 실망 매물`, fx: { [p.co]: p.q * rand(7, 14) - sell }, up: p.q > 0 });
-      if (p.kind === 'contract') addNews(min, p.q > 0 ? { text: `${c.name}, ${p.item} 최종 성사`, fx: { [p.co]: rand(3, 8) * (0.5 + v) } } : { text: `${c.name} ${p.item} 협상 결국 무산`, fx: { [p.co]: -rand(3, 7) * (0.5 + v) } });
-      if (p.kind === 'earnings') addNews(min, { text: p.q > 0.4 ? `${c.name} 분기 실적 '깜짝 성적'… 시장 예상 크게 넘어` : p.q > 0.1 ? `${c.name} 분기 실적 예상보다 조금 좋아` : p.q > -0.1 ? `${c.name} 분기 실적 예상 수준` : p.q > -0.4 ? `${c.name} 분기 실적 기대에 조금 못 미쳐` : `${c.name} 분기 실적 '어닝 쇼크'… 이익 크게 줄어`, fx: { [p.co]: p.q * rand(5, 10) }, up: p.q >= 0 });
+      // 발표 날 주가는 "계획이 생길 때 가격 × 결과"로 다시 맞춰짐: 소문에 미리 오른(내린) 만큼은 되돌려짐 (거품이면 꺼짐)
+      const fair = v => ((p.p0 || st.stocks[p.co].price) * (1 + v / 100) / st.stocks[p.co].price - 1) * 100;
+      const sell = 0;
+      if (p.kind === 'product') addNews(min, { text: p.q > 0.4 ? `${c.name} ${p.item} 대박 조짐… 첫날 주문 폭주` : p.q > 0 ? `${c.name} ${p.item} 출시, 반응 무난` : p.q > -0.4 ? `${c.name} ${p.item} 출시했지만 반응 미지근` : `${c.name} ${p.item} 혹평 쏟아져… 실망 매물`, fx: { [p.co]: fair(p.q * rand(7, 14)) }, up: p.q > 0 });
+      if (p.kind === 'contract') addNews(min, p.q > 0 ? { text: `${c.name}, ${p.item} 최종 성사`, fx: { [p.co]: fair(rand(3, 8) * (0.5 + v)) }, up: true } : { text: `${c.name} ${p.item} 협상 결국 무산`, fx: { [p.co]: fair(-rand(3, 7) * (0.5 + v)) }, up: false });
+      if (p.kind === 'earnings') addNews(min, { text: p.q > 0.4 ? `${c.name} 분기 실적 '깜짝 성적'… 시장 예상 크게 넘어` : p.q > 0.1 ? `${c.name} 분기 실적 예상보다 조금 좋아` : p.q > -0.1 ? `${c.name} 분기 실적 예상 수준` : p.q > -0.4 ? `${c.name} 분기 실적 기대에 조금 못 미쳐` : `${c.name} 분기 실적 '어닝 쇼크'… 이익 크게 줄어`, fx: { [p.co]: fair(p.q * rand(5, 10)) }, up: p.q >= 0 });
       if (p.kind === 'rate') addNews(min, p.q > 0 ? { text: '한울은행, 기준금리 0.25%p 올려… 대출 부담 커져', fx: { '*': -1, 금융: 2.5, 건설: -2.5 }, up: false } : p.q < 0 ? { text: '한울은행, 기준금리 0.25%p 내려… 경기 살리기', fx: { '*': 1, 건설: 2.5, 금융: -1.5 }, up: true } : { text: '한울은행, 기준금리 동결', fx: {} });
     }
     st.plans = st.plans.filter(p => !p.done || min - p.release < DAY);
@@ -140,7 +144,10 @@ function createMarket(file, read, write) {
   function closeNews(min) {
     const idx = indexNow(), prev = st.idxPrev || idx, ch = (idx / prev - 1) * 100;
     const ups = COMPANIES.filter(c => st.stocks[c.id].price > st.stocks[c.id].prev).length, downs = COMPANIES.filter(c => st.stocks[c.id].price < st.stocks[c.id].prev).length;
-    st.news.unshift({ min, text: `[마감] 한울종합지수 ${idx.toFixed(1)} (${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%) · 오른 종목 ${ups}개, 내린 종목 ${downs}개`, ids: [], up: ch >= 0 });
+    const flows = Object.entries(st.dayFlow).sort((a, b) => b[1] - a[1]), man = v => `${Math.round(Math.abs(v) / 10000).toLocaleString()}만 원`;
+    const buyTop = flows[0]?.[1] > 100000 ? ` · 개인 순매수 1위 ${BY_ID[flows[0][0]].name}(${man(flows[0][1])})` : '', sellTop = flows.at(-1)?.[1] < -100000 ? ` · 순매도 1위 ${BY_ID[flows.at(-1)[0]].name}(${man(flows.at(-1)[1])})` : '';
+    st.news.unshift({ min, text: `[마감] 한울종합지수 ${idx.toFixed(1)} (${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%) · 오른 종목 ${ups}개, 내린 종목 ${downs}개${buyTop}${sellTop}`, ids: [], up: ch >= 0 });
+    st.dayFlow = {};
     st.news = st.news.slice(0, 40); st.idxPrev = idx;
   }
 
@@ -167,7 +174,8 @@ function createMarket(file, read, write) {
       }
       const len = MARKET_CLOSE - MARKET_OPEN, beta = BETA[c.sector] ?? 1;
       let r = gauss() * c.vol * 0.85 / 100 / Math.sqrt(len) + beta * (st.mood / 100 / len + common * 0.6 / 100 / Math.sqrt(len));   // 종목만의 흔들림 + 시장 전체를 따라감
-      for (const p of st.plans) if (p.co === c.id && !p.done && p.kind !== 'rate') r += p.q * 0.000014;   // 아는 사람들이 먼저 사고팖 (발표 전까지 q 방향으로 1~3%쯤)
+      const f = st.flow[c.id];
+      if (f) { const take = Math.abs(f) < 20000 ? f : f * 0.2; r += take / IMPACT * Math.sqrt(30000 / c.price); st.flow[c.id] -= take; if (Math.abs(st.flow[c.id]) < 1) delete st.flow[c.id]; }   // 사람들의 주문이 몇 분에 걸쳐 가격에 반영 (작은 회사일수록 크게)
       for (const p of st.pending) {
         if (p.id !== c.id) continue;
         const take = p.gap ? p.left * 0.5 : p.left / p.ticks;                                       // 장 닫혀 있을 때 난 뉴스: 장 열리자마자 절반
@@ -198,11 +206,15 @@ function createMarket(file, read, write) {
   // 아직 발표 안 된 계획 (NPC 대화에 씀 — 결과 q는 서버 밖으로 안 나감, 대화가 흐릿하게만 흘림)
   const rumors = () => st.plans.filter(p => !p.done).map(p => ({ id: p.id, co: p.co, name: BY_ID[p.co]?.name, kind: p.kind, item: p.item, q: p.q, release: p.release, announced: !!p.announced }));
   const setMacro = m => { macro = { ...macro, ...m }; };
+  // NPC(또는 사람)의 주문: won > 0 사기, < 0 팔기. 장이 열려 있을 때만 받음
+  const order = (id, won) => { if (!BY_ID[id] || !Number.isFinite(won)) return; st.flow[id] = (st.flow[id] || 0) + won; st.dayFlow[id] = (st.dayFlow[id] || 0) + won; dirty = true; };
+  // 오늘 많이 오른 종목 (따라 사기)
+  const hot = () => COMPANIES.filter(c => { const s = st.stocks[c.id]; return s.prev && s.price / s.prev > 1.08; }).map(c => c.id);
   const priceOf = id => st.stocks[id]?.price;
   // 바깥(세계 시뮬레이션)에서 온 뉴스: 영향은 ±10% 안으로만 받음 (한 사건이 시장을 뒤집지 않게)
   const ingest = (min, n) => { const fx = Object.fromEntries(Object.entries(n.fx).filter(([k]) => BY_ID[k] || inSector(k).length).map(([k, v]) => [k, Math.max(-10, Math.min(10, v))])); if (Object.keys(fx).length) { addNews(min, { text: n.text, fx }); dirty = true; } };
   const quote = id => { const c = BY_ID[id], s = st.stocks[id]; return c && s ? { name: c.name, price: s.price, prev: s.prev } : null; };   // 회사 하나의 지금 시세 (사람들 대화에 씀)
-  return { advance, view, priceOf, BY_ID, ingest, quote, rumors, setMacro };
+  return { advance, view, priceOf, BY_ID, ingest, quote, rumors, setMacro, order, hot };
 }
 
 module.exports = { createMarket, COMPANIES, BY_ID, tickOf };

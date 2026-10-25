@@ -10,7 +10,9 @@ const { DAY, weatherOf } = require('../world.js');
 const { REGIONS, OCC, SURNAMES, GIVEN1, GIVEN2, MICRO } = require('./data.js');
 const { makeTalk } = require('./talk.js');
 const brain = require('./brain.js');
-const mind = require('./mind.js');     // 마음: 감정·인생 목표·하루 계획(약속)   // 뇌: 먹을 것 고르기·날씨 반응·성향 (모든 판단을 한 구조로)
+const mind = require('./mind.js');
+const belief = require('./belief.js');   // 믿음·소문·투자
+const { marketOpen } = require('../world.js');     // 마음: 감정·인생 목표·하루 계획(약속)   // 뇌: 먹을 것 고르기·날씨 반응·성향 (모든 판단을 한 구조로)
 
 const OUTDOOR = new Set(['commute', 'walk', 'market', 'jobhunt', 'shop', 'cafe', 'eatOut', 'visit']);   // 맵에 걸어 다니는 모습으로 보이는 행동 (가게·카페·식당·친구 집은 '가는 중'으로)
 // 거리에서 보일 때의 이름 (가게 안이 아니라 가는 길이므로)
@@ -125,6 +127,10 @@ function createPeople() {
     applyAct(ctx, n, act, job, h);
     brain.weatherBody(ctx, n, se, OUTDOOR.has(act) || act === 'work' && OUT_WORK.has(job?.place), remember);   // 비·눈·추위에 몸이 반응
     if (plan && n.act === plan.act) mind.planDone(ctx, n, plan, remember);                 // 계획을 지킴
+    if (n.act === 'work') { belief.learn(ctx, n); belief.scoop(ctx, n); }                 // 일하면서 회사 일을 알게 됨 / 기자는 퍼진 소문을 기사로
+    if (plan?.with && plan.done) { belief.share(ctx, n, P[plan.with]); belief.share(ctx, P[plan.with], n); }   // 약속 자리에서 수다
+    if (h === 21 && n.act === 'home' && P[n.spouse]?.act === 'home') belief.share(ctx, n, P[n.spouse]);        // 저녁에 집에서 배우자에게
+    if (h === 9 + n.id % 6 && marketOpen(ctx.min)) belief.invest(ctx, n, age, remember);   // 하루 한 번 휴대폰으로 주식 확인
     mind.hourFeel(ctx, n, n.act, n.act === 'sleep');                                        // 감정: 가라앉고, 지금 처지로 새로 생김
     // 일 끝나는 시각: 하루 품삯 (그날 반 넘게 일했으면)
     if (job && h === job.to - 1 && n.worked >= (job.to - job.from) / 2) payday(ctx, n, job);
@@ -164,6 +170,7 @@ function createPeople() {
     const gain = 3 + (n.tr.a + other.tr.a) * 3 + ctx.rnd(ctx.min, n.id, 33) * 3;
     for (const [a, b] of [[n, other], [other, n]]) {
       a.friends[b.id] = Math.min(100, (a.friends[b.id] || 0) + gain); a.need.social += 10;
+      belief.share(ctx, a, b);   // 만나면 소문을 전함
       const ids = Object.keys(a.friends);
       if (ids.length > 10) delete a.friends[ids.reduce((x, y) => (a.friends[x] < a.friends[y] ? x : y))];
     }
@@ -179,11 +186,14 @@ function createPeople() {
   // ----- 하루에 한 번: 나이·삶의 사건(작은 일·병·승진·결혼·출생·죽음·이사) -----
   function dayOf(ctx) {
     const P = ctx.S.people, day = ctx.day, list = Object.values(P.list), byRegion = {};
+    const live = new Set(belief.liveIds());                                                  // 아직 발표 안 된 계획 (끝난 소문은 잊음)
+    if (P.heard) for (const id of Object.keys(P.heard)) if (!live.has(+id)) delete P.heard[id];
     for (const n of list) (byRegion[n.region] ||= []).push(n);
     for (const n of list) {
       const r = k => ctx.rnd(day, n.id, 40 + k), age = ageOf(n, day);
       lifeStage(n, day);
       mind.reviewGoal(ctx, n, age, remember, (amount, to) => ctx.ledger.move(acct(n.id), to, amount));
+      belief.daily(ctx, n, live);
       for (const id in n.friends) if (Number(id) !== n.spouse && (n.friends[id] -= 0.6) < 5) delete n.friends[id];   // 안 만나면 조금씩 멀어짐
       if ((day - n.born) % 365 === 0 && age > 0) remember(n, day, `${age}번째 생일이었다`, 8);
       n.health = ctx.clamp(n.health + (n.health < 100 ? 4 : 0), 0, 100, 80);
@@ -238,6 +248,7 @@ function createPeople() {
   }
   function die(ctx, n) {
     const P = ctx.S.people, heir = P.list[n.spouse] || n.kids.map(k => P.list[k]).find(Boolean);
+    belief.liquidate(ctx, n);                                                                  // 가진 주식은 팔아서 돈으로
     ctx.ledger.close(acct(n.id), heir ? acct(heir.id) : 'gov');   // 남은 돈은 배우자·자녀에게 (없으면 나라)
     for (const id of [n.spouse, ...n.kids, ...n.parents]) { const f = P.list[id]; if (f) remember(f, ctx.day, `${n.name}님을 떠나보냈다`, -30); }
     if (P.list[n.spouse]) P.list[n.spouse].spouse = null;
