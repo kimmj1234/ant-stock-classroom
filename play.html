@@ -52,6 +52,13 @@
   .guide .menu-list .danger:hover { background: #e8574f; }
   .menu-list p { margin: 0; font-size: 12px; text-align: center; }
   /* 메뉴 버튼 (작은 "☰"): 휴대폰·태블릿에만. ESC 키가 없으니 이것으로 메뉴를 엶 (PC는 ESC) */
+  /* Ctrl+W 경고창: 화면 위쪽 가운데, 노란 바탕 + 검은 계단 테두리 픽셀 띠 */
+  .ctrl-warn {
+    position: absolute; left: 50%; top: 22px; transform: translateX(-50%); z-index: 5; margin: 0; padding: 10px 18px; max-width: calc(100% - 48px); box-sizing: border-box;
+    background: #f2c94c; color: #000; font: 14px/1.5 Galmuri14, "Malgun Gothic", monospace; -webkit-font-smoothing: none; text-align: center; pointer-events: none;
+    box-shadow: 4px 0 #000, -4px 0 #000, 0 4px #000, 0 -4px #000, inset -4px -4px #c9a12c;
+  }
+  .ctrl-warn[hidden] { display: none; }
   .menu-btn { display: none; }
   .menu-btn {
     position: absolute; right: 18px; bottom: 18px; width: 36px; height: 36px; border: 0; background: #fff; color: #000; cursor: pointer;
@@ -76,6 +83,7 @@
   <div class="stick" id="stick" aria-hidden="true"><div class="knob" id="knob"></div></div>
   <button class="ebtn" id="ebtn" type="button" aria-label="상호작용">E</button>
   <button class="menu-btn" id="menuBtn" type="button" aria-label="메뉴 열기">☰</button>
+  <p class="ctrl-warn" id="ctrlWarn" role="alert" hidden>조심하세요! Ctrl + W를 누르면 창이 닫힐 수 있습니다!</p>
   <!-- 메뉴 창: ESC(또는 ☰)로 열고 닫음. 이용방법으로 조작 방법을 다시 볼 수 있음 -->
   <div class="guide-wrap" id="menuWrap" hidden>
     <section class="guide menu" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
@@ -127,11 +135,15 @@
   const guide = $('guideWrap'), ok = $('guideOk'), menu = $('menuWrap'), main = $('menuMain'), settings = $('menuSettings');
   const post = name => fetch('/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
 
-  // 실수로 나가기 막기: Ctrl+W·새로고침·창 닫기 직전에 브라우저의 "사이트에서 나가시겠습니까?" 확인 창을 띄움
-  // (Ctrl+W 자체는 브라우저가 웹페이지에 넘겨주지 않아서 완전히 막을 수는 없음). 메뉴로 일부러 나갈 때는 확인 없이
-  let leaving = false;
-  const leave = url => { leaving = true; location.assign(url); };
-  addEventListener('beforeunload', e => { if (!leaving && window.authState?.me) { e.preventDefault(); e.returnValue = ''; } });
+  const leave = url => location.assign(url);
+  // Ctrl+W 경고: Ctrl+W는 브라우저가 먼저 처리해서 게임이 W를 알 수 없음 → Ctrl(Mac은 ⌘)을 누르는 순간 미리 경고창을 띄움.
+  // 누르고 있는 동안 계속 보이고, 손을 떼면 2초 뒤 사라짐
+  const warn = $('ctrlWarn'), mac = /Mac|iPhone|iPad/.test(navigator.platform);
+  if (mac) warn.textContent = '조심하세요! ⌘ + W를 누르면 창이 닫힐 수 있습니다!';
+  let warnTimer = 0;
+  addEventListener('keydown', e => { if (e.key === (mac ? 'Meta' : 'Control')) { clearTimeout(warnTimer); warn.hidden = false; } }, true);
+  addEventListener('keyup', e => { if (e.key === (mac ? 'Meta' : 'Control')) warnTimer = setTimeout(() => { warn.hidden = true; }, 2000); }, true);
+  addEventListener('blur', () => { warnTimer = setTimeout(() => { warn.hidden = true; }, 2000); });
   // 화면 확대·축소 막기: Ctrl + 마우스 휠(터치패드 두 손가락 확대·축소 포함), Ctrl + +/−/0
   addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
   addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && ['+', '=', '-', '_', '0'].includes(e.key)) e.preventDefault(); }, true);
