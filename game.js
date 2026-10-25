@@ -288,22 +288,20 @@ async function loadMarket() {
   const latest = r.news[0] && r.news[0].min + r.news[0].text;
   if (phone.seen !== null && latest && latest !== phone.seen && $hud('phoneWrap').hidden) notify('[속보] ' + r.news[0].text);   // 휴대폰을 안 보고 있을 때 새 뉴스
   phone.seen = latest || '';
-  if (!$hud('phoneWrap').hidden) renderPhone();
+  if (!$hud('phoneWrap').hidden && phone.app === 'stock') renderPhone();
 }
 setInterval(() => { if (me.basicUI && online) loadMarket(); }, 15000);
-document.addEventListener('phoneopen', () => { renderPhone(); loadMarket(); });
-setInterval(() => { if (!$hud('phoneWrap').hidden) loadMarket(); }, 2000);
+document.addEventListener('phoneopen', () => { renderPhone(); if (phone.app === 'stock') loadMarket(); if (phone.app === 'job') loadJob(); });
+setInterval(() => { if (!$hud('phoneWrap').hidden && phone.app === 'stock') loadMarket(); }, 2000);
 
-function renderPhone() {
+function renderStock() {
   const d = phone.data, scr = $hud('phoneScreen');
-  document.querySelectorAll('.phone-tabs button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === phone.tab || (phone.tab === 'detail' && b.dataset.tab === 'list')));
   if (!d) { scr.innerHTML = '<p class="mk-empty">시세를 불러오는 중…</p>'; return; }
   const st = $hud('mkStatus'), nx = today(d.next);
   st.className = 'phone-status ' + (d.open ? 'open' : '');
   st.textContent = d.open ? '장 열림 · 15:30에 마감' : `장 마감 · 다음 개장 ${nx.month}월 ${nx.date}일 (${nx.weekday}) 09:00`;
   $hud('phoneClock').textContent = today(clock.min).time;
   if (phone.tab === 'detail') return renderDetail();
-  if (phone.tab === 'world') return renderWorld(scr);
   if (phone.tab === 'list') {
     scr.innerHTML = '<ul class="mk-list">' + d.stocks.map(s => {
       const ch = s.price - s.prev;
@@ -472,6 +470,129 @@ function renderWorld(scr) {
     <h3 class="mk-h">소식</h3><ul class="mk-news">${w.news.map(n => `<li><small>${whenOf(n.min)} · ${SC[n.scale] || ''}${n.region ? ' · ' + n.region : ''}</small>${n.text}</li>`).join('') || '<li>아직 소식이 없어요.</li>'}</ul>
     <h3 class="mk-h">세계 시스템</h3><p class="mk-sys">계산 ${w.health.lastMs}ms · 돈 합계 ${w.health.money ? '정상' : '확인 필요'}${w.health.checks.length ? '<br>' + w.health.checks.map(c => c.text).join('<br>') : ''}</p>`;
 }
+// ===== 휴대폰 앱: 홈 화면에서 앱을 고름 (앞으로 부동산·차량 앱도 여기에 더함) =====
+const APPS = {
+  stock: { name: '한울증권', color: '#d32f2f', mark: '▲', tabs: [['list', '시세'], ['mine', '내 주식'], ['news', '뉴스']] },
+  job: { name: '한울잡', color: '#2f9e5a', mark: '잡', tabs: [['posts', '구인'], ['myjob', '내 일'], ['pay', '급여']] },
+  world: { name: '세상', color: '#3d7fd6', mark: '◎', tabs: [['world', '세상']] },
+};
+function renderPhone() {
+  const scr = $hud('phoneScreen'), app = APPS[phone.app], nav = document.querySelector('.phone-tabs');
+  $hud('phoneTitle').textContent = app ? app.name : '휴대폰';
+  $hud('phoneHome').hidden = !app;
+  $hud('phoneClock').textContent = today(clock.min).time;
+  const tabs = app ? app.tabs : [];
+  nav.hidden = tabs.length < 2;
+  nav.style.gridTemplateColumns = `repeat(${tabs.length}, 1fr)`;
+  const want = tabs.map(t => t[0]).join();
+  if (nav.dataset.tabs !== want) { nav.dataset.tabs = want; nav.innerHTML = tabs.map(([k, label]) => `<button type="button" data-tab="${k}">${label}</button>`).join(''); }
+  nav.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === phone.tab || (phone.tab === 'detail' && b.dataset.tab === 'list')));
+  const st = $hud('mkStatus');
+  if (!app) { st.className = 'phone-status'; const t = today(clock.min); st.textContent = `${t.month}월 ${t.date}일 (${t.weekday}) ${t.wxName}`; return renderHome(scr); }
+  if (phone.app === 'job') return renderJob(scr, st);
+  if (phone.app === 'world') { st.className = 'phone-status'; st.textContent = '한울 나라 소식과 통계'; return renderWorld(scr); }
+  renderStock();
+}
+function renderHome(scr) {
+  scr.innerHTML = '<div class="ph-home">' + Object.entries(APPS).map(([k, a]) => `<button type="button" class="ph-app" data-app="${k}"><span class="ph-ico" style="background:${a.color}">${a.mark}</span>${a.name}</button>`).join('') + '</div>';
+}
+function openApp(k) {
+  phone.app = k; phone.tab = APPS[k].tabs[0][0];
+  if (k === 'stock') loadMarket(); if (k === 'job') loadJob(); if (k === 'world') loadSociety();
+  renderPhone();
+}
+
+// ===== 한울잡: 구인 공고 · 내 일 · 급여명세 / 출근 자리 켜기 / 근무 중 화면 / 알림 =====
+// 서버(jobs.js)가 정한 것만 보여 줌. 10초마다 내 일 상태와 새 알림(월급·결근·자동 퇴근…)을 받아 옴
+phone.app = null;
+function loadJob() {
+  if (!online || !me.basicUI) return;
+  return post('job').then(r => { if (r.ok) gotJob(r); });
+}
+function gotJob(r) {
+  phone.job = r;
+  if (r.cash != null) me.cash = r.cash;
+  // 내 일터의 출근 자리만 켬 (다른 일터 앞에는 "출근하기"가 안 뜸)
+  for (const sc of Object.values(SCENES)) for (const sp of sc.spots) if (sp.type === 'work') sp.off = !(r.job && r.job.key === sp.key);
+  setWorking(r.work, r.job);
+  (r.inbox || []).forEach((m, i) => setTimeout(() => notify(m.text), i * 2700));   // 새 알림을 차례로
+  if (!$hud('phoneWrap').hidden && phone.app === 'job') renderPhone();
+}
+setInterval(loadJob, 10000);
+document.addEventListener('auth', () => setTimeout(loadJob, 500));
+if (window.authState) setTimeout(loadJob, 1500);
+const hm = m => `${Math.floor(m / 60)}시간 ${Math.round(m % 60)}분`;
+const clockOf = min => today(min).time;
+function renderJob(scr, st) {
+  const r = phone.job;
+  if (!r) { scr.innerHTML = '<p class="mk-empty">불러오는 중…</p>'; return; }
+  const j = r.job;
+  st.className = 'phone-status' + (r.work ? ' open' : '');
+  st.textContent = r.work ? `근무 중 · ${j.name} (${clockOf(r.work.in)} 출근)` : j ? (j.next ? `다음 출근 ${today(j.next).month}월 ${today(j.next).date}일 (${today(j.next).weekday}) ${clockOf(j.next)} · ${j.where}` : '이번 주 근무 없음') : '일자리를 찾아보세요';
+  if (phone.tab === 'posts') {
+    scr.innerHTML = (j ? `<p class="mk-empty">지금은 ${j.name}에 다니고 있어요. 다른 곳에 가려면 "내 일"에서 그만둬야 해요.</p>` : '') + (r.postings?.length ? '<ul class="mk-list">' + r.postings.map(p => `<li class="job-row"><div><b>${p.name}</b> <small>${p.region} · ${p.where}</small></div>
+      <div class="job-meta"><span class="job-tag${p.part ? ' part' : ''}">${p.part ? '알바' : '정규직'}</span>${p.title} · ${p.hours} · ${p.days}</div>
+      <div class="job-meta"><b>${p.pay}</b> · 시급 ${won(p.hourly)}원 · 남은 자리 ${p.openings}</div>
+      <div class="job-meta ${p.ok ? '' : 'down'}">지원 조건: ${p.req}</div>
+      <button type="button" class="job-btn" data-apply="${p.emp}" ${!p.ok || j ? 'disabled' : ''}>지원하기</button></li>`).join('') + '</ul>' : '<p class="mk-empty">지금은 빈자리가 없어요.</p>');
+  } else if (phone.tab === 'myjob') {
+    if (!j) { scr.innerHTML = '<p class="mk-empty">아직 일자리가 없어요. "구인"에서 지원해 보세요.</p>'; return; }
+    const absent = (j.absentDays || []).length;
+    scr.innerHTML = `<div class="mk-sum job-sum"><span>일터</span><b>${j.name}</b><span>하는 일</span><b>${j.title} (${j.part ? '알바' : '정규직'})</b>
+      <span>출근 장소</span><b>${j.region} · ${j.where}</b><span>근무</span><b>${j.days} ${j.hours}</b><span>시급</span><b>${won(j.hourly)}원</b>
+      <span>급여</span><b>${j.payday}</b><span>이번에 일한 시간</span><b>${hm(j.worked)}</b><span>쌓인 급여(공제 전)</span><b>${won(j.earned)}원</b>
+      <span>지각 · 결근(30일)</span><b class="${absent ? 'down' : ''}">${j.late || 0}번 · ${absent}번${absent >= 2 ? ' ⚠' : ''}</b><span>동료</span><b>${(j.coworkers || []).join(', ') || '-'}</b></div>
+      <p class="job-note">근무 시간에 출근 장소 앞에서 <b>E 출근하기</b>. 한 시간 전부터 출근할 수 있고, 10분 넘게 늦으면 지각이에요. 30일 안에 결근 3번이면 해고돼요.</p>
+      <button type="button" class="job-btn quit" data-quit>그만두기</button>`;
+  } else {
+    const ps = (r.payslips || []).slice().reverse();
+    scr.innerHTML = ps.length ? '<ul class="mk-news">' + ps.map(p => `<li><small>${whenOf(p.min)} · ${p.name}</small><b>${p.label} ${won(p.net)}원</b><small>일한 시간 ${p.hours}시간 · 받은 돈 ${won(p.gross)}원 − 세금·보험 ${won(p.tax)}원 (${(p.rate * 100).toFixed(1)}%)</small></li>`).join('') + '</ul>' : '<p class="mk-empty">아직 받은 급여가 없어요. 정규직은 매달 25일, 알바는 매주 금요일에 들어와요.</p>';
+  }
+}
+$hud('phoneScreen').addEventListener('click', async e => {
+  const app = e.target.closest('[data-app]');
+  if (app) return openApp(app.dataset.app);
+  const ap = e.target.closest('[data-apply]');
+  if (ap) { ap.disabled = true; const r = await post('apply', { emp: +ap.dataset.apply }); notify(r.ok ? '취직했어요! "내 일"에서 출근 장소와 시간을 확인해요.' : r.msg); if (r.ok) { phone.tab = 'myjob'; gotJob({ ...r, inbox: [] }); loadJob(); } else ap.disabled = false; return; }
+  if (e.target.closest('[data-quit]')) { if (!confirm('정말 그만둘까요? 쌓인 급여는 바로 받아요.')) return; const r = await post('quitjob'); notify(r.ok ? '일을 그만뒀어요.' : r.msg); gotJob({ ...r }); loadJob(); }
+});
+$hud('phoneHome').addEventListener('click', () => { phone.app = null; renderPhone(); });
+
+// 근무 중: 캐릭터는 일터 안(안 보임) · 못 걸음 · 아래쪽에 근무 화면(일한 시간·쌓이는 급여·퇴근하기)
+function setWorking(work, job) {
+  const was = !!me.atWork;
+  me.atWork = !!work; me.work = work; me.job = job;
+  $hud('workWrap').hidden = !work;
+  if (work && !was && job && SCENE.name === job.scene) { me.x = job.x * TILE; me.y = job.y * TILE + 10; }   // 근무 중이면 일터 앞 (새로고침해도)
+  if (work && job) $hud('workTitle').textContent = `${job.name} · ${job.title}`;
+}
+function updateWorkPanel() {
+  if (!me.atWork || !me.job) return;
+  const j = me.job, mins = Math.max(0, Math.min(clock.min, j.end) - Math.max(me.work.in, j.start)), total = j.end - j.start;
+  $hud('workTime').textContent = `${clockOf(me.work.in)} 출근 · ${hm(mins)} 일함 · ${clockOf(j.end)} 퇴근`;
+  $hud('workPay').textContent = `오늘 ${won(Math.round(mins / 60 * j.hourly))}원 쌓임`;
+  $hud('workBar').style.width = Math.min(100, mins / total * 100) + '%';
+}
+$hud('workOut').addEventListener('click', async () => {
+  const r = await post('clockout');
+  notify(r.msg || '퇴근했어요.');
+  gotJob(r);
+});
+async function clockIn() {
+  const r = await post('clockin');
+  notify(r.msg);
+  if (r.ok) gotJob({ ...r, inbox: [] });
+}
+// 출근 알림: 다음 근무 30분 전·시작 시각에 (같은 근무는 한 번만)
+let remindKey = '';
+setInterval(() => {
+  const j = phone.job?.job;
+  if (!j || me.atWork || !j.next) return;
+  const left = j.next - clock.min, k = j.next + (left <= 0 ? 'go' : 'soon');
+  if (left <= 30 && left > 25 && remindKey !== k) { remindKey = k; notify(`30분 뒤 ${j.name} 출근이에요! (${j.where})`); }
+  if (left <= 0 && left > -5 && remindKey !== k) { remindKey = k; notify(`출근 시간이에요! ${j.where}로 가요.`); }
+}, 4000);
+setInterval(updateWorkPanel, 500);
 document.addEventListener('bagopen', () => {
   const c = $hud('invChar'), g = c.getContext('2d');
   g.clearRect(0, 0, c.width, c.height); g.drawImage(sprite(me.look, 's', 0), 0, 0);
@@ -562,7 +683,8 @@ function interact() {
   held.clear();
   if (sp.type === 'seat') return sitDown(sp);
   if (sp.type === 'shop') return window.openShop();   // 마트 점원 앞: 물건 사기 창
-  if (sp.type === 'terminal') return window.openTravel();   // 터미널 문 앞: 고속버스 표 사기 창
+  if (sp.type === 'terminal') return window.openTravel();
+  if (sp.type === 'work') return clockIn();   // 내 일터 앞: 출근하기   // 터미널 문 앞: 고속버스 표 사기 창
   if (sp.type === 'door') return void (fade = { t0: performance.now(), sp, done: false });
   if (sp.type === 'exit' && !me.basicUI) return notify('안내소에서 기본 UI를 받아야 한가람으로 갈 수 있어요!');   // 기본 UI 없이는 못 떠남
   if (sp.type === 'exit') return window.askLeave(() => { fade = { t0: performance.now(), sp, done: false }; });   // 튜토리얼 떠나기: 확인 창에서 "떠나기"를 골라야 감
@@ -719,7 +841,7 @@ function drawPrompt(sp, cam) {
   const who = sp.type === 'npc' || sp.type === 'shop' ? sp.npc : sp.type === 'exit' || sp.type === 'stand' ? me : null;
   const x = Math.round((who ? who.x : sp.px) * S - cam.x);
   const y = who ? Math.round(who.y * S - cam.y) - SPRITE.foot * S * SPRITE.scale - 8 - 32 - (who !== me ? 14 : 0) : Math.round(sp.py * S - cam.y);   // NPC는 꼬리표 위로
-  const label = { npc: '대화', shop: '물건 사기', terminal: '표 사기', exit: '한가람으로 떠나기', seat: '앉기', stand: '일어나기' }[sp.type] || (sp.out ? '나가기' : '들어가기');
+  const label = { npc: '대화', shop: '물건 사기', terminal: '표 사기', work: '출근하기', exit: '한가람으로 떠나기', seat: '앉기', stand: '일어나기' }[sp.type] || (sp.out ? '나가기' : '들어가기');
   ctx.font = '14px Galmuri14, "Malgun Gothic", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   const w = 26 + 6 + ctx.measureText(label).width + 10, viewW = cv.width / (devicePixelRatio || 1);
   const left = Math.max(8, Math.min(viewW - w - 8, x - Math.round(w / 2)));   // 화면 끝에서도 잘리지 않게
@@ -770,7 +892,7 @@ function drawOverSky(cam, now) {
     const x = p.x * S - cam.x, y = p.y * S - cam.y, r = [x - 8 * k, y - 17 * k, x + 8 * k, y + k];
     if (litRects.some(l => l[4] < footY(p) && r[0] < l[2] && r[2] > l[0] && r[1] < l[3] && r[3] > l[1])) again(p, 1);
   }
-  if (occluded(me, cam)) again(me, 0.55);
+  if (!me.atWork && occluded(me, cam)) again(me, 0.55);
 }
 // 그 사람의 몸 가운데·머리 자리가 발밑보다 앞(아래)에 서 있는 물건 그림(건물·나무)에 덮였는지
 function occluded(p, cam) {
@@ -912,7 +1034,7 @@ function frame(now) {
   // 장면 바꾸기: 다 어두워지면 장면을 바꾸고 문 앞(안이면 현관 매트 앞)에 섬 → 다시 밝아짐
   if (fade && !fade.done && now - fade.t0 >= FADE) { useScene(fade.sp.to); me.x = fade.sp.at.x; me.y = fade.sp.at.y; me.dir = fade.sp.face || (fade.sp.out ? 's' : 'n'); me.left = !!fade.sp.faceLeft; fade.done = true; saveProgress(); }   // 들어가면 위(안쪽), 나오면 아래를 봄
   if (fade && now - fade.t0 >= FADE * 2) fade = null;
-  const busy = fade || !talkBox.hidden || !document.getElementById('leaveWrap').hidden;   // 장면을 바꾸거나 대화하는 동안은 못 걸음
+  const busy = fade || !talkBox.hidden || !document.getElementById('leaveWrap').hidden || me.atWork;   // 근무 중에도 못 걸음   // 장면을 바꾸거나 대화하는 동안은 못 걸음
   let vx = busy ? 0 : stick.x + held.has('R') - held.has('L'), vy = busy ? 0 : stick.y + held.has('D') - held.has('U');
   if (me.sit) {   // 벤치: 앉아 있을 때 방향키를 누르면 일어남. 앉는 중·일어나는 중·앉아 있는 동안은 못 걸음
     if (me.sit.phase === 'on' && Math.hypot(vx, vy) > 0.1) standUp(now);
@@ -945,13 +1067,13 @@ function frame(now) {
   drawShadows(ctx, S, cam);   // 물건 그림자 (바닥 위, 물건 아래)
   // 건물·나무·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
   // 바닥 무늬(맨홀·주차 P)는 맨 먼저 → 무엇에든 가려짐
-  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), ...[...walkers.values()].map(w => ({ y: w.y, draw: () => drawPlayer(w, cam, now) })), ...[...others.values()].map(o => ({ y: o.sit ? o.sit.by + 1 : o.y, draw: () => drawPlayer(o, cam, now) })), { y: me.sit ? me.sit.sp.by + 1 : me.y, draw: () => drawPlayer(me, cam, now) }];   // 앉아 있으면 벤치보다 앞에 그림
+  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), ...[...walkers.values()].map(w => ({ y: w.y, draw: () => drawPlayer(w, cam, now) })), ...[...others.values()].map(o => ({ y: o.sit ? o.sit.by + 1 : o.y, draw: () => drawPlayer(o, cam, now) })), { y: me.sit ? me.sit.sp.by + 1 : me.y, draw: () => { if (!me.atWork) drawPlayer(me, cam, now); } }];   // 근무 중이면 일터 안이라 안 보임   // 앉아 있으면 벤치보다 앞에 그림
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
   drawClocks(cam);
   drawSky(cam, W, H, dt, now);
   drawOverSky(cam, now);
   // 이름표: 건물 뒤에 완전히 가려진 걷는 NPC는 이름표도 숨김 (다른 플레이어·나는 늘 보임)
-  NPCS.forEach(n => drawName(n, cam, true)); walkers.forEach(w => { if (!occluded(w, cam)) drawName(w, cam, true); }); others.forEach(o => drawName(o, cam)); drawName(me, cam);
+  NPCS.forEach(n => drawName(n, cam, true)); walkers.forEach(w => { if (!occluded(w, cam)) drawName(w, cam, true); }); others.forEach(o => drawName(o, cam)); if (!me.atWork) drawName(me, cam);
   const sp = !busy && (me.sit ? me.sit.phase === 'on' && { type: 'stand' } : nearSpot(me.x, me.y)), wk = !busy && !me.sit && nearWalker();
   if (wk && (!sp || Math.hypot(wk.x - me.x, wk.y - me.y) < Math.hypot(sp.x - me.x, sp.y - me.y))) drawPrompt({ type: 'npc', npc: wk }, cam);
   else if (sp) drawPrompt(sp, cam);

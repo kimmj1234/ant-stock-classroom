@@ -9,7 +9,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..');
 const stubCtx = new Proxy({}, { get: () => () => ({}) });
 const ctx = vm.createContext({ console, Math, Map, Set, document: { createElement: () => ({ getContext: () => stubCtx }) } });
-for (const f of ['world.js', 'sprites.js', 'town.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
+for (const f of ['world.js', 'workplaces.js', 'sprites.js', 'town.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 const { SCENES, TILE } = vm.runInContext('({ SCENES, TILE })', ctx);
 const ON_WATER = new Set(['boat']), BAD_GROUND = new Set(['R', 'Z', 'S']);
 let problems = 0;

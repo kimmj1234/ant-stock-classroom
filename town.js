@@ -427,6 +427,8 @@ const SCENES = {
     spot({ type: 'door', x: 10 * TILE, y: 11 * TILE + 16, px: 10 * TILE, py: 11 * TILE - 40, to: 'field', out: true, at: { x: 20 * TILE, y: 12 * TILE + 40 } });
   }),
 };
+// 출근 자리 (workplaces.js): 일터마다 건물 앞에 E 자리. 처음엔 꺼 두고(off) 내가 그 일터에 다닐 때만 켬 (game.js)
+for (const w of WORKPLACES) SCENES[w.scene].spots.push({ type: 'work', key: w.key, x: w.x * TILE, y: w.y * TILE + 10, px: w.x * TILE, py: w.y * TILE - 60, r: 40, off: true });
 function useScene(name) {
   SCENE = SCENES[name];
   ({ cols: COLS, rows: ROWS, ground: GROUND, things: THINGS, solid: SOLID, spots: SPOTS, npcs: NPCS, start: START } = SCENE);
@@ -440,7 +442,7 @@ const thingsAround = () => THINGS;
 // (x, y) 픽셀 근처(보통 30픽셀, NPC는 42픽셀 안)에 E로 할 수 있는 곳이 있으면 그중 가장 가까운 것
 function nearSpot(x, y) {
   let best = null, bd = Infinity;
-  for (const sp of SPOTS) { if (sp.taken || sp.othersOn) continue; const d = Math.hypot(sp.x - x, sp.y - y); if (d < (sp.r || 30) && d < bd) { bd = d; best = sp; } }   // 누가 앉은 자리는 빼고
+  for (const sp of SPOTS) { if (sp.taken || sp.othersOn || sp.off) continue; const d = Math.hypot(sp.x - x, sp.y - y); if (d < (sp.r || 30) && d < bd) { bd = d; best = sp; } }   // 누가 앉은 자리는 빼고
   return best;
 }
 

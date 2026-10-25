@@ -48,6 +48,20 @@ function createSim({ file, read, write, toMarket = () => {}, quote = () => null 
         health: { checks: kernel.state.health.slice(0, 5), lastMs: kernel.runtime.lastMs, deferred: kernel.runtime.deferred, money: kernel.ledger.total() === kernel.state.total0 },
       };
     },
+    // ----- 플레이어 일자리 (server jobs.js가 씀) -----
+    // 일터 목록: 지금 직원 수(NPC + 플레이어)와 자리 수
+    employers() {
+      const W = S().work, count = {};
+      for (const n of Object.values(S().people.list)) if (n.emp) count[n.emp] = (count[n.emp] || 0) + 1;
+      return Object.values(W.emps).map(e => ({ id: e.id, key: e.key, name: e.name, region: e.region, occ: e.occ, company: e.company, cap: e.cap, staff: (count[e.id] || 0) + (e.players?.length || 0), morale: Math.round(e.morale) }));
+    },
+    // 플레이어를 일터 직원으로 넣고 빼기 (who = 계정)
+    hirePlayer(empId, who) { const e = S().work.emps[empId]; if (!e) return false; e.players = [...new Set([...(e.players || []), who])]; return true; },
+    firePlayer(empId, who) { const e = S().work.emps[empId]; if (e) e.players = (e.players || []).filter(p => p !== who); },
+    // 플레이어 월급: 그 일터 돈에서 나감(세계 경제와 맞물림). 일터 돈이 모자라도 플레이어는 받음(나머지는 바깥에서 — 돈 합계는 그대로)
+    payPlayer(empId, amount) { const ok = kernel.ledger.move('e:' + empId, 'ext', amount); return ok; },
+    // 같은 일터 NPC 동료 몇 명 (이름)
+    coworkers(empId, n = 3) { return Object.values(S().people.list).filter(p => p.emp === empId).slice(0, n).map(p => p.name); },
     kernel,
   };
   function ctxLite(min) { return { min, day: Math.floor(min / DAY), t: min % DAY, S: S(), rnd: kernel.rnd, clamp: kernel.clamp, emit: kernel.emit, ledger: kernel.ledger }; }

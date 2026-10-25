@@ -16,7 +16,7 @@ const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');   // 로그인 쿠�
 const FILES = {
   '/': 'home.html', '/site.css': 'site.css', '/site.js': 'site.js', '/wordmark.css': 'wordmark.css',
   '/logo.svg': 'assets/logo.svg',                 // 브라우저 탭 아이콘: 픽셀 하트 두 개
-  '/play': 'play.html', '/game.js': 'game.js', '/sprites.js': 'sprites.js', '/town.js': 'town.js', '/country.js': 'country.js', '/world.js': 'world.js',     // 게임 화면 (로그인한 사람만, 안 했으면 화면이 메인으로 보냄)
+  '/play': 'play.html', '/game.js': 'game.js', '/sprites.js': 'sprites.js', '/town.js': 'town.js', '/country.js': 'country.js', '/world.js': 'world.js', '/workplaces.js': 'workplaces.js',     // 게임 화면 (로그인한 사람만, 안 했으면 화면이 메인으로 보냄)
 };
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml' };
 
@@ -210,6 +210,16 @@ const TUTORIAL_SCENES = ['field', 'home'];   // 튜토리얼 공간: 떠난 계�
 // 접속한 사람마다(로그인 세션마다) 마지막 자리를 메모리에 두고, 각자 자리를 알릴 때(/api/move, 0.15초마다) 답장으로 같은 장면에 있는 다른 사람 목록을 돌려줌.
 // (계속 열어 두는 실시간 연결은 인터넷 주소(Cloudflare 터널)가 중간에 모아 두는 바람에 늦게 와서, 보통 요청·답장으로 바꿈)
 // 들어오는 값은 모두 검사(장면 이름·좌표 범위·방향·차림 글자 모양)하고, 5초 동안 소식이 없으면 지움
+// ===== 내 일자리 (jobs.js): 세계 시뮬레이션 일터에 취직 · 출퇴근 · 급여 =====
+const { createJobs } = require('./jobs.js');
+const { WORKPLACES } = require('./workplaces.js');
+const jobs = createJobs({ accounts, sim, lifeOf });
+jobs.restore();
+setInterval(() => {
+  const now = worldMinutes(); let any = false;
+  for (const a of Object.values(accounts)) if (a.job) { jobs.settle(a, now); any = true; }
+  if (any) writeJSONFile(ACCOUNTS_FILE, accounts);
+}, 20000);
 const online = new Map();    // 세션 토큰 해시 → { id(무작위), name, look, scene, x, y, dir, left, moving, seat, t }
 const LOOK_DIRS = ['s', 'se', 'e', 'ne', 'n'];
 const okColor = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
@@ -298,6 +308,21 @@ http.createServer(async (req, res) => {
       // person: 누가 말을 걸었는지(key)도 넘겨 NPC가 그 사람을 기억함
       if (name === 'person') { const t = Number.isInteger(b.id) && sim.talk(b.id, now, key); return t ? json(res, 200, { ok: true, ...t }) : json(res, 404, { ok: false, msg: '그 사람은 지금 없어요.' }); }
       return json(res, 200, { ok: true, ...sim.society() });
+    }
+    if (['job', 'apply', 'quitjob', 'clockin', 'clockout'].includes(name)) {   // 일자리: job = 내 일·구인 공고·새 알림 / apply { emp } / quitjob / clockin / clockout
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      const a = accounts[key], now = worldMinutes();
+      jobs.settle(a, now);
+      let r = { ok: true };
+      if (name === 'apply') r = jobs.apply(a, key, b.emp, now);
+      if (name === 'quitjob') r = jobs.quit(a, now);
+      if (name === 'clockin') {   // 출근은 일터 앞에 서 있을 때만 (마지막으로 알린 자리로 확인)
+        const wp = a.job && WORKPLACES.find(w => w.key === a.job.key), me = online.get(tokenHash(tokenOf(req)));
+        r = !wp ? { ok: false, msg: '다니는 일터가 없어요.' } : !me || me.scene !== wp.scene || Math.hypot(me.x - wp.x * 32, me.y - wp.y * 32) > 120 ? { ok: false, msg: `일터 앞에서 출근해야 해요. (${wp.where})` } : jobs.clockIn(a, now);
+      }
+      if (name === 'clockout') r = jobs.clockOut(a, now, false);
+      if (name !== 'job') writeJSONFile(ACCOUNTS_FILE, accounts);
+      return json(res, 200, { ...r, ...jobs.view(a, now), postings: name === 'job' ? jobs.postings(a, lifeOf(a).region) : undefined, inbox: jobs.takeInbox(a), cash: lifeOf(a).cash, stats: lifeOf(a).stats });
     }
     if (name === 'market') {   // 시세판: 장 열림 여부 · 다음 개장 · 회사별 시세 · 뉴스 · 내 돈과 가진 주식
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });

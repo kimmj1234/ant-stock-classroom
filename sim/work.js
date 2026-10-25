@@ -22,7 +22,7 @@ function createWork() {
     const W = { emps: {}, local: {}, next: 1 };
     const add = (region, occ, cap, name, company) => {
       const key = `${region}:${name}`, ex = Object.values(W.emps).find(e => e.key === key && e.occ === occ);
-      if (ex) { ex.cap += cap; return ex; }
+      if (ex) { ex.cap += Math.max(1, Math.round(cap)); return ex; }
       const e = { id: W.next++, key, region, occ, cap: Math.max(1, Math.round(cap)), name, company: company || null, gov: !!OCC[occ].gov, morale: 70 };
       W.emps[e.id] = e; ctx.ledger.open('e:' + e.id, e.cap * OCC[occ].wage * 20);   // 처음 운영 자금: 품삯 20일치
       return e;
@@ -47,6 +47,7 @@ function createWork() {
   const staffOf = (ctx, W) => {   // 일터별 지금 직원 수 (사람 쪽 emp가 기준)
     const c = {};
     for (const n of Object.values(ctx.S.people.list)) if (n.emp) c[n.emp] = (c[n.emp] || 0) + 1;
+    for (const e of Object.values(W.emps)) if (e.players?.length) c[e.id] = (c[e.id] || 0) + e.players.length;   // 플레이어 직원도 자리를 차지
     return c;
   };
   // 채용: 지역마다 빈자리 ↔ 구직자. 실력(skill)+성실(c) 높은 사람부터. 자기 지역에 자리가 없으면 가끔 다른 지역으로 이사해서 지원

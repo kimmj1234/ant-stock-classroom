@@ -137,7 +137,36 @@
   .phone-status { padding: 6px 14px; font-size: 13px; background: #e9e7f0; color: #4a4560; }
   .phone-status.open { background: #ffe8e6; color: #c62828; }
   .phone-screen { overflow-y: auto; }
-  .phone-tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 3px solid #1e1b3a; }
+  .phone-tabs { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 3px solid #1e1b3a; }
+  .phone-tabs[hidden] { display: none; }
+  /* 휴대폰 홈 화면: 앱 아이콘 */
+  .ph-home { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 8px; padding: 26px 14px; }
+  .ph-app { display: grid; justify-items: center; gap: 6px; border: 0; background: none; color: #1e1b3a; font: inherit; font-size: 13px; cursor: pointer; }
+  .ph-ico { display: grid; place-items: center; width: 54px; height: 54px; color: #fff; font: 22px/1 Galmuri11, monospace; box-shadow: 3px 0 #1e1b3a, -3px 0 #1e1b3a, 0 3px #1e1b3a, 0 -3px #1e1b3a, inset -4px -4px rgba(0, 0, 0, .25); }
+  .ph-app:hover .ph-ico { filter: brightness(1.1); }
+  /* 한울잡 */
+  .job-row { display: grid; gap: 3px; padding: 11px 14px; border-bottom: 1px solid #ddd9e6; }
+  .job-row small { color: #6a6680; font-size: 12px; }
+  .job-meta { font-size: 13px; color: #4a4560; }
+  .job-tag { display: inline-block; margin-right: 6px; padding: 0 6px; background: #2f6fc6; color: #fff; font-size: 12px; }
+  .job-tag.part { background: #f2a03d; }
+  .job-btn { justify-self: start; margin-top: 4px; padding: 7px 14px; border: 0; background: #2f9e5a; color: #fff; font: inherit; cursor: pointer; box-shadow: inset -3px -3px rgba(0, 0, 0, .25); }
+  .job-btn:disabled { opacity: .4; cursor: default; }
+  .job-btn.quit { margin: 0 14px 16px; background: #a8302c; }
+  .job-note { margin: 0 14px 12px; color: #4a4560; font-size: 13px; }
+  .job-sum { grid-template-columns: auto 1fr; font-size: 13px; }
+  .job-sum span { white-space: nowrap; color: #6a6680; }
+  .job-sum b { text-align: right; }
+  /* 근무 중 화면 (아래 가운데, 게임은 계속 보임) */
+  .work-wrap { position: absolute; left: 50%; bottom: 22px; z-index: 4; transform: translateX(-50%); }
+  .work-wrap[hidden] { display: none; }
+  .work { display: grid; gap: 6px; min-width: 300px; padding: 12px 18px; background: #fff; color: #000; font: 16px/1.4 Galmuri9, Galmuri14, monospace;
+    box-shadow: 3px 0 #000, -3px 0 #000, 0 3px #000, 0 -3px #000, inset -3px -3px #b8b8b8; }
+  .work b { font: 18px Galmuri11, monospace; }
+  .work-bar { height: 10px; background: #e9e7f0; box-shadow: 0 0 0 2px #1e1b3a; }
+  .work-bar i { display: block; height: 100%; width: 0; background: #2f9e5a; }
+  .work button { justify-self: end; padding: 6px 14px; border: 0; background: #1e1b3a; color: #fff; font: inherit; cursor: pointer; }
+  .work button:focus-visible { outline: 3px dashed #f2c94c; outline-offset: 3px; }
   .phone-tabs button { padding: 11px 0; border: 0; background: #fff; color: #1e1b3a; font: inherit; cursor: pointer; }
   .phone-tabs button[aria-pressed=true] { background: #1e1b3a; color: #fff; }
   .phone button:focus-visible, .phone input:focus-visible { outline: 3px dashed #f2c94c; outline-offset: -3px; }
@@ -322,11 +351,15 @@
   <!-- 휴대폰: 왼쪽 아래 휴대폰이나 P로 열고, P·ESC·×로 닫음. 주식 앱 "한울증권" (game.js가 채움) -->
   <div class="phone-wrap" id="phoneWrap" hidden>
     <section class="phone" role="dialog" aria-modal="true" aria-labelledby="phoneTitle">
-      <div class="phone-bar"><span id="phoneClock">09:00</span><b id="phoneTitle">한울증권</b><button type="button" id="phoneClose" aria-label="휴대폰 닫기">×</button></div>
+      <div class="phone-bar"><button type="button" id="phoneHome" aria-label="홈 화면으로" hidden>◀</button><span id="phoneClock">09:00</span><b id="phoneTitle">휴대폰</b><button type="button" id="phoneClose" aria-label="휴대폰 닫기">×</button></div>
       <div class="phone-status" id="mkStatus">시세를 불러오는 중…</div>
       <div class="phone-screen" id="phoneScreen"></div>
-      <nav class="phone-tabs" aria-label="주식 앱 메뉴"><button type="button" data-tab="list" aria-pressed="true">시세</button><button type="button" data-tab="mine" aria-pressed="false">내 주식</button><button type="button" data-tab="news" aria-pressed="false">뉴스</button><button type="button" data-tab="world" aria-pressed="false">세상</button></nav>
+      <nav class="phone-tabs" aria-label="앱 메뉴" hidden></nav>
     </section>
+  </div>
+  <!-- 근무 중: 일터에서 일하는 동안 아래 가운데 (일한 시간·쌓이는 급여·퇴근하기) -->
+  <div class="work-wrap" id="workWrap" hidden>
+    <section class="work" aria-live="polite"><span>근무 중</span><b id="workTitle"></b><div class="work-bar"><i id="workBar"></i></div><span id="workTime"></span><span id="workPay"></span><button type="button" id="workOut">퇴근하기</button></section>
   </div>
   <!-- 전국 지도 창: 오른쪽 아래 지도나 M으로 열고, M·ESC·닫기로 닫음 -->
   <div class="guide-wrap" id="mapWrap" hidden>
@@ -432,6 +465,7 @@
 </main>
 <script src="/site.js"></script>
 <script src="/world.js"></script>
+<script src="/workplaces.js"></script>
 <script src="/sprites.js"></script>
 <script src="/town.js"></script>
 <script src="/country.js"></script>
