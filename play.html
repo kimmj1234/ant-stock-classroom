@@ -117,6 +117,7 @@
       <div class="menu-list" id="menuMain">
         <button type="button" class="primary" data-act="resume">게임으로 돌아가기</button>
         <button type="button" data-act="guide">이용방법</button>
+        <button type="button" data-act="screen" id="screenBtn">전체 화면</button>
         <button type="button" data-act="settings">설정</button>
         <button type="button" data-act="home">홈페이지로 이동</button>
         <button type="button" class="danger" data-act="logout">로그아웃</button>
@@ -170,6 +171,7 @@
   const startWrap = $('startWrap'), closeWrap = $('closeWrap'), warn = $('ctrlWarn'), warnText = $('ctrlWarnText');
   let pendingGuide = false;   // 시작 창이 떠 있는 동안 처음 안내 창은 미뤄 둠
   let closing = false;        // "예"를 눌러 창 닫기를 고른 뒤
+  let byMenu = false;         // 메뉴의 "기본 화면"으로 일부러 창 모드로 바꿈 → 안내 띠를 띄우지 않음
   const enterFullscreen = async () => {
     try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch {}
     try { await navigator.keyboard?.lock(); } catch {}   // 모든 키를 게임이 먼저 받음(전체화면일 때만 됨)
@@ -185,8 +187,9 @@
   // 전체화면이 풀리면(ESC 길게 등) 위쪽에 안내 띠, 다시 들어가면 숨김
   const showWarn = (text, button) => { warnText.textContent = text; $('fsBack').textContent = button; warn.hidden = false; };
   document.addEventListener('fullscreenchange', () => {
-    if (document.fullscreenElement) { warn.hidden = true; closing = false; }
-    else if (!touch && startWrap.hidden && !closing) showWarn('창 모드에서는 Ctrl + W를 막을 수 없어요', '전체화면으로');
+    if (document.fullscreenElement) { warn.hidden = true; closing = false; byMenu = false; }
+    else if (!touch && startWrap.hidden && !closing && !byMenu) showWarn('창 모드에서는 Ctrl + W를 막을 수 없어요', '전체화면으로');
+    $('screenBtn').textContent = document.fullscreenElement ? '기본 화면' : '전체 화면';
   });
   $('fsBack').addEventListener('click', () => { closing = false; enterFullscreen(); game.focus(); });
   // 확인 창: 예 → 웹페이지는 창을 직접 닫을 수 없어서 전체화면·키 잠금을 풀고 "한 번 더 누르면 닫힘" 안내 / 아니오 → 게임으로
@@ -228,13 +231,22 @@
     $('menuTitle').textContent = list === main ? '나의 두번째 인생' : '설정';
     list.querySelector('button').focus();
   };
-  const openMenu = () => { menu.hidden = false; page(main); };
+  const openMenu = () => { menu.hidden = false; $('screenBtn').textContent = document.fullscreenElement ? '기본 화면' : '전체 화면'; page(main); };
   const closeMenu = () => { menu.hidden = true; game.focus(); };
   const ACTS = {
     resume: closeMenu,
     settings: () => page(settings),
     back: () => page(main),
     guide: () => { menu.hidden = true; fromMenu = true; openGuide(); },
+    // 전체 화면 ↔ 기본 화면: 전체화면이면 키 잠금을 풀고 창 모드로, 아니면 전체화면 + 키 잠금(누른 순간이라 브라우저가 허락함)
+    screen: async () => {
+      closeMenu();
+      if (document.fullscreenElement) {
+        byMenu = true;
+        try { navigator.keyboard?.unlock(); } catch {}
+        try { await document.exitFullscreen(); } catch {}
+      } else { byMenu = false; warn.hidden = true; await enterFullscreen(); }
+    },
     home: () => leave('/'),
     logout: async () => { await post('logout').catch(() => {}); leave('/'); },
   };
