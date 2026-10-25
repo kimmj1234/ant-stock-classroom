@@ -51,7 +51,8 @@
   .guide .menu-list .danger { background: #d8443f; color: #fff; box-shadow: 3px 0 #000, -3px 0 #000, 0 3px #000, 0 -3px #000, inset -3px -3px #a8302c; }
   .guide .menu-list .danger:hover { background: #e8574f; }
   .menu-list p { margin: 0; font-size: 12px; text-align: center; }
-  /* 메뉴 버튼 (오른쪽 아래 작은 "☰", 휴대폰은 ESC 키가 없으니 이것으로) */
+  /* 메뉴 버튼 (작은 "☰"): 휴대폰·태블릿에만. ESC 키가 없으니 이것으로 메뉴를 엶 (PC는 ESC) */
+  .menu-btn { display: none; }
   .menu-btn {
     position: absolute; right: 18px; bottom: 18px; width: 36px; height: 36px; border: 0; background: #fff; color: #000; cursor: pointer;
     font: 16px Galmuri14, monospace; box-shadow: 3px 0 #000, -3px 0 #000, 0 3px #000, 0 -3px #000, inset -3px -3px #b8b8b8;
@@ -62,7 +63,7 @@
   .stick, .ebtn { display: none; }
   @media (pointer: coarse) {
     .guide .keyboard { display: none; } .guide .touch { display: grid; }   /* 안내 창: 키보드 대신 조이스틱·E 버튼 설명 */
-    .menu-btn { right: 28px; bottom: auto; top: 18px; }
+    .menu-btn { display: block; right: 28px; bottom: auto; top: 18px; }
     .stick { display: block; position: absolute; left: 24px; bottom: 24px; width: 120px; height: 120px; border-radius: 50%; background: rgba(0, 0, 0, .12); border: 3px solid #000; touch-action: none; }
     .knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: #000; }
     .ebtn { display: grid; place-items: center; position: absolute; right: 28px; bottom: 40px; width: 76px; height: 76px; border-radius: 50%; border: 3px solid #000; background: #fff; font: bold 28px sans-serif; color: #000; touch-action: none; }
