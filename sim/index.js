@@ -10,7 +10,7 @@ const { createEvents } = require('./events.js');
 const { createSociety } = require('./society.js');
 const { REGIONS } = require('./data.js');
 
-function createSim({ file, read, write, toMarket = () => {} }) {
+function createSim({ file, read, write, toMarket = () => {}, quote = () => null }) {
   const kernel = createKernel({ file, read, write });
   const people = createPeople(), work = createWork(), events = createEvents({ toMarket }), society = createSociety();
   // 사회 모듈 상태를 다른 모듈이 먼저 읽으므로 사회를 먼저 만들어 둠(init 순서), 매일 돌리는 순서는 사람 → 일 → 사건 → 사회
@@ -35,7 +35,7 @@ function createSim({ file, read, write, toMarket = () => {} }) {
       const n = S().people.list[id];
       if (!n) return null;
       const near = kernel.state.news.filter(x => x.region === n.region || x.scale !== 'local').slice(0, 4), news = near[id % Math.max(1, near.length)];   // 사람마다 들은 소문이 다름
-      return people.talk(S(), id, nowMin, news?.text);
+      return people.talk(S(), id, nowMin, news?.text, quote);
     },
     // 휴대폰 "세상" 탭: 나라 통계 · 지역별 · 사건 소식 · 시스템 건강
     society() {

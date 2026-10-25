@@ -7,14 +7,15 @@ const { weatherOf } = require('../world.js');
 const { REGIONS, OCC, COMMON_JOBS } = require('./data.js');
 
 // 상장 회사 일터 (economy.js의 회사와 연결) — 주가 뉴스의 근거가 됨
-const COMPANY_EMP = {
-  한가람: [['hanbit', '한빛전자 본사', 'office'], ['nuri', '누리소프트', 'dev'], ['daehan', '대한건설', 'builder'], ['pureun', '푸른식품 본사', 'office'],
-    ['byeolbit', '별빛제약 본사', 'researcher'], ['bada', '바다해운 본사', 'office'], ['haneul', '하늘항공 본사', 'office'], ['saebom', '새봄화학 본사', 'office']],
-  단비: [['hanbit', '한빛전자 단비공장', 'factory'], ['saebom', '새봄화학 단비공장', 'factory'], ['bada', '바다해운 물류센터', 'trucker']],
-  별하항: [['byeolhafish', '별하수산', 'fisher']], 누리벌: [['nurigrain', '누리곡산', 'farmer']], 마루: [['byeolbit', '별빛제약 연구소', 'researcher'], ['nuri', '누리소프트 연구소', 'dev']],
-  아라항: [['bada', '바다해운 아라항 부두', 'docker']],
+const COMPANY_EMP = {   // 지역 → [회사 아이디, 일터 이름, 직업]
+  한가람: [['hanulbank', '한울금융', 'banker'], ['nuri', '누리소프트', 'dev'], ['daehan', '대한건설', 'builder'], ['garamstore', '가람유통', 'office'],
+    ['hanulgames', '한울게임즈', 'dev'], ['hanultel', '한울통신', 'office'], ['haneul', '하늘항공', 'office'], ['hanulmedia', '한울방송', 'office']],
+  단비: [['hanbit', '한빛전자 본사·공장', 'factory'], ['saebom', '새봄화학 본사·공장', 'factory']],
+  별하항: [['byeolhafish', '별하수산', 'fisher']], 누리벌: [['nurigrain', '누리곡산', 'farmer']], 마루: [['byeolbit', '별빛제약 본사·연구소', 'researcher'], ['nuri', '누리소프트 연구소', 'dev']],
+  아라항: [['bada', '바다해운 부두', 'docker'], ['bada', '바다해운 본사', 'office']], 푸른들: [['pureun', '푸른식품', 'farmer']],
+  은빛포: [['eunbit', '은빛조선', 'shipbuilder']], 바람골: [['baram', '바람에너지', 'engineer']], 솔내: [['solnae', '솔내광업', 'miner']], 늘봄: [['neulbom', '늘봄리조트', 'hotel']],
 };
-const PLACE_NAME = { clerk: '마트', barista: '카페', cook: '식당', teacher: '학교', nurse: '병원', doctor: '병원', driver: '버스', civil: '시청', vendor: '전통시장', banker: '한울은행', hotel: '리조트', farmer: '농장', fisher: '선단', forester: '산림조합', miner: '광업소', shipbuilder: '조선소', engineer: '풍력발전소', docker: '부두', saltworker: '염전', office: '상사' };
+const PLACE_NAME = { trucker: '물류센터', clerk: '마트', barista: '카페', cook: '식당', teacher: '학교', nurse: '병원', doctor: '병원', driver: '버스', civil: '시청', vendor: '전통시장', banker: '한울은행', hotel: '리조트', farmer: '농장', fisher: '선단', forester: '산림조합', miner: '광업소', shipbuilder: '조선소', engineer: '풍력발전소', docker: '부두', saltworker: '염전', office: '상사' };
 
 function createWork() {
   function init(ctx) {

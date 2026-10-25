@@ -8,6 +8,7 @@
 // 무너짐 방지: 욕구·기분·스트레스는 0~100 범위 + 기분은 천천히 따라감(급변 없음), 출생률은 목표 인구 쪽으로 당김, 매일 검사로 끊긴 관계·NaN을 고침
 const { DAY, weatherOf } = require('../world.js');
 const { REGIONS, OCC, SURNAMES, GIVEN1, GIVEN2, MICRO } = require('./data.js');
+const { makeTalk } = require('./talk.js');
 
 const OUTDOOR = new Set(['commute', 'walk', 'market', 'jobhunt', 'shop', 'cafe', 'eatOut', 'visit']);   // 맵에 걸어 다니는 모습으로 보이는 행동 (가게·카페·식당·친구 집은 '가는 중'으로)
 // 거리에서 보일 때의 이름 (가게 안이 아니라 가는 길이므로)
@@ -22,7 +23,6 @@ const ageOf = (n, day) => Math.floor((day - n.born) / 365);
 const acct = id => 'p:' + id;
 // 받침에 맞는 조사
 const jong = s => { const c = s.charCodeAt(s.length - 1) - 0xac00; return c >= 0 && c <= 11171 ? c % 28 : 0; };
-const iE = s => s + (jong(s) ? '이에요' : '예요'), ro = s => s + (jong(s) && jong(s) !== 8 ? '으로' : '로'), eun = s => s + (jong(s) ? '은' : '는');
 
 const COLORS = ['#f7f7f7', '#fff4dc', '#f3efe6', '#e8eef5', '#f7efe0', '#f5e6ea', '#e9f3e6', '#efe9f7'];
 const HAT = { fisher: '#2f6fc6', farmer: '#c9951c', builder: '#f2a03d', factory: '#3d7fd6', docker: '#e8454b', vendor: '#7a4a2a', student: '#5dbb4a' };
@@ -265,23 +265,12 @@ function createPeople() {
       }));
     },
     // ----- 말 걸기: 지금 상태로 대사를 만듦 -----
-    talk(S, id, min, news) {
+    // ----- 말 걸기: talk.js가 그 사람의 지금 삶·말투로 대사를 만듦 -----
+    talk(S, id, min, news, quote) {
       const n = S.people.list[id];
       if (!n) return null;
-      const day = Math.floor(min / DAY), h = Math.floor((min % DAY) / 60), age = ageOf(n, day), job = OCC[n.occ], emp = S.work.emps[n.emp];
-      const lines = [];
-      lines.push(n.tr.e > 0.6 ? `${h < 11 ? '좋은 아침이에요' : h < 18 ? '안녕하세요' : '좋은 저녁이에요'}! 반가워요!` : `${h < 11 ? '아, 안녕하세요' : h < 18 ? '…안녕하세요' : '안녕하세요, 늦은 시간이네요'}.`);
-      lines.push(job ? `저는 ${n.name}, ${age}살이에요. ${emp ? emp.name + '에서 ' : ''}${ro(job.name)} 일해요.` : n.occ === 'student' ? `저는 ${n.name}, ${age}살 학생이에요.` : n.occ === 'retired' ? `저는 ${n.name}이고, 일은 그만두고 쉬고 있어요. ${age}살이랍니다.` : n.occ === 'jobless' ? `저는 ${n.name}, ${age}살이에요. 요즘 일자리를 찾고 있어요.` : `나는 ${iE(n.name)}! ${age}살!`);
-      const N = n.need, low = Object.entries(N).sort((a, b) => a[1] - b[1])[0];
-      const feel = low[1] > 55 ? (n.mood > 20 ? '오늘은 기분이 꽤 좋아요.' : '그럭저럭 괜찮은 하루예요.') : { food: '배가 좀 고프네요.', energy: '좀 피곤해요. 일찍 자야겠어요.', social: '요즘 사람을 별로 못 만나서 좀 외로워요.', fun: '뭔가 재밌는 일이 없나 심심해요.' }[low[0]];
-      lines.push(`지금은 ${actName(n.act, min)}이에요. ${feel}`);
-      const m = n.mem[0];
-      if (m) lines.push(`${m.d === day ? '오늘' : m.d === day - 1 ? '어제' : '며칠 전에'} ${m.t.replace(/다(!?)$/, '어요$1')}`);
-      const sp = S.people.list[n.spouse], kid = S.people.list[n.kids[0]], fr = Object.entries(n.friends).sort((a, b) => b[1] - a[1]).map(([i]) => S.people.list[i]).find(f => f && f.id !== n.spouse);
-      if (sp) lines.push(`${eun(sp.name)} 제 ${n.tr.a > 0.5 ? '소중한 ' : ''}배우자예요.${kid ? ` 아이 ${kid.name}도 있어요.` : ''}`);
-      else if (fr) lines.push(`요즘 ${fr.name}님이랑 자주 만나요.`);
-      if (news) lines.push(`그나저나 들었어요? ${news}`);
-      return { name: n.name, job: job?.name, lines };
+      const job = OCC[n.occ], emp = S.work.emps[n.emp];
+      return { name: n.name, job: job?.name, lines: makeTalk({ S, n, min, age: ageOf(n, Math.floor(min / DAY)), empName: emp?.name, ageOf, news, quote }) };
     },
     ageOf, OUTDOOR,
   };

@@ -4,7 +4,7 @@
 
 // 지역 14곳 (country.js와 같은 이름): 목표 인구, 특산 일터. 열린 곳(open)은 지금 걸어 다닐 수 있는 맵이 있음
 const REGIONS = {
-  한가람: { pop: 320, open: 'city', jobs: ['office', 'office', 'dev', 'banker', 'builder', 'vendor', 'researcher'] },
+  한가람: { pop: 320, open: 'city', jobs: ['office', 'office', 'dev', 'dev', 'banker', 'builder', 'vendor'] },
   누리벌: { pop: 110, open: 'nuribeol', jobs: ['farmer', 'farmer', 'farmer'] },
   별하항: { pop: 120, open: 'byeolha', jobs: ['fisher', 'fisher', 'vendor'] },
   단비: { pop: 150, open: 'danbi', jobs: ['factory', 'factory', 'factory', 'trucker'] },
@@ -24,20 +24,20 @@ const REGIONS = {
 //   장소 종류 = 화면에 보이는지 정함: street·park·market·beach는 밖(맵에 걸어 다님), 나머지는 건물 안
 const OCC = {
   office: { name: '회사원', sector: '사무', place: 'office', from: 9, to: 18, wage: 140000 },
-  dev: { name: '개발자', sector: 'IT', place: 'office', from: 10, to: 19, wage: 165000, company: 'nuri' },
-  researcher: { name: '연구원', sector: '제약', place: 'lab', from: 9, to: 18, wage: 160000, company: 'byeolbit' },
+  dev: { name: '개발자', sector: 'IT', place: 'office', from: 10, to: 19, wage: 165000 },
+  researcher: { name: '연구원', sector: '제약', place: 'lab', from: 9, to: 18, wage: 160000 },
   banker: { name: '은행원', sector: '금융', place: 'office', from: 9, to: 16, wage: 150000 },
-  builder: { name: '건설 노동자', sector: '건설', place: 'site', from: 7, to: 16, wage: 150000, weather: ['rain', 'storm', 'snow'], company: 'daehan' },
+  builder: { name: '건설 노동자', sector: '건설', place: 'site', from: 7, to: 16, wage: 150000, weather: ['rain', 'storm', 'snow'] },
   vendor: { name: '시장 상인', sector: '상업', place: 'market', from: 6, to: 19, wage: 110000, weekend: true },
-  farmer: { name: '농부', sector: '농업', place: 'field', from: 6, to: 17, wage: 100000, weekend: true, weather: ['storm'], company: 'nurigrain' },
-  fisher: { name: '어부', sector: '수산', place: 'sea', from: 4, to: 12, wage: 120000, weekend: true, weather: ['rain', 'storm'], company: 'byeolhafish' },
-  factory: { name: '공장 노동자', sector: '제조', place: 'factory', from: 8, to: 17, wage: 130000, company: 'hanbit' },
-  trucker: { name: '화물차 기사', sector: '물류', place: 'street', from: 6, to: 15, wage: 125000, company: 'bada' },
+  farmer: { name: '농부', sector: '농업', place: 'field', from: 6, to: 17, wage: 100000, weekend: true, weather: ['storm'] },
+  fisher: { name: '어부', sector: '수산', place: 'sea', from: 4, to: 12, wage: 120000, weekend: true, weather: ['rain', 'storm'] },
+  factory: { name: '공장 노동자', sector: '제조', place: 'factory', from: 8, to: 17, wage: 130000 },
+  trucker: { name: '화물차 기사', sector: '물류', place: 'street', from: 6, to: 15, wage: 125000 },
   forester: { name: '산림 관리인', sector: '임업', place: 'forest', from: 7, to: 16, wage: 105000, weather: ['storm'] },
   miner: { name: '광부', sector: '광업', place: 'mine', from: 7, to: 16, wage: 140000 },
   shipbuilder: { name: '조선소 기술자', sector: '제조', place: 'factory', from: 8, to: 17, wage: 145000 },
   engineer: { name: '풍력 기술자', sector: '에너지', place: 'site', from: 8, to: 17, wage: 150000, weather: ['storm'] },
-  docker: { name: '항만 노동자', sector: '해운', place: 'port', from: 7, to: 16, wage: 135000, weekend: true, weather: ['storm'], company: 'bada' },
+  docker: { name: '항만 노동자', sector: '해운', place: 'port', from: 7, to: 16, wage: 135000, weekend: true, weather: ['storm'] },
   hotel: { name: '호텔 직원', sector: '관광', place: 'hotel', from: 8, to: 17, wage: 105000, weekend: true },
   saltworker: { name: '염전 일꾼', sector: '농업', place: 'field', from: 6, to: 15, wage: 95000, weather: ['rain', 'storm'] },
   // 어느 지역에나 있는 일
