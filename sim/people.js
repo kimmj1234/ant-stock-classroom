@@ -9,7 +9,8 @@
 const { DAY, weatherOf } = require('../world.js');
 const { REGIONS, OCC, SURNAMES, GIVEN1, GIVEN2, MICRO } = require('./data.js');
 const { makeTalk } = require('./talk.js');
-const brain = require('./brain.js');   // 뇌: 먹을 것 고르기·날씨 반응·성향 (모든 판단을 한 구조로)
+const brain = require('./brain.js');
+const mind = require('./mind.js');     // 마음: 감정·인생 목표·하루 계획(약속)   // 뇌: 먹을 것 고르기·날씨 반응·성향 (모든 판단을 한 구조로)
 
 const OUTDOOR = new Set(['commute', 'walk', 'market', 'jobhunt', 'shop', 'cafe', 'eatOut', 'visit']);   // 맵에 걸어 다니는 모습으로 보이는 행동 (가게·카페·식당·친구 집은 '가는 중'으로)
 // 거리에서 보일 때의 이름 (가게 안이 아니라 가는 길이므로)
@@ -18,7 +19,7 @@ const STREET_NAME = { shop: '장 보러 가는 중', cafe: '카페 가는 중', 
 const ACT_NAME = {
   sleep: '자는 중', work: '일하는 중', school: '학교에서 공부 중', eatHome: '집에서 밥 먹는 중', eatOut: '식당에서 밥 먹는 중', cafe: '카페에서 쉬는 중',
   walk: '산책하는 중', shop: '마트에서 장 보는 중', market: '시장 구경하는 중', visit: '친구 집에 놀러 간 중', hospital: '병원에 간 중',
-  jobhunt: '일자리 찾는 중', home: '집에서 쉬는 중', commute: '오가는 중',
+  jobhunt: '일자리 찾는 중', home: '집에서 쉬는 중', commute: '오가는 중', study: '공부하는 중', trip: '여행 중',
 };
 const actName = (act, min) => act === 'commute' ? (min % DAY < 720 ? '출근하는 중' : '퇴근하는 중') : ACT_NAME[act];
 const ageOf = (n, day) => Math.floor((day - n.born) / 365);
@@ -79,7 +80,14 @@ function createPeople() {
     const workday = job && (!weekend || job.weekend && (n.id + ctx.day) % 7 < 5);   // 오늘 일하는 날인지
     const shift = job && (!weekend || job.weekend && (n.id + ctx.day) % 7 < 5) && h >= job.from && h < job.to;
     const blocked = job?.weather?.includes(wx);                                           // 날씨 때문에 일 못 하는 날 (어부·건설 등)
-    const out = brain.outdoorCost(n, se), food = brain.chooseFood(ctx, n, se, age);       // 바깥 나가는 부담 · 먹을 것 (뇌가 따져 봄)
+    const out = brain.outdoorCost(n, se);                                                  // 바깥 나가는 부담
+    let food = brain.chooseFood(ctx, n, se, age);                                           // 먹을 것 (뇌가 따져 봄)
+    const P = ctx.S.people.list;
+    if (h >= 6) mind.makePlan(ctx, n, se, age, job, P, workday);                             // 아침에 오늘 할 일을 세움 (한 번)
+    let plan = mind.planNow(ctx, n, h, P, remember);                                        // 지금 할 차례인 계획
+    if (plan && plan.out && !plan.with && plan.k !== 'shop' && (se.rain || se.snow) && me.rainHate > 0.35) { plan.missed = true; mind.feel(n, 'sad', 12, `비 때문에 ${plan.label} 못 갔`); plan = null; }   // 비 오면 나들이는 접음
+    if (plan?.food) { const o = brain.FOODS.find(f => f.id === plan.food); if (o && ctx.ledger.bal('p:' + n.id) >= o.price) food = { o, u: 170, parts: {} }; }   // 약속한 메뉴
+    const E = k => mind.emo(n, k);
     const score = {
       sleep: (h >= 23 || h < 5 ? 95 : h < 6 ? 55 : h < 7 ? 38 : h < 8 ? 20 : 0) + (100 - N.energy) * 0.7 - (N.energy > 92 ? 40 : 0) + R(1),   // 밤엔 잠이 끈질김 → 보통 6~7시에 일어남
       work: shift && !blocked && n.health > 35 ? 92 + T.c * 20 + R(2) - (h === 12 && job.to - job.from >= 7 ? 70 : 0) : -1,   // 12시는 점심시간
@@ -93,27 +101,38 @@ function createPeople() {
       hospital: n.health < 40 && h >= 9 && h < 18 ? 120 : -1,
       commute: workday && !blocked && n.health > 35 && job.place !== 'street' && (h === (job.from + 23) % 24 ? 96 : h === job.to ? 62 + T.c * 10 : -1),
       jobhunt: n.occ === 'jobless' && !weekend && h >= 9 && h < 17 ? 50 + n.stress * 0.3 + T.c * 10 + R(10) : -1,
-      home: 30 + (100 - N.fun) * 0.2 + T.n * 8 + R(11),
+      home: 30 + (100 - N.fun) * 0.2 + T.n * 8 + R(11) + E('sad') * 0.2 * (1 - T.e) - E('bored') * 0.3,
+      study: -1, trip: -1,
     };
+    // 감정이 행동에 주는 무게: 심심하면 나감, 화나면 걸으며 식힘, 슬프면 (활발한 사람은) 친구를 찾음
+    score.walk += E('bored') * 0.35 + E('anger') * 0.2; score.cafe += E('bored') * 0.3; score.visit += E('sad') * 0.3 * T.e + E('bored') * 0.2;
+    if (n.goal?.k === 'job') score.jobhunt += 15;
+    if (plan && !plan.food) score[plan.act] = Math.max(score[plan.act] ?? -1, 0) + 85;   // 계획한 일을 하려 함
+    if (plan?.food && food?.u === 170) score.eat = 170;
     if (n.occ === 'child') { score.work = score.jobhunt = score.school = -1; score.cafe -= 60; }
     let act = 'home', best = -Infinity;
     for (const [k, v] of Object.entries(score)) if (v > best) { best = v; act = k; }
+    if (n.trip) { if (ctx.day >= n.trip.until) { remember(n, ctx.day, `${n.trip.place} 여행에서 돌아왔다`, 12); n.trip = null; } else act = h >= 7 && h < 23 ? 'trip' : 'sleep'; }
     // 먹기: 고른 것을 실제로 함(돈 내고 먹음) + 왜 그랬는지 생각을 남김 (말 걸면 그대로 말함)
     n.dish = null;
     if (act === 'eat') {
-      if (brain.consume(ctx, n, food.o)) { act = food.o.act; n.dish = food.o.id; n.thought = { min: ctx.min, act, id: food.o.id, dish: brain.dishName(food.o, se.temp), why: brain.reasonOf(n, food, se) }; }
+      if (brain.consume(ctx, n, food.o)) { act = food.o.act; n.dish = food.o.id; n.thought = { min: ctx.min, act, id: food.o.id, dish: brain.dishName(food.o, se.temp), why: plan?.food === food.o.id ? [`${plan.withName}님이랑 약속이 있어서요`] : brain.reasonOf(n, food, se) };
+        if (food.parts.taste > 6 || food.parts.sweet > 25 || food.parts.warm > 8 || food.parts.cool > 6) mind.savor(n, ctx.min, 'joy', 14, `${n.thought.dish} 먹었`);   // 먹고 싶던 걸 먹으면 기분 좋음
+      }
       else act = 'home';
     }
     n.act = act;
     applyAct(ctx, n, act, job, h);
     brain.weatherBody(ctx, n, se, OUTDOOR.has(act) || act === 'work' && OUT_WORK.has(job?.place), remember);   // 비·눈·추위에 몸이 반응
+    if (plan && n.act === plan.act) mind.planDone(ctx, n, plan, remember);                 // 계획을 지킴
+    mind.hourFeel(ctx, n, n.act, n.act === 'sleep');                                        // 감정: 가라앉고, 지금 처지로 새로 생김
     // 일 끝나는 시각: 하루 품삯 (그날 반 넘게 일했으면)
     if (job && h === job.to - 1 && n.worked >= (job.to - job.from) / 2) payday(ctx, n, job);
     if (h === 0) n.worked = 0;
     for (const k in N) N[k] = ctx.clamp(N[k], 0, 100, 60);
     // 기분: 욕구·스트레스·건강·최근 기억·지역 분위기가 정한 목표로 천천히 다가감 (갑자기 바뀌지 않음)
     const memW = n.mem.reduce((a, m) => a + m.w * Math.max(0, 1 - (ctx.day - m.d) / 7), 0);
-    const target = (N.food + N.energy + N.social + N.fun) / 4 - 50 - n.stress * 0.3 + (n.health - 70) * 0.3 + memW + (ctx.S.events?.mood?.[n.region] || 0);
+    const target = (N.food + N.energy + N.social + N.fun) / 4 - 50 - n.stress * 0.3 + (n.health - 70) * 0.3 + memW + (ctx.S.events?.mood?.[n.region] || 0) + mind.moodPull(n);
     n.mood = ctx.clamp(n.mood * 0.8 + target * 0.2, -100, 100, 0);
     n.stress = ctx.clamp(n.stress, 0, 100, 20);
   }
@@ -130,6 +149,8 @@ function createPeople() {
     if (act === 'shop') { if (pay(30000, ctx.S.work.local?.[n.region]?.mart || 'ext')) n.groceries += 12; }
     if (act === 'hospital') { if (pay(15000, ctx.S.work.local?.[n.region]?.hospital || 'gov')) n.health += 8; }
     if (act === 'jobhunt') { n.stress += 1; }
+    if (act === 'study') { n.skill = Math.min(1, n.skill + 0.002); N.fun -= 2; n.stress += 0.5; }
+    if (act === 'trip') { N.fun += 15; N.social += 5; n.stress -= 4; }
     if (act === 'home' || act === 'sleep') { n.stress -= 1.5; N.fun += act === 'home' ? 8 : 0; }
   }
   // 같은 시간·같은 지역에 사람을 만나러 나온 사람끼리 친해짐 (친구 10명까지, 가장 덜 친한 친구가 밀려남)
@@ -162,13 +183,14 @@ function createPeople() {
     for (const n of list) {
       const r = k => ctx.rnd(day, n.id, 40 + k), age = ageOf(n, day);
       lifeStage(n, day);
+      mind.reviewGoal(ctx, n, age, remember, (amount, to) => ctx.ledger.move(acct(n.id), to, amount));
       for (const id in n.friends) if (Number(id) !== n.spouse && (n.friends[id] -= 0.6) < 5) delete n.friends[id];   // 안 만나면 조금씩 멀어짐
       if ((day - n.born) % 365 === 0 && age > 0) remember(n, day, `${age}번째 생일이었다`, 8);
       n.health = ctx.clamp(n.health + (n.health < 100 ? 4 : 0), 0, 100, 80);
       if (r(1) < 0.0015 + n.stress / 100 * 0.004 + Math.max(0, age - 60) * 0.0002) { n.health -= 25 + r(2) * 20; remember(n, day, '몸살이 나서 앓아누웠다', -10); }
       if (r(3) < 0.06) { const [t, w] = MICRO[Math.floor(r(4) * MICRO.length)]; remember(n, day, t, w); ctx.emit({ type: 'micro', scale: 'micro', region: n.region }); }
       // 일: 오래 다니고 실력이 좋으면 승진, 너무 힘들면 그만둠
-      if (OCC[n.occ] && day - n.since > 120 && n.skill > 0.7 && r(5) < 0.004) { n.wage = Math.round(n.wage * 1.08); n.since = day; remember(n, day, '승진했다!', 15); }
+      if (OCC[n.occ] && day - n.since > 120 && n.skill > 0.7 && r(5) < 0.004 * (n.goal?.k === 'promotion' ? 2.5 : 1)) { n.wage = Math.round(n.wage * 1.08); n.since = day; n.promoted = day; remember(n, day, '승진했다!', 15); }
       if (OCC[n.occ] && n.stress > 85 && r(6) < 0.01) leaveJob(ctx, n, '일이 너무 힘들어서 회사를 그만뒀다', -10);
       else if (OCC[n.occ] && r(6) < 0.0012) leaveJob(ctx, n, '새로운 일을 해 보려고 회사를 그만뒀다', 2);   // 자연스러운 이직
       // 연금·실업급여 (정부 → 사람)
@@ -184,7 +206,7 @@ function createPeople() {
       // 결혼: 서로 아주 친한 싱글 어른 둘 (같은 지역)
       if (!n.spouse && age >= 24 && age <= 45) for (const [fid, aff] of Object.entries(n.friends)) {
         const f = P.list[fid];
-        if (aff >= 95 && f && !f.spouse && f.region === n.region && ageOf(f, day) >= 24 && r(7) < 0.002) {
+        if (aff >= 95 && f && !f.spouse && f.region === n.region && ageOf(f, day) >= 24 && r(7) < 0.002 * (n.goal?.k === 'love' ? 3 : 1)) {
           n.spouse = f.id; f.spouse = n.id; remember(n, day, `${f.name}님과 결혼했다`, 25); remember(f, day, `${n.name}님과 결혼했다`, 25);
           ctx.emit({ type: 'wedding', scale: 'micro', region: n.region }); break;
         }
@@ -276,6 +298,8 @@ function createPeople() {
       const label = n => {
         if (n.occ === 'reporter' && n.act === 'work') return '취재 중';
         if (rainy && n.wet > 45 && !n.umbToday) return '비 피해 뛰어가는 중';
+        const pl = mind.planLabel(n, Math.floor((min % DAY) / 60), day);
+        if (pl) return pl;
         const th = n.thought;
         if (n.dish && th?.act === n.act) return th.id === 'cvs' ? '편의점 가는 중' : n.act === 'eatHome' ? (th.id === 'delivery' ? '배달 시키러 집에 가는 중' : '집에 밥 먹으러 가는 중') : `${th.dish} ${th.id === 'coffee' ? '마시러' : '먹으러'} 가는 중`;
         return STREET_NAME[n.act] || actName(n.act, min);
@@ -286,13 +310,13 @@ function createPeople() {
     },
     // ----- 말 걸기: 지금 상태로 대사를 만듦 -----
     // ----- 말 걸기: talk.js가 그 사람의 지금 삶·말투로 대사를 만듦 -----
-    talk(S, id, min, news, quote, who, rumors = []) {
+    talk(S, id, min, news, quote, who, rumors = [], bal = 0) {
       const n = S.people.list[id];
       if (!n) return null;
       const job = OCC[n.occ], emp = S.work.emps[n.emp];
       n.met ||= {};
       const met = n.met[who] || { times: 0, last: null };   // 이 사람(플레이어)을 만난 횟수·마지막 시각
-      const lines = makeTalk({ S, n, min, age: ageOf(n, Math.floor(min / DAY)), empName: emp?.name, ageOf, news, quote, met, rumors, doing: n.occ === 'reporter' && n.act === 'work' ? '취재 중' : STREET_NAME[n.act] || actName(n.act, min) });
+      const lines = makeTalk({ S, n, min, age: ageOf(n, Math.floor(min / DAY)), empName: emp?.name, ageOf, news, quote, met, rumors, bal, doing: n.occ === 'reporter' && n.act === 'work' ? '취재 중' : STREET_NAME[n.act] || actName(n.act, min) });
       n.met[who] = { times: met.times + 1, last: Math.floor(min) };
       const keys = Object.keys(n.met);
       if (keys.length > 8) delete n.met[keys.reduce((a, b) => (n.met[a].last < n.met[b].last ? a : b))];   // 가장 오래전에 만난 사람부터 잊음

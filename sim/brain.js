@@ -5,6 +5,7 @@
 // 사람마다 생각이 다름: 사람 번호로 정해지는 개성(입맛·절약·우산 습관·날씨 민감도·새로움 추구·충동)과 성격(5가지)이 같은 상황에서 다른 답을 냄
 // 새 판단(옷·여가·쇼핑·투자 …)을 더할 때도 선택지 목록 + 같은 따지기 함수로 더하면 됨
 const { hash, DAY, weatherOf, weekdayOf, temperature } = require('../world.js');
+const mind = require('./mind.js');
 
 // ----- 개성: 사람 번호로 정해지는 고정값 (저장하지 않아도 늘 같음) -----
 const selfCache = new Map();
@@ -77,21 +78,22 @@ function weigh(n, o, se, ctx, money) {
   const s = selfOf(n), N = n.need, P = {}, add = (k, v) => { P[k] = (P[k] || 0) + v; };
   // 좋은 점: 채워지는 욕구 × 급한 정도 × 좋아하는 정도
   add('hunger', urg(N.food) * (o.food || 0) * 2.3);
-  add('sweet', urg(N.sweet) * (o.sweet || 0) * (0.2 + s.sweet * 1.1));
+  add('sweet', urg(N.sweet) * (o.sweet || 0) * (0.2 + s.sweet * 1.1) * (1 + mind.emo(n, 'sad') / 60));   // 울적하면 단 게 더 당김
   add('caffeine', urg(N.caffeine) * (o.caffeine || 0) * s.coffee * 1.6);
   add('social', urg(N.social) * (o.social || 0) * (0.5 + n.tr.e));
   add('taste', ((o.spicy || 0) * (s.spicy - 0.45) + (o.meat || 0) * (s.meat - 0.45)) * 30 + ((o.healthy ?? 0.5) - 0.5) * (s.healthy - 0.5) * 30);
+  if (o.spicy && mind.emo(n, 'anger') > 10) add('stress', mind.emo(n, 'anger') * 0.25 * o.spicy);   // 화나면 매운 거
   if (o.warm && se.temp < 8) add('warm', (8 - se.temp) * 1.2);                       // 추운 날 뜨끈한 국물
   if (o.id === 'dessert' && se.temp >= 26) add('cool', (se.temp - 26) * 2);           // 더운 날 빙수
   if (o.treat) add('treat', se.wd >= 4 ? 4 : -14);                                         // 고기는 금요일·주말에 (평일엔 아껴 둠)
   if (o.meal && isMealTime(se.h)) add('mealtime', 14 + n.tr.c * 10);                    // 밥때 (규칙적인 사람일수록)
   // 나쁜 점
   if ((o.food || 0) >= 30 && N.food > 70) add('full', -(N.food - 70) * 2.2);          // 배불러서 밥은 못 먹음 (디저트 배는 따로)
-  if (o.price) add('money', -o.price / 1000 * (0.5 + s.frugal * 1.4) * (money < 200000 ? 3 : money < 1000000 ? 1.5 : 1.05));
+  if (o.price) add('money', -o.price / 1000 * (0.5 + s.frugal * 1.4) * (money < 200000 ? 3 : money < 1000000 ? 1.5 : 1.05) * mind.thrift(n));   // 목표(집·여행)를 위해 모으거나 걱정되면 더 아낌
   if (o.effort) add('effort', -o.effort * (0.6 + (100 - N.energy) / 60));                // 피곤하면 요리하기 귀찮음
   if (o.far) add('weather', -outdoorCost(n, se, o.far) - o.far * 6 * (0.5 + s.homebody)); // 나가는 수고 + 날씨
   const recent = n.ate || [];
-  if (recent.includes(o.id)) add('bored', -(s.variety * 16) * (recent.filter(x => x === o.id).length));   // 요즘 계속 먹어서 질림
+  if (recent.includes(o.id)) add('bored', -(s.variety * 16) * (1 + mind.emo(n, 'bored') / 50) * (recent.filter(x => x === o.id).length));   // 요즘 계속 먹어서 질림
   else if (recent.length && s.variety < 0.35 && o.id === recent[0]) add('habit', 6);
   add('whim', (hash(ctx.min, n.id, 950 + o.id.length) - 0.5) * 16 * s.impulsive);    // 그때그때 끌림
   return { u: Object.values(P).reduce((a, b) => a + b, 0), parts: P };
@@ -115,8 +117,10 @@ function chooseFood(ctx, n, se, age) {
 function reasonOf(n, best, se) {
   const P = best.parts, o = best.o, N = n.need, s = selfOf(n), why = [];
   const top = Object.entries(P).filter(([k, v]) => v > 4 && !['whim', 'habit'].includes(k)).sort((a, b) => b[1] - a[1])[0]?.[0];
-  if (top === 'hunger') why.push(N.food < 25 ? '배가 너무 고파서요' : '배가 좀 고파서요');
-  if (top === 'sweet') why.push(N.food > 65 ? '배는 부른데 단 게 당겨서요' : '단 게 너무 당겨서요');
+  if (top === 'sweet' && mind.emo(n, 'sad') > 25) why.push('기분이 꿀꿀해서 단 거라도 먹으려고요');
+  else if (top === 'stress') why.push('스트레스 받아서 매운 게 당겨서요');
+  else if (top === 'hunger') why.push(N.food < 25 ? '배가 너무 고파서요' : '배가 좀 고파서요');
+  else if (top === 'sweet') why.push(N.food > 65 ? '배는 부른데 단 게 당겨서요' : '단 게 너무 당겨서요');
   if (top === 'caffeine') why.push(s.coffee > 0.7 ? '커피 없으면 하루가 안 굴러가서요' : '잠 좀 깨려고요');
   if (top === 'social') why.push('사람 구경도 할 겸요');
   if (top === 'taste') why.push(o.spicy ? '매운 게 땡겨서요' : o.meat ? '고기가 먹고 싶어서요' : '몸 생각해서요');

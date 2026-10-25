@@ -5,6 +5,7 @@
 const { hash, weatherOf, DAY } = require('../world.js');
 const { OCC } = require('./data.js');
 const brain = require('./brain.js');
+const mind = require('./mind.js');
 
 const jong = s => { const c = s.charCodeAt(s.length - 1) - 0xac00; return c >= 0 && c <= 11171 ? c % 28 : 0; };
 const ro = s => s + (jong(s) && jong(s) !== 8 ? '으로' : '로'), eun = s => s + (jong(s) ? '은' : '는'), ira = s => s + (jong(s) ? '이' : '');
@@ -106,7 +107,7 @@ const AGAIN = { elder: ['허허, 오랜만일세.', '이게 얼마 만인가.'],
 //   · 하루 동안 바뀌는 것(오늘의 직업 이야기 등)은 그날 고정 → D
 //   · 첫마디는 늘 머리 위 표시와 같은 "지금 하는 일"(+ 실제 욕구에 맞는 이유)
 //   · 다시 말 걸면 아직 안 한 다음 주제로 넘어감 (만난 횟수만큼 순서를 돌림)
-function makeTalk({ S, n, min, age, empName, ageOf, news, quote, met, doing, rumors = [] }) {
+function makeTalk({ S, n, min, age, empName, ageOf, news, quote, met, doing, rumors = [], bal = 0 }) {
   const day = Math.floor(min / DAY), h = Math.floor((min % DAY) / 60);
   const F = k => hash(n.id, 501, k), D = k => hash(day, n.id, k);
   const fix = (list, k) => list[Math.floor(F(k) * list.length)], today = (list, k) => list[Math.floor(D(k) * list.length)];
@@ -128,6 +129,10 @@ function makeTalk({ S, n, min, age, empName, ageOf, news, quote, met, doing, rum
   } else lines.push((n.occ === 'reporter' && n.act === 'work' ? NOW.reporter : NOW[n.act] || `지금은 ${doing}이에요.`) + why);
   // 비·눈 오는 날: 우산 / 젖음
   if (['rain', 'storm', 'snow'].includes(wx) && n.act !== 'sleep') lines.push(n.wet > 45 && !n.umbToday ? '우산을 깜빡해서 쫄딱 젖었어요…' : n.umbToday && n.wet < 20 && ['commute', 'walk', 'shop', 'market', 'eatOut', 'cafe', 'jobhunt'].includes(n.act) ? '아침에 우산 챙기길 잘했어요.' : '');
+  // 마음: 지금 감정(이유와 함께) · 오늘 계획(약속)
+  const fl = mind.feelLine(n), pl = mind.planLine(n, h, day);
+  if (fl) lines.push(kid ? banmal(fl) : fl);
+  if (pl && !(fresh && th.why[0]?.includes('약속') && pl.endsWith('나왔어요!')) && !(fl?.includes('님이랑') && pl.startsWith('아까'))) lines.push(pl);   // 같은 이야기를 두 번 하지 않게   // 이미 약속 때문에 간다고 했으면 겹치지 않게
   // 회사 소문 (사람마다 느끼는 정도가 다름: 결과 q + 그 사람·그 계획마다 고정된 착각). 무뚝뚝한 사람은 절반쯤 입을 다묾
   const feel = (p, k) => p.q + (hash(n.id, p.id, 61) - 0.5) * k;
   const myCo = S.work.emps[n.emp]?.company;
@@ -156,7 +161,8 @@ function makeTalk({ S, n, min, age, empName, ageOf, news, quote, met, doing, rum
   const emp = S.work.emps[n.emp], q = emp?.company && quote?.(emp.company);
   if (q && q.prev) topics.push(() => { const ch = (q.price - q.prev) / q.prev * 100; return Math.abs(ch) < 0.5 ? `우리 ${q.name} 주가는 요즘 잠잠해요.` : ch > 0 ? `우리 ${q.name} 주가가 오늘 ${ch.toFixed(1)}% 올랐대요! 분위기 좋아요.` : `우리 ${q.name} 주가가 오늘 ${(-ch).toFixed(1)}% 떨어져서 다들 표정이 안 좋아요.`; });
   if (!kid || age >= 10) topics.push(() => `쉬는 날엔 ${eul(fix(HOBBY, 6))} 해요.`);
-  for (const t of brain.tasteTalk(n)) topics.push(() => t);   // 그 사람의 성향(입맛·절약·비 싫어함·덤벙댐)
+  for (const t of brain.tasteTalk(n)) topics.push(() => t);
+  if (n.goal) topics.unshift(() => mind.goalLine(n, bal));   // 인생 목표는 먼저 꺼냄   // 그 사람의 성향(입맛·절약·비 싫어함·덤벙댐)
   topics.push(() => fix(age < 19 ? ['나중에 크면 우주비행사 될 거야!', '빨리 어른이 되고 싶어.'] : age < 35 ? ['언젠가 내 가게를 차리고 싶어요.', '집값이 너무 비싸서 독립이 걱정이에요.', '돈 모아서 해외여행 가는 게 꿈이에요.'] : age < 65 ? ['애들 학비 대느라 허리가 휘어요.', '노후 준비를 슬슬 해야 하는데 걱정이에요.', '건강이 최고예요. 요즘 운동을 시작했어요.'] : ['손주 보는 게 제일 행복하지.', '무릎이 예전 같지 않아.'], 7));
   if (news && !/[.!?…]$/.test(news)) news += '.';
   if (news) topics.push(() => `그나저나 들었어요? ${news}`);
