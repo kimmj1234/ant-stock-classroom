@@ -505,15 +505,17 @@ function painter(w, h) {
   // 밤에 불이 켜질 곳: lit(x, y, 가로, 세로)로 그림에 적어 두면 game.js가 밤에 노랗게 켬 (c.lights)
   const lights = c.lights = [], lit = (x, y, w, h) => lights.push([x, y, w, h]);
   const box = (x, y, bw, bh, color) => { g.fillStyle = color; g.fillRect(x, y, bw, bh); };
-  // 간판 글씨: 따로 그린 뒤 반쯤 걸친 픽셀은 켜거나 끄기만 해서(흐린 테두리 없이) 픽셀 그림처럼 또렷하게
+  // 간판 글씨: 그림에 굽지 않고 c.texts에 적어 두면 game.js가 화면 해상도로 또렷하게 그림 (작은 그림을 키우면 글씨가 깨지므로)
+  // 글씨 칸 = (cx, y+5) 자리의 간판 바탕색이 이어지는 넓이·높이를 재서 정함 → 글씨는 그 안 가운데, 넘치면 game.js가 줄임
+  const texts = c.texts = [];
   const center = (s, cx, y, color) => {
-    const t = makeCanvas(w, h), tg = t.getContext('2d');
-    tg.font = '11px Galmuri11, monospace'; tg.textBaseline = 'top'; tg.fillStyle = color;
-    tg.fillText(s, Math.round(cx - tg.measureText(s).width / 2), y);
-    const img = tg.getImageData(0, 0, w, h), d = img.data;
-    for (let i = 3; i < d.length; i += 4) d[i] = d[i] >= 110 ? 255 : 0;
-    tg.putImageData(img, 0, 0);
-    g.drawImage(t, 0, 0);
+    const px = (x, yy) => x < 0 || yy < 0 || x >= w || yy >= h ? -1 : g.getImageData(x, yy, 1, 1).data.join();
+    const mx = Math.floor(cx), my = Math.floor(y + 5), bg = px(mx, my);
+    let l = mx, r = mx, t = my, b = my;
+    while (px(l - 1, my) === bg) l--; while (px(r + 1, my) === bg) r++;
+    while (px(mx, t - 1) === bg) t--; while (px(mx, b + 1) === bg) b++;
+    const half = Math.min(cx - l, r + 1 - cx), bh = b + 1 - t, size = Math.min(11, bh);
+    texts.push({ s, x: cx, y: t + (bh - size) / 2, size, maxW: half * 2 - 2, color });
   };
   // 창문: 창틀 + 유리(위는 밝게) + 가운데 창살 (+ 창가 화분)
   const win = (x, y, w, h, flowers, glass = '#8fc3e6') => {
@@ -1177,7 +1179,7 @@ const ARTS = {
   },
   fridgecase() {   // 음료 냉장고(가로 3칸): 은색 틀 + 유리문 셋 + 칸마다 색색 병
     const W = 48, H = 44, t = bTools(W, H), { box } = t;
-    box(0, 0, W, H, INK); box(1, 1, W - 2, H - 2, '#c9cfd6'); box(1, 1, W - 2, 4, '#3d7fd6'); t.center('음료', 24, -1, '#ffffff');
+    box(0, 0, W, H, INK); box(1, 1, W - 2, H - 2, '#c9cfd6'); box(1, 1, W - 2, 6, '#3d7fd6'); t.center('음료', 24, -1, '#ffffff');
     for (let d = 0; d < 3; d++) {
       const x = 3 + d * 15;
       box(x, 7, 13, 34, '#2f3b55');

@@ -468,7 +468,23 @@ function drawGround(cam, W, H) {
 // 건물·나무: 발밑(y) 가운데(x)를 기준으로 세움
 function drawThing(t, cam) {
   const img = thingArt(t), k = S * ART, w = img.width * k, h = img.height * k;
-  ctx.drawImage(img, Math.round(t.x * S - cam.x - w / 2), Math.round(t.y * S - cam.y - h), w, h);
+  const ox = Math.round(t.x * S - cam.x - w / 2), oy = Math.round(t.y * S - cam.y - h);
+  ctx.drawImage(img, ox, oy, w, h);
+  if (img.texts?.length) drawSignTexts(img.texts, ox, oy, k);
+}
+// 간판 글씨: 화면 해상도로 그림(깨짐 없음). 간판 넓이보다 길면 글씨를 줄여 안에 맞춤
+document.fonts.load("11px 'Galmuri11 Bold'");   // 캔버스 글씨는 글꼴을 저절로 불러오지 않아서 미리 부름
+function drawSignTexts(texts, ox, oy, k) {
+  ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const tx of texts) {
+    const font = px => `${px}px 'Galmuri11 Bold', Galmuri11, monospace`;
+    ctx.font = font(tx.size * k);
+    const tw = ctx.measureText(tx.s).width, max = tx.maxW * k;
+    if (tw > max) ctx.font = font(tx.size * k * max / tw);
+    ctx.fillStyle = tx.color;
+    ctx.fillText(tx.s, Math.round(ox + tx.x * k), Math.round(oy + (tx.y + tx.size / 2) * k) + 1);
+  }
+  ctx.restore();
 }
 function drawPlayer(p, cam, now) {
   const k = S * SPRITE.scale;   // 캐릭터 픽셀 1칸 = k px

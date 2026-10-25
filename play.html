@@ -15,6 +15,7 @@
   #game { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
   .view { position: relative; min-height: 0; }
   /* 조작 안내 창: 화면 가운데, 말풍선과 같은 픽셀 모양(흰 바탕 + 검은 계단 테두리 + 오른쪽·아래 회색 그늘) */
+  @font-face { font-family: 'Galmuri11 Bold'; font-display: swap; src: url(https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/Galmuri11-Bold.woff2) format("woff2"); }   /* 간판 글씨 */
   @font-face { font-family: Galmuri14; font-display: swap; src: url(https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/Galmuri14.woff2) format("woff2"); }
   .guide-wrap { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; background: rgba(20, 18, 30, .35); padding: 16px; }   /* 창은 기본 UI·버튼보다 위 */
   .guide-wrap[hidden] { display: none; }
