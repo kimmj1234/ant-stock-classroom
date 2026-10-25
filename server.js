@@ -16,7 +16,7 @@ const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');   // 로그인 쿠�
 const FILES = {
   '/': 'home.html', '/site.css': 'site.css', '/site.js': 'site.js', '/wordmark.css': 'wordmark.css',
   '/logo.svg': 'assets/logo.svg',                 // 브라우저 탭 아이콘: 픽셀 하트 두 개
-  '/play': 'play.html', '/game.js': 'game.js', '/sprites.js': 'sprites.js', '/town.js': 'town.js', '/korea.js': 'korea.js',     // 게임 화면 (로그인한 사람만, 안 했으면 화면이 메인으로 보냄)
+  '/play': 'play.html', '/game.js': 'game.js', '/sprites.js': 'sprites.js', '/town.js': 'town.js', '/country.js': 'country.js',     // 게임 화면 (로그인한 사람만, 안 했으면 화면이 메인으로 보냄)
 };
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml' };
 
