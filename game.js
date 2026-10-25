@@ -390,6 +390,17 @@ function walkTilesOf() {   // 이 장면에서 사람이 서 있을 수 있는 �
   for (let ty = 0; ty < ROWS; ty++) for (let tx = 0; tx < COLS; tx++) if (WALK_GROUND.includes(tileAt(tx, ty)) && !SOLID.has(tx + ',' + ty)) walkTiles.push([tx, ty]);
   return walkTiles;
 }
+// 걷는 위치는 화면 꾸밈이라, 밖에 나온 사람들은 내 근처(14칸 안)에서 걸어 다님. 내가 멀리 가면(25칸 넘게) 화면 밖 근처로 옮겨 옴 → 넓은 도시 어디서나 거리가 살아 있음
+function tileNearMe(minT, maxT) {
+  const tiles = walkTilesOf();
+  for (let i = 0; i < 40; i++) {
+    const t = tiles[Math.floor(Math.random() * tiles.length)];
+    if (!t) break;
+    const d = Math.hypot((t[0] + 0.5) * TILE - me.x, (t[1] + 0.7) * TILE - me.y) / TILE;
+    if (d >= minT && d <= maxT) return t;
+  }
+  return tiles[Math.floor(Math.random() * tiles.length)] || [0, 0];
+}
 async function loadWalkers() {
   if (!online || !me.basicUI) return;
   const scene = SCENE.name;
@@ -398,11 +409,10 @@ async function loadWalkers() {
   if (!r.ok || SCENE.name !== scene) return;
   const ids = new Set(r.people.map(p => p.id));
   for (const id of walkers.keys()) if (!ids.has(id)) walkers.delete(id);   // 집·일터로 들어간 사람은 사라짐
-  const tiles = walkTilesOf();
   for (const p of r.people) {
     const w = walkers.get(p.id);
     if (w) { w.act = p.act; w.job = p.job; continue; }
-    const [tx, ty] = tiles[Math.floor(hash(p.id, 5, 9) * tiles.length)] || [0, 0];
+    const [tx, ty] = tileNearMe(2, 14);
     walkers.set(p.id, { ...p, x: (tx + 0.5) * TILE, y: (ty + 0.7) * TILE, tx: null, ty: null, dir: 's', left: false, moving: false, wait: Math.random() * 3 });
   }
 }
@@ -412,6 +422,7 @@ function updateWalkers(dt) {
   const tiles = walkTiles || (WALK_SCENES.includes(SCENE.name) ? walkTilesOf() : []);
   for (const w of walkers.values()) {
     if (w.talking > 0) { w.talking -= dt; w.moving = false; continue; }
+    if (Math.hypot(w.x - me.x, w.y - me.y) > TILE * 25) { const [tx, ty] = tileNearMe(13, 18); w.x = (tx + 0.5) * TILE; w.y = (ty + 0.7) * TILE; w.tx = null; }
     if (w.wait > 0) { w.wait -= dt; w.moving = false; continue; }
     if (w.tx == null) {   // 가까운(6칸 안) 걸을 수 있는 칸을 새 목적지로
       for (let i = 0; i < 8 && w.tx == null; i++) {
