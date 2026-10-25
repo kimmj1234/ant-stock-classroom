@@ -108,9 +108,27 @@
   .hud-bag:hover { background: #f1f0ec; }
   .hud-bag:focus-visible { outline: 3px dashed #f2c94c; outline-offset: 5px; }
   .hud-bag kbd { position: absolute; right: -10px; bottom: -10px; min-width: 24px; height: 24px; font-size: 13px; }
-  /* 가방 창: 5×4칸 */
-  .bag-grid { display: grid; grid-template-columns: repeat(5, 44px); gap: 8px; justify-content: center; margin: 0 0 14px; }
-  .bag-grid span { height: 44px; background: #f1f0ec; box-shadow: inset 2px 2px #c8c6c0, 2px 0 #000, -2px 0 #000, 0 2px #000, 0 -2px #000; }
+  /* 가방 창: 나무 상자 느낌 — 진한 갈색 계단 테두리 + 밝은 나무 틀(위·왼쪽 밝게, 아래·오른쪽 어둡게), 위에 걸친 제목 판, 오른쪽 위 주황 X, 움푹 들어간 칸 5×4 */
+  .crate {
+    position: relative; padding: 30px 20px 16px; background: #a0592f; color: #f6e3c0;
+    font: 14px/1.5 Galmuri14, "Malgun Gothic", monospace; -webkit-font-smoothing: none;
+    box-shadow: 4px 0 #2e1a10, -4px 0 #2e1a10, 0 4px #2e1a10, 0 -4px #2e1a10, inset 4px 4px #c97b45, inset -4px -4px #6e3a1c;
+  }
+  .crate h2 {
+    position: absolute; top: -16px; left: 50%; transform: translateX(-50%); margin: 0; padding: 3px 22px;
+    background: #6e3a1c; color: #f6e3c0; font: inherit; white-space: nowrap;
+    box-shadow: 3px 0 #2e1a10, -3px 0 #2e1a10, 0 3px #2e1a10, 0 -3px #2e1a10, inset 0 3px #8a4c26;
+  }
+  .crate-x {
+    position: absolute; top: -16px; right: -16px; width: 34px; height: 34px; padding: 0; border: 0; cursor: pointer;
+    background: #d9622b; color: #2e1a10; font: 700 22px/1 Galmuri11, monospace;
+    box-shadow: 3px 0 #2e1a10, -3px 0 #2e1a10, 0 3px #2e1a10, 0 -3px #2e1a10, inset 3px 3px #f2914f, inset -3px -3px #a8431a;
+  }
+  .crate-x:hover { background: #e8733a; }
+  .crate-x:focus-visible { outline: 3px dashed #f2c94c; outline-offset: 5px; }
+  .bag-grid { display: grid; grid-template-columns: repeat(5, 48px); gap: 10px; justify-content: center; margin: 0 0 12px; }
+  .bag-grid span { height: 48px; background: #7a4121; box-shadow: 2px 0 #2e1a10, -2px 0 #2e1a10, 0 2px #2e1a10, 0 -2px #2e1a10, inset 4px 4px #5a2e15, inset -2px -2px #94532b; }
+  .crate p { margin: 0; text-align: center; font-size: 13px; color: #f6e3c0; }
   .menu-btn { display: none; }
   .menu-btn {
     position: absolute; right: 18px; bottom: 18px; width: 36px; height: 36px; border: 0; background: #fff; color: #000; cursor: pointer;
@@ -177,11 +195,11 @@
   </div>
   <!-- 가방 창: 왼쪽 아래 가방 버튼이나 B로 열고, B·ESC·닫기로 닫음 -->
   <div class="guide-wrap" id="bagWrap" hidden>
-    <section class="guide menu wide" role="dialog" aria-modal="true" aria-labelledby="bagTitle">
+    <section class="crate" role="dialog" aria-modal="true" aria-labelledby="bagTitle">
       <h2 id="bagTitle">가방</h2>
+      <button type="button" class="crate-x" id="bagClose" aria-label="가방 닫기">×</button>
       <div class="bag-grid" id="bagGrid"></div>
-      <p class="start-text" id="bagEmpty">아직 가방이 비어 있어요</p>
-      <div class="menu-list"><button type="button" class="primary" id="bagClose">닫기</button></div>
+      <p id="bagEmpty">아직 가방이 비어 있어요</p>
     </section>
   </div>
   <!-- 메뉴 창: ESC(또는 ☰)로 열고 닫음. 이용방법으로 조작 방법을 다시 볼 수 있음 -->
