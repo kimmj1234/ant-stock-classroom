@@ -52,13 +52,22 @@
   .guide .menu-list .danger:hover { background: #e8574f; }
   .menu-list p { margin: 0; font-size: 12px; text-align: center; }
   /* 메뉴 버튼 (작은 "☰"): 휴대폰·태블릿에만. ESC 키가 없으니 이것으로 메뉴를 엶 (PC는 ESC) */
-  /* Ctrl+W 경고창: 화면 위쪽 가운데, 노란 바탕 + 검은 계단 테두리 픽셀 띠 */
+  /* 시작 창·Ctrl+W 확인 창의 안내 글 / 예·아니오 두 칸 */
+  .start-text { margin: 0 0 18px; text-align: center; font-size: 13px; line-height: 1.7; }
+  .menu-list.yesno { grid-template-columns: 1fr 1fr; gap: 16px; }
+  .menu.wide { width: min(380px, 100%); }
+  /* 창 모드 안내 띠: 화면 위쪽 가운데, 노란 바탕 + 검은 계단 테두리 + 버튼 */
   .ctrl-warn {
-    position: absolute; left: 50%; top: 22px; transform: translateX(-50%); z-index: 5; margin: 0; padding: 10px 18px; max-width: calc(100% - 48px); box-sizing: border-box;
-    background: #f2c94c; color: #000; font: 14px/1.5 Galmuri14, "Malgun Gothic", monospace; -webkit-font-smoothing: none; text-align: center; pointer-events: none;
+    position: absolute; left: 50%; top: 22px; transform: translateX(-50%); z-index: 5; margin: 0; padding: 8px 10px 8px 18px; max-width: calc(100% - 48px); box-sizing: border-box;
+    display: flex; align-items: center; gap: 14px; white-space: nowrap;
+    background: #f2c94c; color: #000; font: 14px/1.5 Galmuri14, "Malgun Gothic", monospace; -webkit-font-smoothing: none;
     box-shadow: 4px 0 #000, -4px 0 #000, 0 4px #000, 0 -4px #000, inset -4px -4px #c9a12c;
   }
   .ctrl-warn[hidden] { display: none; }
+  .ctrl-warn button {
+    border: 0; padding: 4px 12px; background: #2f6fc6; color: #fff; font: inherit; font-size: 13px; cursor: pointer;
+    box-shadow: 3px 0 #000, -3px 0 #000, 0 3px #000, 0 -3px #000, inset -3px -3px #1f4f96;
+  }
   .menu-btn { display: none; }
   .menu-btn {
     position: absolute; right: 18px; bottom: 18px; width: 36px; height: 36px; border: 0; background: #fff; color: #000; cursor: pointer;
@@ -83,7 +92,24 @@
   <div class="stick" id="stick" aria-hidden="true"><div class="knob" id="knob"></div></div>
   <button class="ebtn" id="ebtn" type="button" aria-label="상호작용">E</button>
   <button class="menu-btn" id="menuBtn" type="button" aria-label="메뉴 열기">☰</button>
-  <p class="ctrl-warn" id="ctrlWarn" role="alert" hidden>조심하세요! Ctrl + W를 누르면 창이 닫힐 수 있습니다!</p>
+  <!-- 창 모드 안내 띠: 전체화면이 아니면 Ctrl+W를 막을 수 없다고 알림 -->
+  <div class="ctrl-warn" id="ctrlWarn" role="status" hidden><span id="ctrlWarnText">창 모드에서는 Ctrl + W를 막을 수 없어요</span><button type="button" id="fsBack">전체화면으로</button></div>
+  <!-- 시작 창(PC): 전체화면은 사용자가 누른 다음에만 켤 수 있어서 "게임 시작"을 누르면 전체화면 + 키보드 잠금 -->
+  <div class="guide-wrap" id="startWrap" hidden>
+    <section class="guide menu" role="dialog" aria-modal="true" aria-labelledby="startTitle">
+      <h2 id="startTitle">나의 두번째 인생</h2>
+      <p class="start-text">전체화면으로 시작해요.<br>Ctrl + W로 창이 실수로 닫히지 않게 막아 줘요.</p>
+      <div class="menu-list"><button type="button" class="primary" id="startBtn">게임 시작</button></div>
+    </section>
+  </div>
+  <!-- Ctrl+W 확인 창: 전체화면에서 Ctrl+W를 누르면 창을 닫는 대신 이 창이 뜸 -->
+  <div class="guide-wrap" id="closeWrap" hidden>
+    <section class="guide menu wide" role="alertdialog" aria-modal="true" aria-labelledby="closeTitle" aria-describedby="closeText">
+      <h2 id="closeTitle">조심하세요!</h2>
+      <p class="start-text" id="closeText">Ctrl + W를 누르면 창이 닫힐 수 있습니다!<br>정말 창을 닫을까요?</p>
+      <div class="menu-list yesno"><button type="button" class="danger" data-close="yes">예</button><button type="button" class="primary" data-close="no">아니오</button></div>
+    </section>
+  </div>
   <!-- 메뉴 창: ESC(또는 ☰)로 열고 닫음. 이용방법으로 조작 방법을 다시 볼 수 있음 -->
   <div class="guide-wrap" id="menuWrap" hidden>
     <section class="guide menu" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
@@ -127,7 +153,8 @@
 <script src="/game.js"></script>
 <script>
 'use strict';
-// 창 두 개(키보드는 게임보다 먼저 가로채서, 창이 열려 있는 동안 캐릭터가 움직이지 않게 함)
+// 창들(키보드는 게임보다 먼저 가로채서, 창이 열려 있는 동안 캐릭터가 움직이지 않게 함)
+//   시작 창(PC): 게임 시작 → 전체화면 + 키보드 잠금 / Ctrl+W 확인 창: 예·아니오
 //   조작 안내 창: 계정을 만들고 처음 들어왔을 때 한 번만 저절로 뜸(서버 계정에 "봤음" 기록). Enter·E·Esc·Space로 닫음
 //   메뉴 창: ESC나 ☰로 열고 닫음. ↑↓(W/S)로 고르고 Enter·Space·E로 누름
 {
@@ -136,14 +163,44 @@
   const post = name => fetch('/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
 
   const leave = url => location.assign(url);
-  // Ctrl+W 경고: Ctrl+W는 브라우저가 먼저 처리해서 게임이 W를 알 수 없음 → Ctrl(Mac은 ⌘)을 누르는 순간 미리 경고창을 띄움.
-  // 누르고 있는 동안 계속 보이고, 손을 떼면 2초 뒤 사라짐
-  const warn = $('ctrlWarn'), mac = /Mac|iPhone|iPad/.test(navigator.platform);
-  if (mac) warn.textContent = '조심하세요! ⌘ + W를 누르면 창이 닫힐 수 있습니다!';
-  let warnTimer = 0;
-  addEventListener('keydown', e => { if (e.key === (mac ? 'Meta' : 'Control')) { clearTimeout(warnTimer); warn.hidden = false; } }, true);
-  addEventListener('keyup', e => { if (e.key === (mac ? 'Meta' : 'Control')) warnTimer = setTimeout(() => { warn.hidden = true; }, 2000); }, true);
-  addEventListener('blur', () => { warnTimer = setTimeout(() => { warn.hidden = true; }, 2000); });
+  // ===== Ctrl+W 막기 =====
+  // 창 모드에서는 브라우저가 Ctrl+W를 먼저 처리해서 막을 수 없음. 전체화면 + 키보드 잠금(크롬·엣지)일 때만 게임이 Ctrl+W를 받음
+  // → PC는 "게임 시작"으로 전체화면에 들어가고, Ctrl+W를 누르면 예/아니오 확인 창. 짧은 ESC는 메뉴, 길게 누르면 전체화면이 풀림(브라우저 규칙)
+  const touch = matchMedia('(pointer: coarse)').matches;   // 휴대폰·태블릿은 Ctrl+W가 없고, 처음 누를 때 전체화면(game.js)
+  const startWrap = $('startWrap'), closeWrap = $('closeWrap'), warn = $('ctrlWarn'), warnText = $('ctrlWarnText');
+  let pendingGuide = false;   // 시작 창이 떠 있는 동안 처음 안내 창은 미뤄 둠
+  let closing = false;        // "예"를 눌러 창 닫기를 고른 뒤
+  const enterFullscreen = async () => {
+    try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch {}
+    try { await navigator.keyboard?.lock(); } catch {}   // 모든 키를 게임이 먼저 받음(전체화면일 때만 됨)
+  };
+  const start = async () => {
+    startWrap.hidden = true; game.focus();
+    if (pendingGuide) { pendingGuide = false; openGuide(); }
+    await enterFullscreen();
+    if (!document.fullscreenElement) showWarn('창 모드에서는 Ctrl + W를 막을 수 없어요', '전체화면으로');   // 전체화면이 안 켜졌으면(브라우저가 막음 등) 알림
+  };
+  $('startBtn').addEventListener('click', start);
+  if (!touch) { startWrap.hidden = false; $('startBtn').focus(); }
+  // 전체화면이 풀리면(ESC 길게 등) 위쪽에 안내 띠, 다시 들어가면 숨김
+  const showWarn = (text, button) => { warnText.textContent = text; $('fsBack').textContent = button; warn.hidden = false; };
+  document.addEventListener('fullscreenchange', () => {
+    if (document.fullscreenElement) { warn.hidden = true; closing = false; }
+    else if (!touch && startWrap.hidden && !closing) showWarn('창 모드에서는 Ctrl + W를 막을 수 없어요', '전체화면으로');
+  });
+  $('fsBack').addEventListener('click', () => { closing = false; enterFullscreen(); game.focus(); });
+  // 확인 창: 예 → 웹페이지는 창을 직접 닫을 수 없어서 전체화면·키 잠금을 풀고 "한 번 더 누르면 닫힘" 안내 / 아니오 → 게임으로
+  const openClose = () => { closeWrap.hidden = false; closeWrap.querySelector('[data-close=no]').focus(); };
+  const answer = async yes => {
+    closeWrap.hidden = true;
+    if (!yes) return game.focus();
+    closing = true;
+    try { navigator.keyboard?.unlock(); } catch {}
+    try { if (document.fullscreenElement) await document.exitFullscreen(); } catch {}
+    window.close();   // 스크립트가 연 창이 아니면 브라우저가 무시함
+    showWarn('이제 Ctrl + W를 누르면 창이 닫혀요', '게임 계속하기');
+  };
+  closeWrap.addEventListener('click', e => { const b = e.target.closest('[data-close]'); if (b) answer(b.dataset.close === 'yes'); });
   // 화면 확대·축소 막기: Ctrl + 마우스 휠(터치패드 두 손가락 확대·축소 포함), Ctrl + +/−/0
   addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
   addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && ['+', '=', '-', '_', '0'].includes(e.key)) e.preventDefault(); }, true);
@@ -157,7 +214,11 @@
     if (fromMenu) { fromMenu = false; openMenu(); $('menuMain').querySelector('[data-act=guide]').focus(); }
     else game.focus();
   };
-  const onMe = me => { if (me && !me.guideSeen && guide.hidden && !first) { first = true; openGuide(); } };
+  const onMe = me => {
+    if (!me || me.guideSeen || !guide.hidden || first) return;
+    first = true;
+    if (startWrap.hidden) openGuide(); else pendingGuide = true;
+  };
   document.addEventListener('auth', e => onMe(e.detail));
   if (window.authState) onMe(window.authState.me);
   ok.addEventListener('click', closeGuide);
@@ -180,6 +241,24 @@
   menu.addEventListener('click', e => { const act = e.target.closest('button')?.dataset.act; if (act) ACTS[act](); });
   $('menuBtn').addEventListener('click', () => (menu.hidden ? openMenu() : closeMenu()));
   addEventListener('keydown', e => {
+    if (!startWrap.hidden) {   // 시작 창: Enter·Space·E로 게임 시작만, 나머지 키는 게임에 안 넘김
+      e.stopPropagation();
+      if (e.key === 'e' || e.key === 'E') { e.preventDefault(); start(); }
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyW') {   // 전체화면(키 잠금)일 때만 여기까지 옴
+      e.preventDefault(); e.stopPropagation();
+      if (closeWrap.hidden) openClose();
+      return;
+    }
+    if (!closeWrap.hidden) {   // 확인 창: ←→(A/D)로 고르고 Enter·Space·E로 누름, ESC는 아니오
+      e.stopPropagation();
+      const yes = closeWrap.querySelector('[data-close=yes]'), no = closeWrap.querySelector('[data-close=no]');
+      if (e.key === 'Escape') { e.preventDefault(); answer(false); }
+      else if (['ArrowLeft', 'ArrowRight', 'a', 'A', 'd', 'D'].includes(e.key)) { e.preventDefault(); (document.activeElement === yes ? no : yes).focus(); }
+      else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); document.activeElement?.click(); }
+      return;
+    }
     if (!guide.hidden) {
       if (['Enter', 'Escape', ' ', 'e', 'E'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); closeGuide(); }
       return;
