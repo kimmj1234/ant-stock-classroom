@@ -68,6 +68,19 @@
     border: 0; padding: 4px 12px; background: #2f6fc6; color: #fff; font: inherit; font-size: 13px; cursor: pointer;
     box-shadow: 3px 0 #000, -3px 0 #000, 0 3px #000, 0 -3px #000, inset -3px -3px #1f4f96;
   }
+  /* NPC 대화창: 화면 아래 가운데, 같은 픽셀 창. 이름표는 위에 걸침, ▼ = 다음 말 있음 */
+  .talk {
+    position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 4; width: min(640px, calc(100% - 48px)); box-sizing: border-box;
+    padding: 22px 26px 18px; background: #fff; color: #000; cursor: pointer; user-select: none;
+    font: 16px/1.7 Galmuri14, "Malgun Gothic", monospace; -webkit-font-smoothing: none;
+    box-shadow: 4px 0 #000, -4px 0 #000, 0 4px #000, 0 -4px #000, inset -4px -4px #b8b8b8;
+  }
+  .talk[hidden] { display: none; }
+  .talk-name { position: absolute; left: 18px; top: -18px; padding: 2px 12px; background: #2f6fc6; color: #fff; font-size: 14px; box-shadow: 3px 0 #000, -3px 0 #000, 0 3px #000, 0 -3px #000; }
+  .talk p { margin: 0; min-height: 3.4em; }
+  .talk-more { position: absolute; right: 16px; bottom: 8px; font-size: 12px; color: #555; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .talk-more { animation: none; } }
   .menu-btn { display: none; }
   .menu-btn {
     position: absolute; right: 18px; bottom: 18px; width: 36px; height: 36px; border: 0; background: #fff; color: #000; cursor: pointer;
@@ -91,6 +104,7 @@
   <canvas id="game" tabindex="0" aria-label="도시 화면. 방향키나 WASD로 움직이고 E로 상호작용"></canvas>
   <div class="stick" id="stick" aria-hidden="true"><div class="knob" id="knob"></div></div>
   <button class="ebtn" id="ebtn" type="button" aria-label="상호작용">E</button>
+  <div class="talk" id="talkWrap" role="dialog" aria-live="polite" hidden><div class="talk-name" id="talkName"></div><p id="talkText"></p><span class="talk-more" id="talkMore"></span></div>
   <button class="menu-btn" id="menuBtn" type="button" aria-label="메뉴 열기">☰</button>
   <!-- 창 모드 안내 띠: 전체화면이 아니면 Ctrl+W를 막을 수 없다고 알림 -->
   <div class="ctrl-warn" id="ctrlWarn" role="status" hidden><span id="ctrlWarnText">창 모드에서는 Ctrl + W를 막을 수 없어요</span><button type="button" id="fsBack">전체화면으로</button></div>
@@ -273,6 +287,12 @@
     }
     if (!guide.hidden) {
       if (['Enter', 'Escape', ' ', 'e', 'E'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); closeGuide(); }
+      return;
+    }
+    if (!$('talkWrap').hidden && menu.hidden) {   // NPC 대화 중: E·Enter·Space로 다음 말, ESC로 그만. 걷기는 멈춤
+      e.stopPropagation();
+      if (['Enter', ' ', 'e', 'E'].includes(e.key)) { e.preventDefault(); $('talkWrap').click(); }
+      else if (e.key === 'Escape') { e.preventDefault(); $('talkWrap').hidden = true; }
       return;
     }
     if (menu.hidden) {

@@ -1,38 +1,99 @@
 'use strict';
-// ===== 첫 맵: 잔디밭에 주택 한 채 =====
-// 칸 = 바닥 사각형 한 칸(32×32픽셀). 맵 밖으로는 못 나감.
-// 바닥은 GROUND 지도(글자 한 칸 = 바닥 한 칸)로, 서 있는 물건은 place(...) 목록(칸 번호)으로 정함 → 둘 다 고치기 쉬움.
+// ===== 장면(맵): 바깥 잔디밭 + 주택 안 =====
+// 장면마다: 바닥 지도(글자 한 칸 = 바닥 한 칸), 서 있는 물건, 못 지나가는 칸, E로 할 수 있는 곳(문·NPC), 처음 서는 곳.
+// useScene(이름)으로 장면을 바꾸면 크기·바닥·물건이 모두 그 장면 것으로 바뀜.
 // 물건은 캐릭터와 같은 굵기의 픽셀(그림 1칸 = 바닥 2픽셀)로 그림. 빛은 왼쪽 위에서 와서 그림자는 오른쪽 아래로 짐.
 const TILE = 32;                        // 바닥 한 칸(사각형)의 픽셀 크기
 const ART = 2;                          // 물건 그림 1칸 = 바닥 2픽셀 → 바닥 한 칸 = 그림 16칸
-const COLS = 40, ROWS = 24;             // 맵 크기(칸): 1280×768픽셀 → 화면 배율 2배면 2560×1536이라 큰 모니터(2560×1440)까지 꽉 참
-const MAP_W = COLS * TILE, MAP_H = ROWS * TILE;
-const START = { x: 20 * TILE, y: 15 * TILE };   // 처음 서는 자리(픽셀): 집 앞마당
-
-// ----- 바닥 지도 -----
-//   g 잔디   . 보도(베이지 판석)   k 점자블록   q 광장 돌바닥   p 주차장   R 차도   Z 횡단보도
-//   지금은 전부 잔디. 도로를 다시 놓으면 차선 무늬·정지선은 MAIN(대로 줄)·SIDE(골목 칸) 위치로 자동
-const GROUND = Array.from({ length: ROWS }, () => 'g'.repeat(COLS));
-const MAIN = [-1, -1], SIDE = [-1, -1];  // 대로 줄 범위, 골목 칸 범위 (지금은 도로 없음)
+const MAIN = [-1, -1], SIDE = [-1, -1]; // 도로를 다시 놓을 때 쓰는 대로 줄·골목 칸 범위 (지금은 도로 없음)
+// 지금 장면의 값들 (useScene이 채움)
+let SCENE, COLS, ROWS, MAP_W, MAP_H, GROUND, THINGS, SOLID, SPOTS, NPCS, START;
 const inMap = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
 const tileAt = (x, y) => (inMap(x, y) ? GROUND[y][x] : null);
 const isRoad = k => k === 'R' || k === 'Z';
+const WALL_TILES = 'wb';                // 벽 칸은 저절로 못 지나감
 
-// ----- 서 있는 물건 -----
-const THINGS = [], SOLID = new Set();
-// (x, y) = 왼쪽 위 칸, w×d칸 차지. block이면 못 지나감. 그림은 차지한 칸의 아래 가운데에 세움
-function place(type, v, x, y, w = 1, d = 1, block = true) {
-  if (block) for (let yy = y; yy < y + d; yy++) for (let xx = x; xx < x + w; xx++) SOLID.add(xx + ',' + yy);
-  THINGS.push({ type, v, w, d, x: (x + w / 2) * TILE, y: (y + d) * TILE });
+// 장면 만들기: build({ place, decal, deco, wallDeco, spot, npc })로 물건을 놓음
+//   place(종류, 색번호, x, y, 가로칸, 세로줄, 막힘) — (x, y) = 왼쪽 위 칸. 그림은 차지한 칸의 아래 가운데에 세움
+function makeScene(name, ground, start, build) {
+  const sc = { name, cols: ground[0].length, rows: ground.length, ground, start, things: [], solid: new Set(), spots: [], npcs: [] };
+  const place = (type, v, x, y, w = 1, d = 1, block = true) => {
+    if (block) for (let yy = y; yy < y + d; yy++) for (let xx = x; xx < x + w; xx++) sc.solid.add(xx + ',' + yy);
+    sc.things.push({ type, v, w, d, x: (x + w / 2) * TILE, y: (y + d) * TILE });
+  };
+  const decal = (type, x, y, v = 0) => sc.things.push({ type, v, w: 1, d: 1, x: (x + 0.5) * TILE, y: (y + 1) * TILE, ground: true });   // 바닥 무늬(지나갈 수 있음)
+  const deco = (type, x, y, v = 0, dy = 0) => sc.things.push({ type, v, w: 1, d: 1, x: (x + 0.5) * TILE, y: (y + 1) * TILE + dy });     // 작은 장식(지나갈 수 있음)
+  const wallDeco = (type, x, w, bottom) => sc.things.push({ type, v: 0, w, d: 1, x: (x + w / 2) * TILE, y: bottom * TILE, ground: true });   // 벽에 거는 것(창문·액자·시계)
+  // E로 할 수 있는 곳: (x, y) 픽셀 근처에 서서 E. 머리 위 "E" 표시는 (px, py)
+  const spot = o => sc.spots.push(o);
+  const npc = (n, tx, ty) => {   // NPC: 칸 (tx, ty)에 서 있음(못 지나감), 가까이서 E → 대화
+    const o = { ...n, x: (tx + 0.5) * TILE, y: (ty + 1) * TILE - 2, dir: 's', left: false, moving: false };
+    sc.npcs.push(o); sc.solid.add(tx + ',' + ty);
+    spot({ type: 'npc', npc: o, x: o.x, y: o.y, px: o.x, py: o.y - 92 });
+  };
+  build({ place, decal, deco, wallDeco, spot, npc });
+  ground.forEach((row, y) => [...row].forEach((k, x) => { if (WALL_TILES.includes(k)) sc.solid.add(x + ',' + y); }));
+  return sc;
 }
-const decal = (type, x, y, v = 0) => THINGS.push({ type, v, w: 1, d: 1, x: (x + 0.5) * TILE, y: (y + 1) * TILE, ground: true });   // 바닥 무늬(지나갈 수 있음)
-const deco = (type, x, y, v = 0, dy = 0) => THINGS.push({ type, v, w: 1, d: 1, x: (x + 0.5) * TILE, y: (y + 1) * TILE + dy });     // 작은 장식(지나갈 수 있음)
 
-// 주택 한 채: 맵 가운데, 가로 5칸 × 세로 3줄 (지붕은 위로 솟음). 다른 건물·나무 그림도 ARTS에 남아 있어 place(...) 한 줄로 놓을 수 있음
-place('house', 0, 18, 9, 5, 3);
+const SCENES = {
+  // 바깥: 가로 40칸 × 세로 24칸 잔디밭 + 가운데 주택(가로 6칸 × 세로 3줄). 문 앞에서 E → 집 안
+  field: makeScene('field', Array.from({ length: 24 }, () => 'g'.repeat(40)), { x: 20 * TILE, y: 15 * TILE }, ({ place, spot }) => {
+    place('house', 0, 17, 9, 6, 3);
+    spot({ type: 'door', x: 20 * TILE, y: 12 * TILE + 10, px: 20 * TILE, py: 12 * TILE - 98, to: 'home', at: { x: 10 * TILE, y: 10 * TILE } });
+  }),
+  // 집 안: 가로 20칸 × 세로 12칸. w 벽지 벽(위 3줄), b 벽 윗면(테두리), f 나무 마루, r 러그, d 현관 매트(여기서 E → 밖으로)
+  home: makeScene('home', [
+    'wwwwwwwwwwwwwwwwwwww',
+    'wwwwwwwwwwwwwwwwwwww',
+    'wwwwwwwwwwwwwwwwwwww',
+    'bffffffffffffffffffb',
+    'bffffffffrrrrrfffffb',
+    'bffffffffrrrrrfffffb',
+    'bffffffffrrrrrfffffb',
+    'bffffffffrrrrrfffffb',
+    'bffffffffrrrrrfffffb',
+    'bffffffffffffffffffb',
+    'bffffffffffffffffffb',
+    'bbbbbbbbbddbbbbbbbbb',
+  ], { x: 10 * TILE, y: 10 * TILE }, ({ place, wallDeco, spot, npc }) => {
+    // 벽에 거는 것
+    wallDeco('wwin', 7, 2, 2.4); wallDeco('wwin', 13, 2, 2.4);
+    wallDeco('frame', 1, 2, 1.9); wallDeco('clock', 9, 1, 1.6);
+    // 침실 쪽: 침대 · 협탁 · 책장
+    place('bed', 0, 1, 3, 2, 3); place('nightstand', 0, 3, 3); place('shelf', 0, 5, 3, 2, 1);
+    // 거실: TV · 커피 테이블 · 소파 (러그 위)
+    place('tv', 0, 10, 3, 3, 1); place('ctable', 0, 10, 5, 3, 1); place('sofa', 0, 10, 7, 3, 1);
+    // 주방: 조리대(싱크대·가스레인지) · 냉장고 · 식탁과 의자
+    place('counter', 0, 15, 3, 3, 1); place('fridge', 0, 18, 3); place('dtable', 0, 14, 7, 4, 1);
+    // 화분
+    place('plant', 0, 1, 9); place('plant', 1, 18, 9);
+    // 안내원 NPC
+    npc({ name: '안내원 봄', look: { ...DEFAULT_LOOK, color: '#fff4dc', hat: { shape: 'sprout' } }, lines: [
+      '어서 와! 여기는 너의 첫 번째 집이야.',
+      '이곳 "나의 두번째 인생"에서는 공부하고, 일하고, 취미를 즐기며 살아갈 수 있어.',
+      '방향키나 WASD로 움직이고, E로 사람에게 말을 걸거나 문을 열 수 있어.',
+      'ESC를 누르면 메뉴가 열려. 궁금한 게 생기면 언제든 나한테 다시 말 걸어!',
+    ] }, 6, 7);
+    // 현관 매트: E → 밖으로 (집 문 앞)
+    spot({ type: 'door', x: 10 * TILE, y: 11 * TILE + 16, px: 10 * TILE, py: 11 * TILE - 40, to: 'field', at: { x: 20 * TILE, y: 12 * TILE + 40 } });
+  }),
+};
+function useScene(name) {
+  SCENE = SCENES[name];
+  ({ cols: COLS, rows: ROWS, ground: GROUND, things: THINGS, solid: SOLID, spots: SPOTS, npcs: NPCS, start: START } = SCENE);
+  MAP_W = COLS * TILE; MAP_H = ROWS * TILE;
+}
+useScene('field');
 
-const blockedTile = (tx, ty) => !inMap(tx, ty) || SOLID.has(tx + ',' + ty);   // 맵 밖·물건 자리는 못 지나감
+const blockedTile = (tx, ty) => !inMap(tx, ty) || SOLID.has(tx + ',' + ty);   // 맵 밖·물건·벽 자리는 못 지나감
 const thingsAround = () => THINGS;
+// (x, y) 픽셀 근처(30픽셀 안)에 E로 할 수 있는 곳이 있으면 그중 가장 가까운 것
+function nearSpot(x, y) {
+  let best = null, bd = 30;
+  for (const sp of SPOTS) { const d = Math.hypot(sp.x - x, sp.y - y); if (d < bd) { bd = d; best = sp; } }
+  return best;
+}
 
 // ----- 그림 -----
 const makeCanvas = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h });
@@ -67,7 +128,10 @@ function tileImage(tx, ty) {
   const curb = isRoad(k) ? '' : [side(0, -1), side(0, 1), side(-1, 0), side(1, 0)].join('');
   const marks = k === 'R' ? roadMarks(tx, ty) : [];
   const zdir = k === 'Z' ? (ty >= MAIN[0] && ty <= MAIN[1] ? 'h' : 'v') : '';
-  const key = [k, v, curb, marks.join('+'), zdir].join('|');
+  // 집 안: 벽지는 맨 위·맨 아래 줄(몰딩·걸레받이), 러그는 가장자리, 벽 윗면은 안쪽 방향이 그림에 들어감
+  const nb = ch => [tileAt(tx, ty - 1) !== ch, tileAt(tx, ty + 1) !== ch, tileAt(tx - 1, ty) !== ch, tileAt(tx + 1, ty) !== ch].map(Number).join('');
+  const inner = k === 'w' ? (tileAt(tx, ty + 1) !== 'w' ? 'base' : tileAt(tx, ty - 1) !== 'w' ? 'top' : '') : k === 'r' ? nb('r') : k === 'b' ? nb('b') : '';
+  const key = [k, v, curb, marks.join('+'), zdir, inner].join('|');
   if (tileCache.has(key)) return tileCache.get(key);
   const c = makeCanvas(TILE, TILE), g = c.getContext('2d');
   const box = (x, y, w, h, color) => { g.fillStyle = color; g.fillRect(x, y, w, h); };
@@ -98,6 +162,36 @@ function tileImage(tx, ty) {
     for (let i = 0; i < 9; i++) { const px = Math.floor(hash(tx, ty, i) * 30), py = Math.floor(hash(tx, ty, i + 20) * 30); box(px, py, 1, 2, '#62a444'); box(px + 1, py, 1, 1, '#8fcc6a'); }
     if (v === 4) { box(10, 12, 2, 2, '#ffffff'); box(20, 22, 2, 2, '#f5a3b5'); box(24, 8, 2, 2, '#f2c94c'); }
     if (v === 5) { box(12, 16, 6, 3, '#5e9e41'); box(13, 15, 4, 1, '#5e9e41'); }
+  } else if (k === 'f' || k === 'd') {   // 나무 마루: 가로 널빤지(8픽셀), 줄마다 이음새를 엇갈림 / d = 현관 매트
+    box(0, 0, TILE, TILE, '#c98d5a');
+    for (let y = 0; y < TILE; y += 8) {
+      box(0, y, TILE, 1, '#a8703f'); box(0, y + 1, TILE, 1, '#d9a070');
+      const off = ((ty * 4 + y / 8) % 3) * 11 + v * 3;
+      box((off + 6) % TILE, y + 1, 1, 7, '#a8703f');
+      box((off + 9) % TILE, y + 4, 4, 1, '#bb7f4c');   // 나뭇결
+    }
+    if (k === 'd') { box(2, 4, 28, 24, '#5a3a32'); box(3, 5, 26, 22, '#8a3f3f'); for (let x = 5; x < 28; x += 3) box(x, 7, 1, 18, '#a85a4a'); }
+  } else if (k === 'w') {   // 벽지: 크림색 + 세로 줄무늬, 맨 위 몰딩, 맨 아래 나무 걸레받이
+    box(0, 0, TILE, TILE, '#f1e4cc');
+    for (let x = 3; x < TILE; x += 8) { box(x, 0, 2, TILE, '#e9d8b9'); box(x + 5, 0, 1, TILE, '#f7eedd'); }
+    if (inner === 'top') { box(0, 0, TILE, 4, '#d9c39c'); box(0, 4, TILE, 1, '#bfa77f'); }
+    if (inner === 'base') { box(0, TILE - 9, TILE, 1, '#6f4a30'); box(0, TILE - 8, TILE, 8, '#8a5a3b'); box(0, TILE - 8, TILE, 1, '#a8774f'); }
+  } else if (k === 'b') {   // 벽 윗면(위에서 본 벽 두께): 어두운 나무색, 방 쪽 가장자리는 밝게
+    box(0, 0, TILE, TILE, '#5f4a3e');
+    for (let y = 4; y < TILE; y += 8) box(0, y, TILE, 1, '#544034');
+    const [up, down, left, right] = [...inner].map(Number);
+    if (up && tileAt(tx, ty - 1) === 'f') box(0, 0, TILE, 3, '#8a6f5c');
+    if (down && tileAt(tx, ty + 1) === 'f') box(0, TILE - 3, TILE, 3, '#8a6f5c');
+    if (left && tileAt(tx - 1, ty) === 'f') box(0, 0, 3, TILE, '#8a6f5c');
+    if (right && tileAt(tx + 1, ty) === 'f') box(TILE - 3, 0, 3, TILE, '#8a6f5c');
+  } else if (k === 'r') {   // 러그: 붉은 바탕 + 마름모 무늬, 가장자리는 크림색 테두리와 술
+    box(0, 0, TILE, TILE, '#b8483e');
+    for (let i = 0; i < TILE; i += 16) { box(i + 6, 6, 4, 4, '#d9a24a'); box(i + 6, 22, 4, 4, '#d9a24a'); box(i + 14, 14, 4, 4, '#e8c98a'); }
+    const [up, down, left, right] = [...inner].map(Number);
+    if (up) { box(0, 0, TILE, 4, '#f1e4cc'); box(0, 4, TILE, 1, '#8a3a32'); }
+    if (down) { box(0, TILE - 4, TILE, 4, '#f1e4cc'); box(0, TILE - 5, TILE, 1, '#8a3a32'); }
+    if (left) { box(0, 0, 4, TILE, '#f1e4cc'); box(4, 0, 1, TILE, '#8a3a32'); for (let y = 2; y < TILE; y += 4) box(0, y, 2, 2, '#f8f1e2'); }
+    if (right) { box(TILE - 4, 0, 4, TILE, '#f1e4cc'); box(TILE - 5, 0, 1, TILE, '#8a3a32'); for (let y = 2; y < TILE; y += 4) box(TILE - 2, y, 2, 2, '#f8f1e2'); }
   } else if (k === 'p') {   // 주차장: 아스팔트 + 주차 칸 흰 선 + 바퀴 멈춤턱
     box(0, 0, TILE, TILE, '#55555e');
     for (const [px, py] of [[7, 9], [21, 18], [12, 26]]) box(px, py, 1, 1, '#61616a');
@@ -196,55 +290,169 @@ function painter(w, h) {
 const SIGNS = [['약국', '#2f9e5a'], ['치킨', '#e8454b'], ['분식', '#f2a03d'], ['빵집', '#b5653f'], ['꽃집', '#d4537e'], ['PC방', '#3d7fd6'], ['안경', '#4bb3a0'], ['떡집', '#7b5bd6']];
 const WALLS = ['#f1e6d0', '#e9c46a', '#cfe0d6', '#f0d0c0', '#dcd3ef', '#d8e4f0', '#f3dfb4', '#e8d0d8'];
 const ARTS = {
-  // 주택(5칸 × 3줄, 키 5칸): 굴뚝 / 붉은 기와 박공지붕(위로 갈수록 좁아짐, 기와 줄·용마루) / 처마 그늘 /
-  // 크림색 나무 판자 벽 + 모서리 기둥 / 초록 덧창 달린 창문 두 개(창가 화분) / 차양 아래 현관문(창·손잡이) + 벽등 + 번지판 / 돌 기단·계단
+  // 주택(6칸 × 3줄, 키 5.5칸): 굴뚝 / 붉은 기와 박공지붕(기와 줄·용마루) + 흰 처마 띠 /
+  // 크림색 나무 판자 벽 + 모서리 기둥 / 양쪽에 덧창 달린 창문(창가 화분) / 가운데 차양 + 현관문 + 처마 밑 등 / 돌 기단·계단
   house() {
-    const W = 80, H = 80, { c, box } = painter(W, H);
+    const W = 96, H = 88, { c, box } = painter(W, H);
     const ROOF = '#b5503c', ROOF_DK = '#8f3b2c', ROOF_LT = '#cf6a52', WALL = '#f3e6c8', WALL_DK = '#e2d1ad', WOOD = '#8a5a3b';
-    // 굴뚝
-    box(57, 2, 10, 20, INK); box(58, 3, 8, 18, '#a8553f'); box(58, 3, 8, 1, '#c97a5f');
-    for (let y = 6; y < 21; y += 4) box(58, y, 8, 1, '#8f3b2c');
-    box(55, 1, 14, 3, INK); box(56, 2, 12, 1, '#6b6670');
-    // 지붕: 위(용마루)는 좁고 아래(처마)는 맵 폭보다 살짝 넓게. 기와 줄은 4줄마다, 줄마다 이음새를 엇갈림
-    const top = 8, bottom = 34;
+    // 굴뚝 (지붕보다 먼저 → 아래쪽은 지붕에 가려짐)
+    box(68, 4, 12, 24, INK); box(69, 5, 10, 22, '#a8553f'); box(69, 5, 10, 1, '#c97a5f');
+    for (let y = 9; y < 26; y += 4) box(69, y, 10, 1, '#8f3b2c');
+    box(66, 2, 16, 4, INK); box(67, 3, 14, 2, '#6b6670');
+    // 지붕: 용마루는 좁고 처마는 집 폭 그대로. 기와 줄은 4줄마다, 줄마다 이음새를 엇갈림
+    const top = 10, bottom = 42;
     for (let y = top; y < bottom; y++) {
-      const t = (y - top) / (bottom - top - 1), inset = Math.round(13 * (1 - t));
-      const x0 = inset, w = W - inset * 2;
+      const inset = Math.round(16 * (1 - (y - top) / (bottom - top - 1))), x0 = inset, w = W - inset * 2;
       box(x0, y, w, 1, INK);
-      if (y > top) {
-        box(x0 + 1, y, w - 2, 1, (y - top) % 4 === 0 ? ROOF_DK : (y - top) % 4 === 1 ? ROOF_LT : ROOF);
-        for (let x = x0 + 4 + ((y - top) >> 2) % 2 * 4; x < x0 + w - 2; x += 8) if ((y - top) % 4 === 2) box(x, y, 1, 2, ROOF_DK);   // 기와 이음새
-        box(x0 + w - 4, y, 3, 1, ROOF_DK);   // 오른쪽 끝 그늘
-      }
+      if (y === top) continue;
+      const r = (y - top) % 4;
+      box(x0 + 1, y, w - 2, 1, r === 0 ? ROOF_DK : r === 1 ? ROOF_LT : ROOF);
+      if (r === 2) for (let x = x0 + 4 + ((y - top) >> 2) % 2 * 4; x < x0 + w - 2; x += 8) box(x, y, 1, 2, ROOF_DK);   // 기와 이음새
+      box(x0 + w - 4, y, 3, 1, ROOF_DK);   // 오른쪽 끝 그늘
     }
-    box(13, top - 2, W - 26, 3, INK); box(14, top - 1, W - 28, 1, '#5a2a20');   // 용마루
-    box(0, bottom, W, 2, INK); box(2, bottom + 2, W - 4, 2, '#5a4a40');        // 처마 끝 + 그늘
-    // 벽: 나무 판자(4줄마다 그늘 줄) + 양 끝 모서리 기둥
-    box(3, 38, W - 6, 36, INK); box(4, 38, W - 8, 35, WALL);
-    for (let y = 41; y < 72; y += 4) box(4, y, W - 8, 1, WALL_DK);
-    box(4, 38, 3, 35, WOOD); box(W - 7, 38, 3, 35, '#6f4a30');
-    box(W - 10, 38, 3, 35, '#e8d7b4');   // 오른쪽 벽 그늘
-    // 창문 두 개: 창틀 + 유리(위 밝게) + 십자 창살 + 초록 덧창 + 창가 화분
-    for (const wx of [13, 53]) {
-      box(wx - 1, 43, 16, 14, INK); box(wx, 44, 14, 12, '#8fc3e6'); box(wx, 44, 14, 3, '#d4ecfa');
-      box(wx + 6, 44, 2, 12, '#f4f1ea'); box(wx, 49, 14, 2, '#f4f1ea');
-      box(wx - 6, 43, 5, 14, INK); box(wx - 5, 44, 3, 12, '#4f8f5a'); box(wx + 16, 43, 5, 14, INK); box(wx + 17, 44, 3, 12, '#3f7a4a');   // 덧창
-      for (let y = 46; y < 55; y += 3) { box(wx - 5, y, 3, 1, '#3f7a4a'); box(wx + 17, y, 3, 1, '#2f6a3a'); }
-      box(wx - 2, 57, 18, 4, INK); box(wx - 1, 58, 16, 2, WOOD);                                   // 화분 상자
-      [['#e8454b', 0], ['#f2c94c', 4], ['#f5a3b5', 8], ['#ffffff', 12]].forEach(([col, dx]) => { box(wx + dx, 55, 3, 3, col); box(wx + dx + 1, 57, 1, 1, '#3f8a37'); });
+    box(16, top - 2, W - 32, 3, INK); box(17, top - 1, W - 34, 1, '#5a2a20');   // 용마루
+    box(0, bottom, W, 4, INK); box(1, bottom, W - 2, 2, '#f4efe4'); box(1, bottom + 2, W - 2, 1, '#cfc6b4');   // 흰 처마 띠
+    // 벽: 나무 판자(4줄마다 그늘 줄) + 양 끝 모서리 기둥 + 처마 그늘
+    box(3, 46, W - 6, 35, INK); box(4, 46, W - 8, 34, WALL);
+    for (let y = 50; y < 80; y += 4) box(4, y, W - 8, 1, WALL_DK);
+    box(4, 46, W - 8, 2, '#d9c8a4');
+    box(4, 46, 3, 34, WOOD); box(W - 7, 46, 3, 34, '#6f4a30'); box(W - 10, 48, 3, 32, '#e8d7b4');
+    // 창문 두 개(문 양쪽에 대칭): 창틀 + 유리(위 밝게) + 십자 창살 + 초록 덧창 + 창가 화분
+    for (const wx of [16, W - 30]) {
+      box(wx - 1, 52, 16, 16, INK); box(wx, 53, 14, 14, '#8fc3e6'); box(wx, 53, 14, 4, '#d4ecfa');
+      box(wx + 6, 53, 2, 14, '#f4f1ea'); box(wx, 59, 14, 2, '#f4f1ea');
+      box(wx - 6, 52, 5, 16, INK); box(wx - 5, 53, 3, 14, '#4f8f5a'); box(wx + 15, 52, 5, 16, INK); box(wx + 16, 53, 3, 14, '#3f7a4a');   // 덧창
+      for (let y = 55; y < 66; y += 3) { box(wx - 5, y, 3, 1, '#3f7a4a'); box(wx + 16, y, 3, 1, '#2f6a3a'); }
+      box(wx - 2, 68, 18, 4, INK); box(wx - 1, 69, 16, 2, WOOD);   // 화분 상자
+      [['#e8454b', 0], ['#f2c94c', 4], ['#f5a3b5', 8], ['#ffffff', 11]].forEach(([col, dx]) => { box(wx + dx, 66, 3, 3, col); box(wx + dx + 1, 68, 1, 1, '#3f8a37'); });
     }
-    // 현관: 작은 차양 + 문(위 작은 창, 판넬, 손잡이) + 벽등 + 번지판
-    box(31, 41, 18, 3, INK); box(32, 41, 16, 2, '#6b7080');
-    box(33, 45, 14, 29, INK); box(34, 46, 12, 28, '#9a6b45'); box(34, 46, 12, 1, '#b5824f');
-    box(36, 48, 8, 6, INK); box(37, 49, 6, 4, '#f6e3b4');
-    box(36, 57, 3, 7, '#86593a'); box(41, 57, 3, 7, '#86593a'); box(36, 66, 8, 5, '#86593a');
-    box(43, 61, 2, 2, '#f2c94c');
-    box(50, 49, 4, 6, INK); box(51, 50, 2, 4, '#fff1b8');                                       // 벽등
-    box(26, 50, 5, 4, '#2f6fc6'); box(27, 51, 3, 1, '#ffffff');                                 // 번지판
-    // 돌 기단 + 계단
-    box(2, 73, W - 4, 4, INK); box(3, 73, W - 6, 3, '#b9b2a4'); box(3, 73, W - 6, 1, '#d8d1c3');
-    box(29, 74, 22, 4, INK); box(30, 74, 20, 3, '#c9c2b4'); box(30, 74, 20, 1, '#e2dccf');
-    box(27, 77, 26, 3, INK); box(28, 77, 24, 2, '#c9c2b4'); box(28, 77, 24, 1, '#e2dccf');
+    // 현관: 처마 밑 등 + 차양 + 문(위 작은 창, 판넬, 손잡이)
+    box(45, 46, 6, 5, INK); box(46, 47, 4, 3, '#fff1b8');
+    box(37, 51, 22, 4, INK); box(38, 51, 20, 2, '#6b7080'); box(38, 53, 20, 1, '#4d5160');
+    box(40, 56, 16, 25, INK); box(41, 57, 14, 23, '#9a6b45'); box(41, 57, 14, 1, '#b5824f');
+    box(43, 59, 10, 6, INK); box(44, 60, 8, 4, '#f6e3b4');
+    box(43, 67, 4, 7, '#86593a'); box(49, 67, 4, 7, '#86593a');
+    box(51, 69, 2, 2, '#f2c94c');
+    // 돌 기단 + 계단 두 단
+    box(2, 80, W - 4, 4, INK); box(3, 80, W - 6, 3, '#b9b2a4'); box(3, 80, W - 6, 1, '#d8d1c3');
+    box(37, 81, 22, 4, INK); box(38, 81, 20, 3, '#c9c2b4'); box(38, 81, 20, 1, '#e2dccf');
+    box(35, 84, 26, 4, INK); box(36, 84, 24, 3, '#c9c2b4'); box(36, 84, 24, 1, '#e2dccf');
+    return c;
+  },
+  // ===== 집 안 가구 (뒤 벽에 붙은 것은 위로 솟아 벽에 겹쳐 보임) =====
+  bed() {   // 침대(2칸 × 3줄): 나무 머리판 + 베개 + 체크 이불
+    const W = 32, H = 54, { c, box } = painter(W, H);
+    box(1, 0, 30, 12, INK); box(2, 1, 28, 10, '#8a5a3b'); box(2, 1, 28, 2, '#a8774f'); box(4, 4, 24, 5, '#7a4e32');   // 머리판
+    box(2, 12, 28, 40, INK); box(3, 12, 26, 39, '#f7f3ea');
+    box(5, 14, 22, 8, INK); box(6, 15, 20, 6, '#ffffff'); box(6, 19, 20, 2, '#e6e1d6');                               // 베개
+    box(3, 24, 26, 27, '#6aa0d8'); box(3, 24, 26, 2, '#9cc4ea');                                                         // 이불
+    for (let y = 28; y < 50; y += 6) box(3, y, 26, 2, '#5a8cc4');
+    for (let x = 7; x < 29; x += 6) box(x, 26, 2, 25, '#5a8cc4');
+    box(26, 24, 3, 27, '#4f7db3');
+    box(2, 51, 28, 3, INK); box(3, 51, 26, 2, '#7a4e32');                                                               // 발판
+    return c;
+  },
+  nightstand() {   // 협탁 + 스탠드
+    const W = 14, H = 30, { c, box } = painter(W, H);
+    box(4, 0, 6, 6, INK); box(5, 1, 4, 4, '#f6e3b4'); box(6, 6, 2, 5, INK);   // 스탠드
+    box(0, 11, 14, 19, INK); box(1, 12, 12, 17, '#9a6b45'); box(1, 12, 12, 2, '#b5824f');
+    box(2, 16, 10, 5, '#86593a'); box(2, 22, 10, 5, '#86593a'); box(6, 18, 2, 1, '#f2c94c'); box(6, 24, 2, 1, '#f2c94c');
+    return c;
+  },
+  shelf() {   // 책장(2칸): 칸마다 색색 책
+    const W = 30, H = 42, { c, box } = painter(W, H);
+    box(0, 0, 30, 42, INK); box(1, 1, 28, 40, '#8a5a3b'); box(1, 1, 28, 2, '#a8774f');
+    const BOOKS = ['#e8454b', '#3d7fd6', '#f2c94c', '#5dbb4a', '#7b5bd6', '#f2a03d', '#4bb3a0'];
+    for (const [i, y] of [[0, 4], [1, 17], [2, 30]].map(([i, y]) => [i, y])) {
+      box(3, y, 24, 10, '#5a3a28');
+      let x = 4;
+      for (let b = 0; x < 25; b++) { const w = 2 + ((b + i) % 3 === 0 ? 1 : 0), h = 8 - ((b * 3 + i) % 3); box(x, y + 10 - h, w, h, BOOKS[(b + i * 2) % 7]); x += w + 1; }
+      box(1, y + 10, 28, 2, '#a8774f');
+    }
+    return c;
+  },
+  tv() {   // TV(3칸): 낮은 장식장 위 TV
+    const W = 44, H = 34, { c, box } = painter(W, H);
+    box(6, 0, 32, 20, INK); box(7, 1, 30, 18, '#2a3550'); box(8, 2, 12, 6, '#3d5078'); box(20, 21 - 4, 4, 4, INK);   // 화면 + 받침
+    box(0, 20, 44, 14, INK); box(1, 21, 42, 12, '#c98d5a'); box(1, 21, 42, 2, '#d9a070');
+    box(3, 25, 18, 6, '#a8703f'); box(23, 25, 18, 6, '#a8703f'); box(11, 27, 2, 1, '#f2c94c'); box(31, 27, 2, 1, '#f2c94c');
+    return c;
+  },
+  ctable() {   // 거실 낮은 탁자 + 찻잔·과일 접시
+    const W = 34, H = 16, { c, box } = painter(W, H);
+    box(0, 2, 34, 9, INK); box(1, 3, 32, 7, '#a8703f'); box(1, 3, 32, 2, '#c98d5a');
+    box(2, 11, 3, 5, INK); box(29, 11, 3, 5, INK);
+    box(7, 0, 5, 4, INK); box(8, 1, 3, 2, '#ffffff');                                         // 찻잔
+    box(19, 1, 9, 3, INK); box(20, 0, 2, 2, '#e8454b'); box(23, 0, 2, 2, '#f2c94c'); box(25, 1, 2, 2, '#5dbb4a');   // 과일 접시
+    return c;
+  },
+  sofa() {   // 소파(3칸): TV를 보고 있어 등받이가 앞(아래)에 보임
+    const W = 46, H = 24, { c, box } = painter(W, H);
+    box(0, 0, 46, 24, INK);
+    box(1, 1, 6, 22, '#4f8f5a'); box(39, 1, 6, 22, '#3f7a4a'); box(1, 1, 6, 2, '#6aab74');   // 팔걸이
+    box(7, 1, 32, 9, '#5d9e68'); box(22, 1, 1, 9, '#4f8f5a');                              // 앉는 쿠션
+    box(7, 10, 32, 13, '#4f8f5a'); box(7, 10, 32, 2, '#6aab74');                           // 등받이 (뒤에서 본 모습)
+    box(9, 2, 6, 5, '#f2c94c');                                                             // 쿠션 하나
+    return c;
+  },
+  counter() {   // 주방 조리대(3칸): 위 타일 벽 + 싱크대 + 가스레인지 + 아래 수납장
+    const W = 48, H = 38, { c, box } = painter(W, H);
+    box(0, 0, 48, 14, INK); box(1, 1, 46, 13, '#e6eef2');                                  // 벽 타일
+    for (let x = 1; x < 47; x += 6) box(x, 1, 1, 13, '#c9d6dc'); box(1, 7, 46, 1, '#c9d6dc');
+    box(30, 2, 12, 3, INK); box(31, 3, 10, 1, '#9a9aa3');                                  // 칼·국자 걸이
+    box(33, 5, 1, 5, '#8a8a94'); box(37, 5, 1, 6, '#8a8a94');
+    box(0, 14, 48, 24, INK); box(1, 15, 46, 4, '#d8d1c3'); box(1, 15, 46, 1, '#ece6d8');   // 상판
+    box(4, 15, 14, 4, '#9aa6b0'); box(5, 16, 12, 2, '#7f8b96'); box(10, 13, 2, 3, '#8a8a94');   // 싱크대 + 수도꼭지
+    for (const x of [26, 34]) { box(x, 16, 6, 2, '#2f2b38'); box(x + 2, 16, 2, 1, '#e8454b'); }   // 가스레인지
+    box(1, 19, 46, 18, '#e9e4d8'); for (const x of [1, 17, 33]) { box(x, 19, 1, 18, '#c9c2b4'); box(x + 6, 26, 4, 1, '#8a8a94'); }   // 수납장
+    return c;
+  },
+  fridge() {   // 냉장고
+    const W = 16, H = 40, { c, box } = painter(W, H);
+    box(0, 0, 16, 40, INK); box(1, 1, 14, 38, '#e8eef2'); box(1, 1, 2, 38, '#ffffff'); box(13, 1, 2, 38, '#c9d4dc');
+    box(1, 14, 14, 1, INK); box(11, 6, 2, 6, '#8a8a94'); box(11, 18, 2, 10, '#8a8a94');
+    box(4, 20, 3, 3, '#e8454b'); box(6, 26, 3, 3, '#f2c94c');   // 자석
+    return c;
+  },
+  dtable() {   // 식탁(4칸) + 의자 네 개 (뒤 두 개는 식탁에 반쯤 가려짐)
+    const W = 56, H = 30, { c, box } = painter(W, H);
+    const chair = (x, y) => { box(x, y, 12, 10, INK); box(x + 1, y + 1, 10, 8, '#b5824f'); box(x + 1, y + 1, 10, 2, '#c99a62'); };
+    chair(10, 0); chair(34, 0);
+    box(2, 6, 52, 14, INK); box(3, 7, 50, 12, '#c98d5a'); box(3, 7, 50, 2, '#d9a070');
+    box(20, 8, 16, 9, '#f7f3ea'); box(25, 10, 6, 5, INK); box(26, 11, 4, 3, '#e8454b');     // 식탁보 + 그릇
+    box(4, 20, 3, 6, INK); box(49, 20, 3, 6, INK);
+    chair(10, 20); chair(34, 20);
+    return c;
+  },
+  plant(v) {   // 큰 화분
+    const W = 16, H = 30, { c, box } = painter(W, H), leaf = v ? '#4bb3a0' : '#5dbb4a', dk = v ? '#3a8f80' : '#3f8a37';
+    box(3, 0, 10, 20, INK); box(4, 1, 8, 18, leaf); box(1, 6, 14, 10, INK); box(2, 7, 12, 8, leaf);
+    box(5, 2, 2, 6, dk); box(9, 4, 2, 8, dk); box(3, 9, 3, 2, dk); box(11, 10, 3, 2, dk); box(6, 1, 2, 2, '#9ad97a');
+    box(3, 18, 10, 12, INK); box(4, 19, 8, 10, '#d9774a'); box(4, 19, 8, 2, '#e8945e'); box(10, 21, 2, 8, '#b85f38');
+    return c;
+  },
+  // ===== 벽에 거는 것 =====
+  wwin() {   // 창문(2칸) + 커튼
+    const W = 32, H = 30, { c, box } = painter(W, H);
+    box(2, 0, 28, 2, '#8a5a3b');                                                             // 커튼 봉
+    box(5, 3, 22, 22, INK); box(6, 4, 20, 20, '#9fd0ee'); box(6, 4, 20, 6, '#d4ecfa');
+    box(8, 14, 6, 3, '#ffffff'); box(17, 8, 7, 3, '#ffffff');                                 // 구름
+    box(15, 4, 2, 20, '#f4f1ea'); box(6, 13, 20, 2, '#f4f1ea');
+    box(3, 25, 26, 3, INK); box(4, 25, 24, 2, '#f4f1ea');                                     // 창턱
+    for (const x of [1, 25]) { box(x, 2, 6, 24, INK); box(x + 1, 2, 4, 23, '#e8a0a8'); box(x + 2, 2, 1, 23, '#d4848e'); }   // 커튼
+    return c;
+  },
+  frame() {   // 액자: 산과 해 그림
+    const W = 14, H = 12, { c, box } = painter(W, H);
+    box(0, 0, 14, 12, INK); box(1, 1, 12, 10, '#c99a62'); box(2, 2, 10, 8, '#bfe3f5');
+    box(9, 3, 2, 2, '#f2c94c'); box(2, 7, 10, 3, '#5dbb4a'); box(4, 5, 3, 2, '#5dbb4a'); box(5, 4, 1, 1, '#5dbb4a');
+    return c;
+  },
+  clock() {   // 벽시계
+    const W = 10, H = 10, { c, box } = painter(W, H);
+    box(2, 0, 6, 10, INK); box(0, 2, 10, 6, INK); box(1, 1, 8, 8, INK);
+    box(2, 1, 6, 8, '#ffffff'); box(1, 2, 8, 6, '#ffffff');
+    box(4, 2, 1, 3, INK); box(5, 4, 2, 1, INK); box(4, 4, 1, 1, '#e8454b');
     return c;
   },
   // 작은 가게(2칸, 키 4칸): 옥상 난간 / 2층(창문·화분·실외기) / 간판(테두리·조명) / 줄무늬 차양 / 1층(진열창·유리문·계단)

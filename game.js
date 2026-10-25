@@ -1,12 +1,12 @@
 'use strict';
-// 기본 게임 화면: 도시(16×16칸 블록)를 픽셀 캐릭터가 8방향으로 걸어 다니고, 화면(카메라)이 따라감.
-// 캐릭터 그림은 sprites.js, 도시 배치·그림은 town.js. 여기서는 겹쳐 그리기·이동·부딪힘·앞뒤 순서만 함
+// 기본 게임 화면: 맵(장면)을 픽셀 캐릭터가 8방향으로 걸어 다니고, 화면(카메라)이 따라감. 문 앞에서 E → 다른 장면, NPC 앞에서 E → 대화.
+// 캐릭터 그림은 sprites.js, 장면 배치·그림은 town.js. 여기서는 겹쳐 그리기·이동·부딪힘·앞뒤 순서·E 행동만 함
 {
 const cv = document.getElementById('game'), ctx = cv.getContext('2d');
 const SPEED = 240;                      // 화면에서 1초에 걷는 거리(px)
 // 위치는 도시 픽셀 좌표(왼쪽 위 = 0, 0). 발밑 자리
 const me = { name: '', x: START.x, y: START.y, look: DEFAULT_LOOK, dir: 'se', left: false, moving: false };   // dir: 보는 방향(sprites.js의 s·se·e·ne·n), left: 좌우 뒤집기
-let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). 가로로 눕힌 낮은 휴대폰 화면은 1
+let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). 매 프레임 화면이 맵으로 꽉 차게 정함
 
 // ===== 로그인 확인: 안 했거나 로그아웃하면 메인으로 =====
 const onAuth = who => {
@@ -52,15 +52,37 @@ cv.addEventListener('pointerdown', e => {
   document.documentElement.requestFullscreen().then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
 });
 
-// E: 아직 물건이 없어서 안내만 (물건을 만들면 가까운 물건을 찾아 쓰게 바꿀 자리)
-let toast = { text: '', until: 0 };
-function interact() { toast = { text: '아직 상호작용할 물건이 없어요', until: performance.now() + 1500 }; }
+// ===== E: 가까운 문 → 화면이 어두워졌다 밝아지며 다른 장면으로 / 가까운 NPC → 대화창 =====
+const talkBox = document.getElementById('talkWrap');
+let talk = { npc: null, i: 0 };
+let fade = null;   // 장면을 바꾸는 중: { t0: 시작 시각, sp: 들어간 문, done: 바꿨는지 }
+const FADE = 220;  // 어두워지는 데(그리고 밝아지는 데) 걸리는 시간(ms)
+function say() {
+  const { npc, i } = talk;
+  document.getElementById('talkName').textContent = npc.name;
+  document.getElementById('talkText').textContent = npc.lines[i];
+  document.getElementById('talkMore').textContent = i < npc.lines.length - 1 ? '▼' : '닫기';
+}
+talkBox.addEventListener('click', () => {   // 대화창 누르기(또는 E·Enter·Space) = 다음 말, 마지막 말이면 닫기
+  if (++talk.i < talk.npc.lines.length) say();
+  else { talkBox.hidden = true; cv.focus(); }
+});
+function interact() {
+  if (!talkBox.hidden) return talkBox.click();   // 휴대폰 E 버튼
+  if (fade) return;
+  const sp = nearSpot(me.x, me.y);
+  if (!sp) return;
+  held.clear();
+  if (sp.type === 'door') return void (fade = { t0: performance.now(), sp, done: false });
+  face(sp.npc, me.x - sp.npc.x, me.y - sp.npc.y);   // NPC가 나를 봄
+  talk = { npc: sp.npc, i: 0 };
+  say(); talkBox.hidden = false;
+}
 
 // ===== 화면 크기: 캔버스 해상도를 실제 픽셀에 맞춰 흐리지 않게 =====
 new ResizeObserver(() => {
   const k = devicePixelRatio || 1;
   cv.width = Math.round(cv.clientWidth * k); cv.height = Math.round(cv.clientHeight * k);
-  S = cv.clientHeight < 420 ? 1 : 2;
 }).observe(cv);
 
 // ===== 픽셀 그림 만들기 =====
@@ -136,12 +158,17 @@ function drawName(p, cam) {
   ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.strokeText(p.name, x, y);
   ctx.fillStyle = '#000'; ctx.fillText(p.name, x, y);
 }
-function drawToast(W) {
-  if (performance.now() > toast.until) return;
-  ctx.font = 'bold 15px "Malgun Gothic", sans-serif'; ctx.textAlign = 'center';
-  const w = ctx.measureText(toast.text).width + 32;
-  ctx.fillStyle = '#000'; ctx.fillRect(W / 2 - w / 2, 16, w, 36);
-  ctx.fillStyle = '#fff'; ctx.fillText(toast.text, W / 2, 39);
+// E 표시: 가까운 문·NPC 위에 자판 모양 "E" + 할 일 (들어가기·나가기·대화)
+function drawPrompt(sp, cam) {
+  const x = Math.round(sp.px * S - cam.x), y = Math.round(sp.py * S - cam.y);
+  const label = sp.type === 'npc' ? '대화' : sp.to === 'field' ? '나가기' : '들어가기';
+  ctx.font = '14px Galmuri14, "Malgun Gothic", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const w = 26 + 6 + ctx.measureText(label).width + 10, left = x - Math.round(w / 2);
+  ctx.fillStyle = '#000'; ctx.fillRect(left - 3, y - 16, w + 6, 32);
+  ctx.fillStyle = '#fff'; ctx.fillRect(left, y - 13, w, 26);
+  ctx.fillStyle = '#000'; ctx.fillRect(left + 3, y - 10, 22, 20);
+  ctx.fillStyle = '#fff'; ctx.fillText('E', left + 9, y + 1); ctx.fillStyle = '#000'; ctx.fillText(label, left + 31, y + 1);
+  ctx.textBaseline = 'alphabetic';
 }
 
 // 발밑 네모(가로 ±6, 세로 -4~0 픽셀)가 지나갈 수 없는 칸(나무·집)에 걸리는지
@@ -163,7 +190,11 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   // 입력: 방향키 방향 그대로(위 = 화면 위쪽). 두 키를 같이 누르면(↑→ 등) 45도 대각선
-  let vx = stick.x + held.has('R') - held.has('L'), vy = stick.y + held.has('D') - held.has('U');
+  // 장면 바꾸기: 다 어두워지면 장면을 바꾸고 문 앞(안이면 현관 매트 앞)에 섬 → 다시 밝아짐
+  if (fade && !fade.done && now - fade.t0 >= FADE) { useScene(fade.sp.to); me.x = fade.sp.at.x; me.y = fade.sp.at.y; me.dir = fade.sp.to === 'home' ? 'n' : 's'; fade.done = true; }
+  if (fade && now - fade.t0 >= FADE * 2) fade = null;
+  const busy = fade || !talkBox.hidden;   // 장면을 바꾸거나 대화하는 동안은 못 걸음
+  let vx = busy ? 0 : stick.x + held.has('R') - held.has('L'), vy = busy ? 0 : stick.y + held.has('D') - held.has('U');
   const len = Math.hypot(vx, vy);
   if (len > 1) { vx /= len; vy /= len; }   // 대각선도 같은 빠르기
   me.moving = len > 0.1;
@@ -178,6 +209,8 @@ function frame(now) {
   const k = devicePixelRatio || 1, W = cv.width / k, H = cv.height / k;
   ctx.setTransform(k, 0, 0, k, 0, 0);
   ctx.imageSmoothingEnabled = false;      // 픽셀이 번지지 않고 또렷하게
+  // 배율: 기본 2배(낮은 화면은 1배). 화면이 맵보다 크면(큰 모니터·브라우저 축소) 맵이 화면을 꽉 채울 때까지 정수 배로 키움 → 빈 공간 없음
+  S = Math.max(H < 420 ? 1 : 2, Math.ceil(Math.max(W / MAP_W, H / MAP_H)));
   const f = toScreen(me.x, me.y);
   // 카메라: 나를 화면 가운데에. 맵 끝에 가까우면 바깥이 안 보이게 멈춤(맵이 화면보다 작으면 맵을 가운데에)
   const fitCam = (p, view, size) => Math.round(size > view ? Math.min(size - view, Math.max(0, p - view / 2)) : (size - view) / 2);
@@ -186,10 +219,15 @@ function frame(now) {
   drawShadows(ctx, S, cam);   // 물건 그림자 (바닥 위, 물건 아래)
   // 건물·나무·캐릭터를 발밑이 위쪽인 것부터 그림 → 아래쪽(앞)에 있는 것이 위에 겹침
   // 바닥 무늬(맨홀·주차 P)는 맨 먼저 → 무엇에든 가려짐
-  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), { y: me.y, draw: () => drawPlayer(me, cam, now) }];
+  const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), { y: me.y, draw: () => drawPlayer(me, cam, now) }];
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
-  drawName(me, cam);
-  drawToast(W);
+  NPCS.forEach(n => drawName(n, cam)); drawName(me, cam);
+  const sp = !busy && nearSpot(me.x, me.y);
+  if (sp) drawPrompt(sp, cam);
+  if (fade) {   // 검은 화면으로 어두워졌다 밝아짐
+    const t = (now - fade.t0) / FADE;
+    ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(0, Math.min(1, t < 1 ? t : 2 - t))})`; ctx.fillRect(0, 0, W, H);
+  }
   requestAnimationFrame(frame);
 }
 cv.focus();
