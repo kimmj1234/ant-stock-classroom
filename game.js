@@ -588,8 +588,15 @@ function drawSky(cam, W, H, dt, now) {
       const L = (typeof LIGHTS[t.type] === 'function' ? LIGHTS[t.type](t.v) : LIGHTS[t.type]) || thingArt(t).lights;   // 그림에 적어 둔 창문(lit)도 켬
       if (!L) continue;
       const img = thingArt(t), ox = t.x * S - cam.x - img.width * k / 2, oy = t.y * S - cam.y - img.height * k;
+      if (t.type === 'lamp') {   // 가로등: 발밑 바닥에 둥근 빛 웅덩이
+        const fx = t.x * S - cam.x, fy = t.y * S - cam.y, rx = 34 * k;
+        ctx.save(); ctx.translate(fx, fy); ctx.scale(1, 0.45);
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+        g.addColorStop(0, `rgba(255, 210, 120, ${0.32 * lit})`); g.addColorStop(1, 'rgba(255, 210, 120, 0)');
+        ctx.fillStyle = g; ctx.fillRect(-rx, -rx, rx * 2, rx * 2); ctx.restore();
+      }
       for (const [x, y, w, h] of L) {
-        const cx = ox + (x + w / 2) * k, cy = oy + (y + h / 2) * k, r = Math.max(w, h) * k * 1.6;
+        const cx = ox + (x + w / 2) * k, cy = oy + (y + h / 2) * k, r = Math.max(w, h) * k * (t.type === 'lamp' ? 5 : 1.6);   // 가로등은 둘레를 넓게
         const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
         g.addColorStop(0, `rgba(255, 200, 110, ${0.28 * lit})`); g.addColorStop(1, 'rgba(255, 200, 110, 0)');
         ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);

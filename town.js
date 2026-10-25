@@ -895,8 +895,8 @@ const ARTS = {
   ptree(v) { return treeArt(v, false); },
   // 가로등: 둥근 갓 + 노란 불빛 + 기둥 + 받침
   lamp() {
-    const { c, box } = painter(16, 46);
-    box(4, 0, 9, 3, INK); box(3, 3, 11, 3, INK); box(5, 3, 7, 4, '#fff6cf'); box(6, 4, 5, 2, '#ffffff');
+    const { c, box, lit } = painter(16, 46);
+    box(4, 0, 9, 3, INK); box(3, 3, 11, 3, INK); box(5, 3, 7, 4, '#fff6cf'); box(6, 4, 5, 2, '#ffffff'); lit(5, 3, 7, 4);   // 등(밤에 켜짐)
     box(6, 7, 5, 2, INK); box(7, 9, 3, 33, INK); box(8, 9, 1, 33, '#7d8292');
     box(7, 24, 3, 6, INK); box(8, 25, 1, 4, '#3d7fd6');                                                             // 기둥 배너
     box(5, 41, 7, 5, INK); box(6, 42, 5, 2, '#5b6070');
@@ -1020,10 +1020,10 @@ const ARTS = {
     const W = 144, H = 112, t = bTools(W, H), { box } = t;
     box(58, 0, 28, 24, INK); box(59, 1, 26, 22, '#ffffff'); box(68, 4, 8, 18, '#e8454b'); box(62, 9, 20, 8, '#e8454b');   // 십자
     t.wall(2, 22, W - 4, 86, '#f7f8fa'); box(3, 23, W - 6, 3, '#9fd0ee');
-    for (const y of [32, 54]) for (let x = 8; x < W - 8; x += 14) t.glass(x, y, 10, 12, '#bfe3f5', hash(x, y, 2) < 0.6);
+    for (const y of [32, 54]) for (let x = 11; x < W - 20; x += 14) t.glass(x, y, 10, 12, '#bfe3f5', hash(x, y, 2) < 0.6);   // 9칸씩 (벽 안에 꼭 들어가게)
     box(3, 72, W - 6, 2, '#9fd0ee');
     t.sign(40, 76, 64, '병원', '#ffffff', '#d8443f', '#d8443f');
-    box(98, 82, 40, 4, INK); box(99, 82, 38, 3, '#d8443f'); t.center('응급', 118, 70, '#d8443f');                  // 응급실 차양
+    box(98, 76, 40, 13, INK); box(99, 77, 38, 11, '#d8443f'); t.center('응급', 118, 77, '#ffffff');                // 응급실 차양(흰 글씨)
     t.glass(52, 92, 40, 14, '#bfe3f5', true); box(71, 92, 2, 14, '#9aa3ad');
     t.glass(104, 90, 28, 16, '#bfe3f5', true);
     t.base(106);
