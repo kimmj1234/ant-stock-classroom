@@ -264,6 +264,8 @@ function tileImage(tx, ty) {
 const SHADE = 'rgba(32, 26, 52, 0.22)';
 const BIG = new Set(['cafe', 'shop', 'villa', 'house']);
 // 밤에 불이 켜지는 곳: 물건 그림 안의 [x, y, 가로, 세로] (그림 칸 단위). 창문은 창살 사이 유리 네 칸씩
+// 바깥 하늘이 보이는 유리: 물건 그림 안의 [x, y, 가로, 세로] (집 안 창문은 창살 사이 네 칸) → 시간·날씨에 맞춰 색이 바뀜
+const SKY_GLASS = { wwin: [[6, 4, 9, 9], [17, 4, 9, 9], [6, 15, 9, 9], [17, 15, 9, 9]] };
 const LIGHTS = {
   house: [16, 66].flatMap(wx => [[wx, 53, 6, 6], [wx + 8, 53, 6, 6], [wx, 61, 6, 6], [wx + 8, 61, 6, 6]])
     .concat([[44, 60, 8, 4], [46, 47, 4, 3]]),   // 문 위 작은 창, 처마 밑 등
@@ -529,11 +531,11 @@ const ARTS = {
     box(9, 3, 2, 2, '#f2c94c'); box(2, 7, 10, 3, '#5dbb4a'); box(4, 5, 3, 2, '#5dbb4a'); box(5, 4, 1, 1, '#5dbb4a');
     return c;
   },
-  clock() {   // 벽시계
-    const W = 10, H = 10, { c, box } = painter(W, H);
-    box(2, 0, 6, 10, INK); box(0, 2, 10, 6, INK); box(1, 1, 8, 8, INK);
-    box(2, 1, 6, 8, '#ffffff'); box(1, 2, 8, 6, '#ffffff');
-    box(4, 2, 1, 3, INK); box(5, 4, 2, 1, INK); box(4, 4, 1, 1, '#e8454b');
+  clock() {   // 벽시계: 둥근 판 + 12·3·6·9시 눈금 (바늘은 게임 시간에 맞춰 game.js가 그림)
+    const W = 11, H = 11, { c, box } = painter(W, H);
+    box(3, 0, 5, 11, INK); box(0, 3, 11, 5, INK); box(1, 1, 9, 9, INK);
+    box(3, 1, 5, 9, '#ffffff'); box(1, 3, 9, 5, '#ffffff'); box(2, 2, 7, 7, '#ffffff');
+    box(5, 1, 1, 1, '#9a9aa3'); box(9, 5, 1, 1, '#9a9aa3'); box(5, 9, 1, 1, '#9a9aa3'); box(1, 5, 1, 1, '#9a9aa3');
     return c;
   },
   // 작은 가게(2칸, 키 4칸): 옥상 난간 / 2층(창문·화분·실외기) / 간판(테두리·조명) / 줄무늬 차양 / 1층(진열창·유리문·계단)

@@ -49,6 +49,7 @@ const ICONS = {
   sun: ['y...y...y.', '.y..y..y..', '..oooooo..', '..oyyyyo..', 'yyoyyyyoyy', '..oyyyyo..', '..oyyyyo..', '..oooooo..', '.y..y..y..', 'y...y...y.'],
   cloud: ['..........', '..........', '...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', 'gwwwwwwwwg', '.gggggggg.', '..........', '..........'],
   rain: ['...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', '.gggggggg.', '..........', '.u..u..u..', 'u..u..u...', '..........', '.u..u..u..'],
+  moon: ['...yyyy...', '..yyy.....', '.yyy......', '.yyy......', 'yyyy......', 'yyyy......', '.yyy......', '.yyyy.....', '..yyyyyy..', '...yyyy...'],
   snow: ['...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', '.gggggggg.', '..........', '.c...c...c', 'ccc.ccc...', '.c...c...c', '..........'],
   coin: ['...oooo...', '..oyyyyo..', '.oyywwyyo.', 'oyywyyyyyo', 'oyyyyyyyyo', 'oyyyyyyyyo', 'oyyyyyyyyo', '.oyyyyyyo.', '..oyyyyo..', '...oooo...'],
   bag: [   // 파란 배낭: 손잡이, 별·고양이·웃는 얼굴 스티커, 하늘색 띠, 앞주머니 자물쇠, 하트 장식, 양옆 주머니
@@ -85,13 +86,14 @@ const hudEl = document.getElementById('hud'), $hud = id => document.getElementBy
 let hudLast = '';
 function showHud() { hudEl.hidden = !me.basicUI; }
 function updateHud() {   // 글자가 바뀔 때만 고침
-  const t = today(clock.min), key = [t.year, t.season, t.date, t.wx, t.time, me.cash].join('|');
+  const t = today(clock.min), m = clock.min % DAY, icon = t.wx === 'sun' && (m < 330 || m >= 1140) ? 'moon' : t.wx;   // 맑은 밤(오후 7시~새벽 5시 반)엔 달
+  const key = [t.year, t.season, t.date, icon, t.time, me.cash].join('|');
   if (key === hudLast) return;
   hudLast = key;
   const [name, color] = SEASONS[t.season];
   $hud('hudSeason').textContent = name; $hud('hudSeason').style.background = color;
   $hud('hudDay').textContent = (t.year > 1 ? t.year + '년 ' : '') + t.date + '일';
-  $hud('hudWxText').textContent = WX_NAME[t.wx]; drawIcon('hudWx', t.wx);
+  $hud('hudWxText').textContent = WX_NAME[t.wx]; drawIcon('hudWx', icon);
   $hud('hudClock').textContent = t.time;
   $hud('hudCash').textContent = (me.cash || 0).toLocaleString('ko-KR');
 }
@@ -285,6 +287,22 @@ function drawPrompt(sp, cam) {
   ctx.textBaseline = 'alphabetic';
 }
 
+// ===== 벽시계: 게임 시각대로 바늘을 그림 (시침 짧은 검정, 분침 긴 검정, 가운데 빨간 점) =====
+function drawClocks(cam) {
+  const k = S * ART, m = clock.min % DAY;
+  for (const th of THINGS) {
+    if (th.type !== 'clock') continue;
+    const img = thingArt(th), ox = th.x * S - cam.x - img.width * k / 2, oy = th.y * S - cam.y - img.height * k;
+    const hand = (turn, len) => {
+      ctx.fillStyle = INK;
+      for (let r = 0; r <= len; r += 0.5) ctx.fillRect(Math.round(ox + Math.floor(5.5 + Math.sin(turn * 2 * Math.PI) * r) * k), Math.round(oy + Math.floor(5.5 - Math.cos(turn * 2 * Math.PI) * r) * k), k, k);
+    };
+    hand((m % 720) / 720, 2.8);   // 시침
+    hand((m % 60) / 60, 3.9);     // 분침
+    ctx.fillStyle = '#e8454b'; ctx.fillRect(Math.round(ox + 5 * k), Math.round(oy + 5 * k), k, k);
+  }
+}
+
 // ===== 하늘: 게임 시간·날씨에 따라 맵 위에 덧그림 (이름표·E 표시·기본 UI는 그 위라 늘 잘 보임) =====
 //   밤: 오후 5시부터 어두워져 8시~새벽 4시 가장 어둡고 오전 7시까지 밝아짐. 해 질 녘(오후 6시 무렵)엔 주황빛
 //   흐림·비·눈: 바깥이 조금 흐려짐. 비·눈은 화면에 알갱이가 내림(걸으면 맵과 같이 밀려 땅에 내리는 것처럼 보임)
@@ -294,8 +312,41 @@ let skyCam = null;
 function drawSky(cam, W, H, dt, now) {
   const t = today(clock.min), m = clock.min % DAY, out = SCENE.name !== 'home';
   const ramp = (a, b) => Math.min(1, Math.max(0, (m - a) / (b - a)));
-  const night = (m < 240 ? 1 : m < 420 ? 1 - ramp(240, 420) : m < 1020 ? 0 : ramp(1020, 1200)) * (out ? 0.55 : 0.2);
-  const dusk = out ? Math.max(0, 1 - Math.abs(m - 1080) / 90) * 0.14 : 0;
+  const dark = m < 240 ? 1 : m < 420 ? 1 - ramp(240, 420) : m < 1020 ? 0 : ramp(1020, 1200);   // 밤 정도 0(낮) ~ 1(한밤)
+  const evening = Math.max(0, 1 - Math.abs(m - 1080) / 90);                                     // 해 질 녘 정도 (오후 6시가 가장 큼)
+  const night = dark * (out ? 0.55 : 0.2);
+  const dusk = out ? evening * 0.14 : 0;
+  // 집 안 창문: 바깥과 같은 하늘 — 밤엔 남색과 별, 해 질 녘엔 주황, 흐리면 회색, 비·눈이 내림
+  if (!out) {
+    const k = S * ART;
+    for (const th of THINGS) {
+      const G = SKY_GLASS[th.type];
+      if (!G) continue;
+      const img = thingArt(th), ox = th.x * S - cam.x - img.width * k / 2, oy = th.y * S - cam.y - img.height * k;
+      for (const [x, y, w, h] of G) {
+        const px = Math.round(ox + x * k), py = Math.round(oy + y * k), pw = w * k, ph = h * k;
+        const pane = color => { ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph); };
+        if (t.wx !== 'sun') pane(`rgba(130, 140, 160, ${t.wx === 'cloud' ? 0.45 : 0.6})`);
+        if (evening) pane(`rgba(255, 140, 70, ${evening * 0.55})`);
+        if (dark) pane(`rgba(18, 24, 66, ${dark * 0.92})`);
+        ctx.save(); ctx.beginPath(); ctx.rect(px, py, pw, ph); ctx.clip();
+        if (dark > 0.6 && t.wx === 'sun') {   // 별
+          ctx.fillStyle = `rgba(255, 250, 210, ${dark})`;
+          for (let i = 0; i < 3; i++) ctx.fillRect(px + Math.floor(hash(x, y, i) * w) * k, py + Math.floor(hash(x, y, i + 9) * h) * k, k, k);
+        }
+        if (t.wx === 'rain' || t.wx === 'snow') {   // 창밖에 내리는 비·눈
+          const rain = t.wx === 'rain';
+          ctx.fillStyle = rain ? 'rgba(210, 228, 255, 0.8)' : 'rgba(255, 255, 255, 0.95)';
+          for (let i = 0; i < 4; i++) {
+            const fx = (hash(x, i, 3) * w + (rain ? -now / 120 : Math.sin(now / 600 + i) * 0.6)) % w, fy = (hash(y, i, 4) * h + now / (rain ? 40 : 300)) % h;
+            const qx = px + Math.floor((fx + w) % w) * k, qy = py + Math.floor(fy) * k;
+            ctx.fillRect(qx, qy, k, rain ? k * 2 : k);
+          }
+        }
+        ctx.restore();
+      }
+    }
+  }
   const gloom = out ? { cloud: 0.08, rain: 0.16, snow: 0.06 }[t.wx] || 0 : 0;
   const fill = color => { ctx.fillStyle = color; ctx.fillRect(0, 0, W, H); };
   if (gloom) fill(`rgba(70, 78, 100, ${gloom})`);
@@ -393,6 +444,7 @@ function frame(now) {
   // 바닥 무늬(맨홀·주차 P)는 맨 먼저 → 무엇에든 가려짐
   const scene = [...thingsAround(cam.x / S, cam.y / S, (cam.x + W) / S, (cam.y + H) / S).map(t => ({ y: t.ground ? -Infinity : t.y, draw: () => drawThing(t, cam) })), ...NPCS.map(n => ({ y: n.y, draw: () => drawPlayer(n, cam, now) })), { y: me.y, draw: () => drawPlayer(me, cam, now) }];
   scene.sort((a, b) => a.y - b.y).forEach(o => o.draw());
+  drawClocks(cam);
   drawSky(cam, W, H, dt, now);
   NPCS.forEach(n => drawName(n, cam)); drawName(me, cam);
   const sp = !busy && nearSpot(me.x, me.y);
