@@ -88,6 +88,28 @@
     box-shadow: 4px 0 #000, -4px 0 #000, 0 4px #000, 0 -4px #000, inset -4px -4px #c9a12c;
   }
   .got[hidden] { display: none; }
+  /* 기본 UI: 화면 테두리의 작은 픽셀 창들 (왼쪽 위 시간·날씨·계절, 오른쪽 위 현금, 왼쪽 아래 가방). 안내원에게 받은 뒤에만 보임 */
+  .hud[hidden] { display: none; }
+  .hud-box {
+    position: absolute; z-index: 3; box-sizing: border-box; padding: 8px 14px; background: #fff; color: #000;
+    font: 14px/1.5 Galmuri14, "Malgun Gothic", monospace; -webkit-font-smoothing: none;
+    box-shadow: 3px 0 #000, -3px 0 #000, 0 3px #000, 0 -3px #000, inset -3px -3px #b8b8b8;
+  }
+  .hud-box b { font-weight: normal; font-size: 16px; }
+  .ico { width: 20px; height: 20px; image-rendering: pixelated; vertical-align: middle; }
+  .ico.big { width: 36px; height: 36px; }
+  .hud-time { left: 22px; top: 22px; display: grid; gap: 4px; min-width: 190px; }
+  .hud-row { display: flex; align-items: center; gap: 8px; }
+  .hud-row b { margin-left: auto; }
+  .season { padding: 0 8px; color: #000; box-shadow: 2px 0 #000, -2px 0 #000, 0 2px #000, 0 -2px #000; }
+  .hud-cash { right: 22px; top: 22px; display: flex; align-items: center; gap: 8px; }
+  .hud-bag { left: 22px; bottom: 22px; padding: 6px; border: 0; cursor: pointer; display: grid; place-items: center; }
+  .hud-bag:hover { background: #f1f0ec; }
+  .hud-bag:focus-visible { outline: 3px dashed #f2c94c; outline-offset: 5px; }
+  .hud-bag kbd { position: absolute; right: -10px; bottom: -10px; min-width: 20px; height: 20px; font-size: 11px; }
+  /* 가방 창: 5×4칸 */
+  .bag-grid { display: grid; grid-template-columns: repeat(5, 44px); gap: 8px; justify-content: center; margin: 0 0 14px; }
+  .bag-grid span { height: 44px; background: #f1f0ec; box-shadow: inset 2px 2px #c8c6c0, 2px 0 #000, -2px 0 #000, 0 2px #000, 0 -2px #000; }
   .menu-btn { display: none; }
   .menu-btn {
     position: absolute; right: 18px; bottom: 18px; width: 36px; height: 36px; border: 0; background: #fff; color: #000; cursor: pointer;
@@ -98,6 +120,8 @@
   /* 휴대폰·태블릿(손가락): 왼쪽 아래 조이스틱, 오른쪽 아래 E 버튼. 마우스 기기에서는 숨김 */
   .stick, .ebtn { display: none; }
   @media (pointer: coarse) {
+    .hud-cash { right: 84px; }             /* 오른쪽 위 ☰ 버튼 옆 */
+    .hud-bag { bottom: 168px; left: 28px; } /* 조이스틱 위 */
     .guide .keyboard { display: none; } .guide .touch { display: grid; }   /* 안내 창: 키보드 대신 조이스틱·E 버튼 설명 */
     .menu-btn { display: block; right: 28px; bottom: auto; top: 18px; }
     .stick { display: block; position: absolute; left: 24px; bottom: 24px; width: 120px; height: 120px; border-radius: 50%; background: rgba(0, 0, 0, .12); border: 3px solid #000; touch-action: none; }
@@ -113,6 +137,14 @@
   <button class="ebtn" id="ebtn" type="button" aria-label="상호작용">E</button>
   <div class="talk" id="talkWrap" role="dialog" aria-live="polite" hidden><div class="talk-name" id="talkName"></div><p id="talkText"></p><span class="talk-more" id="talkMore"></span></div>
   <div class="got" id="got" role="status" hidden></div>
+  <div class="hud" id="hud" hidden>
+    <div class="hud-box hud-time" aria-label="게임 시간과 날씨">
+      <div class="hud-row"><span class="season" id="hudSeason">봄</span><span id="hudDay">1일</span></div>
+      <div class="hud-row"><canvas class="ico" id="hudWx"></canvas><span id="hudWxText">맑음</span><b id="hudClock">오전 6:00</b></div>
+    </div>
+    <div class="hud-box hud-cash" aria-label="가진 현금"><canvas class="ico" id="hudCoin"></canvas><b id="hudCash">0</b><span>원</span></div>
+    <button class="hud-box hud-bag" id="bagBtn" type="button" aria-label="가방 열기 (B)"><canvas class="ico big" id="hudBag"></canvas><kbd>B</kbd></button>
+  </div>
   <button class="menu-btn" id="menuBtn" type="button" aria-label="메뉴 열기">☰</button>
   <!-- 창 모드 안내 띠: 전체화면이 아니면 Ctrl+W를 막을 수 없다고 알림 -->
   <div class="ctrl-warn" id="ctrlWarn" role="status" hidden><span id="ctrlWarnText">창 모드에서는 Ctrl + W를 막을 수 없어요</span><button type="button" id="fsBack">전체화면으로</button></div>
@@ -138,6 +170,15 @@
       <h2 id="leaveTitle">도시로 떠날까요?</h2>
       <p class="start-text" id="leaveText">이곳은 튜토리얼 공간이에요.<br>한 번 떠나면 다시 돌아올 수 없어요!</p>
       <div class="menu-list yesno"><button type="button" class="primary" data-close="yes">떠나기</button><button type="button" data-close="no">아직 안 떠나기</button></div>
+    </section>
+  </div>
+  <!-- 가방 창: 왼쪽 아래 가방 버튼이나 B로 열고, B·ESC·닫기로 닫음 -->
+  <div class="guide-wrap" id="bagWrap" hidden>
+    <section class="guide menu wide" role="dialog" aria-modal="true" aria-labelledby="bagTitle">
+      <h2 id="bagTitle">가방</h2>
+      <div class="bag-grid" id="bagGrid"></div>
+      <p class="start-text" id="bagEmpty">아직 가방이 비어 있어요</p>
+      <div class="menu-list"><button type="button" class="primary" id="bagClose">닫기</button></div>
     </section>
   </div>
   <!-- 메뉴 창: ESC(또는 ☰)로 열고 닫음. 이용방법으로 조작 방법을 다시 볼 수 있음 -->
@@ -234,6 +275,13 @@
     showWarn('이제 Ctrl + W를 누르면 창이 닫혀요', '게임 계속하기');
   };
   closeWrap.addEventListener('click', e => { const b = e.target.closest('[data-close]'); if (b) answer(b.dataset.close === 'yes'); });
+  // 가방 창: 칸 20개 (물건이 생기면 칸에 그림을 넣을 자리)
+  const bag = $('bagWrap'), bagBtn = $('bagBtn');
+  $('bagGrid').innerHTML = '<span></span>'.repeat(20);
+  const openBag = () => { bag.hidden = false; $('bagClose').focus(); };
+  const closeBag = () => { bag.hidden = true; game.focus(); };
+  bagBtn.addEventListener('click', openBag);
+  $('bagClose').addEventListener('click', closeBag);
   // 튜토리얼 떠나기 확인 창 (game.js가 표지판 앞에서 E를 누르면 엶): 떠나기 → onYes, 아직 안 떠나기 → 게임으로
   const leaveWrap = $('leaveWrap');
   let onLeave = null;
@@ -312,6 +360,12 @@
       else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); document.activeElement?.click(); }
       return;
     }
+    if (!bag.hidden) {   // 가방 창: B·ESC로 닫음, 열려 있는 동안 게임에 키를 안 넘김
+      e.stopPropagation();
+      if (['Escape', 'b', 'B'].includes(e.key)) { e.preventDefault(); closeBag(); }
+      return;
+    }
+    if ((e.key === 'b' || e.key === 'B') && !$('hud').hidden && menu.hidden && guide.hidden && $('talkWrap').hidden) { e.preventDefault(); e.stopPropagation(); return openBag(); }
     if (!guide.hidden) {
       if (['Enter', 'Escape', ' ', 'e', 'E'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); closeGuide(); }
       return;

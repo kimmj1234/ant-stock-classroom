@@ -151,7 +151,9 @@ function googleName(b) {
   return { ok: true, token: startSession(key), created: true, msg: `'${name}' 계정을 새로 만들었어요.` };
 }
 const nameCheck = b => { const bad = nameProblem(b.name); return bad ? { ok: false, msg: bad } : { ok: true, msg: '사용할 수 있는 닉네임이에요.' }; };   // 입력하는 동안 화면이 물어봄
-const AUTH = { login, google: googleLogin, googleName, nameCheck };   // 로그인 전에 부르는 API
+const AUTH = { login, google: googleLogin, googleName, nameCheck };
+// 생활 정보: 게임 시간(분, 처음은 1일 오전 6시), 현금(원), 가방(물건 목록)
+const lifeOf = a => ({ minutes: a.minutes ?? 360, cash: a.cash ?? 50000, bag: a.bag || [] });   // 로그인 전에 부르는 API
 
 // ===== HTTP =====
 function readBody(req) {
@@ -189,12 +191,19 @@ http.createServer(async (req, res) => {
     if (name === 'me') {
       // 로그인 전은 정상 상황이라 200 + auth:false (브라우저 콘솔에 빨간 오류가 남지 않게)
       // guideSeen: 게임 조작 안내 창을 이미 봤는지 (처음 한 번만 띄움) / tutorialDone: 튜토리얼 공간을 떠났는지 (떠나면 다시 못 돌아감) / basicUI: 안내원에게 기본 UI를 받았는지
-      return json(res, 200, key && accounts[key] ? { ok: true, me: { name: accounts[key].name, guideSeen: !!accounts[key].guideSeen, tutorialDone: !!accounts[key].tutorialDone, basicUI: !!accounts[key].basicUI } } : { ok: false, auth: false, msg: '로그인이 필요해요.' });
+      return json(res, 200, key && accounts[key] ? { ok: true, me: { name: accounts[key].name, guideSeen: !!accounts[key].guideSeen, tutorialDone: !!accounts[key].tutorialDone, basicUI: !!accounts[key].basicUI, life: lifeOf(accounts[key]) } } : { ok: false, auth: false, msg: '로그인이 필요해요.' });
     }
     // guideSeen: 조작 안내 창을 닫았음 → 다음부터 안 띄움 / tutorialDone: 튜토리얼을 떠났음 → 다음부터 도시에서 시작 / basicUI: 기본 UI를 받았음
     if (name === 'guideSeen' || name === 'tutorialDone' || name === 'basicUI') {
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
       if (!accounts[key][name]) { accounts[key][name] = true; writeJSONFile(ACCOUNTS_FILE, accounts); }
+      return json(res, 200, { ok: true });
+    }
+    if (name === 'clock') {   // 게임 시간 저장: 앞으로만 감 (화면이 20초마다·페이지를 떠날 때 보냄)
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      const m = b.minutes;
+      if (!Number.isInteger(m) || m < 0 || m > 1e9) return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });
+      if (m > lifeOf(accounts[key]).minutes) { accounts[key].minutes = m; writeJSONFile(ACCOUNTS_FILE, accounts); }
       return json(res, 200, { ok: true });
     }
     return json(res, 400, { ok: false, msg: '잘못된 요청이에요.' });

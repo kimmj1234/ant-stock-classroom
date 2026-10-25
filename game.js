@@ -8,11 +8,75 @@ const SPEED = 240;                      // 화면에서 1초에 걷는 거리(px
 const me = { name: '', x: START.x, y: START.y, look: DEFAULT_LOOK, dir: 'se', left: false, moving: false };   // dir: 보는 방향(sprites.js의 s·se·e·ne·n), left: 좌우 뒤집기
 let S = 2;                              // 픽셀 배율 (픽셀 1칸 = S px). 매 프레임 화면이 맵으로 꽉 차게 정함
 
+// ===== 게임 시간: 현실 1초 = 게임 1분 (하루 = 24분). 계절마다 28일, 봄 → 여름 → 가을 → 겨울 → 다음 해 =====
+// 창(메뉴·안내·가방 등)이 떠 있는 동안은 멈춤. 서버에 20초마다·페이지를 떠날 때 저장
+const DAY = 1440, SEASON_DAYS = 28;
+const SEASONS = [['봄', '#f5a3b5'], ['여름', '#7ed36a'], ['가을', '#f2a03d'], ['겨울', '#bfe3f5']];
+// 날씨: 날마다 정해짐(같은 날은 늘 같음). 계절마다 [날씨, 확률] — 겨울엔 비 대신 눈
+const WEATHER = [
+  [['sun', 0.5], ['cloud', 0.25], ['rain', 0.25]],
+  [['sun', 0.55], ['cloud', 0.15], ['rain', 0.3]],
+  [['sun', 0.6], ['cloud', 0.25], ['rain', 0.15]],
+  [['sun', 0.4], ['cloud', 0.25], ['snow', 0.35]],
+];
+const WX_NAME = { sun: '맑음', cloud: '흐림', rain: '비', snow: '눈' };
+const clock = { min: 360, saved: 360, ready: false };
+function today(min) {
+  const day = Math.floor(min / DAY), season = Math.floor(day / SEASON_DAYS) % 4, year = Math.floor(day / (SEASON_DAYS * 4)) + 1;
+  let r = day === 0 ? 1 : hash(day, 77), wx = 'sun';   // 첫날은 늘 맑음
+  for (const [w, p] of WEATHER[season]) { if (r < p) { wx = w; break; } r -= p; }
+  const m = Math.floor(min % DAY / 10) * 10, h = Math.floor(m / 60);
+  return { year, season, date: day % SEASON_DAYS + 1, wx, time: `${h < 12 ? '오전' : '오후'} ${(h + 11) % 12 + 1}:${String(m % 60).padStart(2, '0')}` };
+}
+const saveClock = beacon => {
+  const minutes = Math.floor(clock.min);
+  if (!clock.ready || minutes <= clock.saved) return;
+  clock.saved = minutes;
+  const body = JSON.stringify({ minutes });
+  if (beacon) navigator.sendBeacon('/api/clock', new Blob([body], { type: 'application/json' }));
+  else fetch('/api/clock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).catch(() => {});
+};
+setInterval(saveClock, 20000);
+addEventListener('pagehide', () => saveClock(true));
+
+// ===== 기본 UI 그림: 픽셀 아이콘 (글자 한 칸 = 픽셀 한 칸) =====
+const ICON_PAL = { y: '#f2c94c', o: '#e0902a', w: '#ffffff', g: '#7c7f96', u: '#3d7fd6', c: '#8fc3e6', k: '#2f2b38', n: '#a8774f', N: '#7a4e32' };
+const ICONS = {
+  sun: ['y...y...y.', '.y..y..y..', '..oooooo..', '..oyyyyo..', 'yyoyyyyoyy', '..oyyyyo..', '..oyyyyo..', '..oooooo..', '.y..y..y..', 'y...y...y.'],
+  cloud: ['..........', '..........', '...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', 'gwwwwwwwwg', '.gggggggg.', '..........', '..........'],
+  rain: ['...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', '.gggggggg.', '..........', '.u..u..u..', 'u..u..u...', '..........', '.u..u..u..'],
+  snow: ['...ggg....', '..gwwwg...', '.gwwwwwgg.', 'gwwwwwwwwg', '.gggggggg.', '..........', '.c...c...c', 'ccc.ccc...', '.c...c...c', '..........'],
+  coin: ['...oooo...', '..oyyyyo..', '.oyywwyyo.', 'oyywyyyyyo', 'oyyyyyyyyo', 'oyyyyyyyyo', 'oyyyyyyyyo', '.oyyyyyyo.', '..oyyyyo..', '...oooo...'],
+  bag: ['....kkkk....', '...k....k...', '...k....k...', '.kkkkkkkkkk.', 'knnnnnnnnnnk', 'knNNNNNNNNnk', 'knnnnyynnnnk', 'knnnnyynnnnk', 'knnnnnnnnnnk', 'knnnnnnnnnnk', 'kNNNNNNNNNNk', '.kkkkkkkkkk.'],
+};
+function drawIcon(id, name) {
+  const c = document.getElementById(id), rows = ICONS[name], g = c.getContext('2d');
+  c.width = rows[0].length; c.height = rows.length;
+  rows.forEach((row, y) => [...row].forEach((ch, x) => { if (ICON_PAL[ch]) { g.fillStyle = ICON_PAL[ch]; g.fillRect(x, y, 1, 1); } }));
+}
+drawIcon('hudCoin', 'coin'); drawIcon('hudBag', 'bag');
+const hudEl = document.getElementById('hud'), $hud = id => document.getElementById(id);
+let hudLast = '';
+function showHud() { hudEl.hidden = !me.basicUI; }
+function updateHud() {   // 글자가 바뀔 때만 고침
+  const t = today(clock.min), key = [t.year, t.season, t.date, t.wx, t.time, me.cash].join('|');
+  if (key === hudLast) return;
+  hudLast = key;
+  const [name, color] = SEASONS[t.season];
+  $hud('hudSeason').textContent = name; $hud('hudSeason').style.background = color;
+  $hud('hudDay').textContent = (t.year > 1 ? t.year + '년 ' : '') + t.date + '일';
+  $hud('hudWxText').textContent = WX_NAME[t.wx]; drawIcon('hudWx', t.wx);
+  $hud('hudClock').textContent = t.time;
+  $hud('hudCash').textContent = (me.cash || 0).toLocaleString('ko-KR');
+}
+
 // ===== 로그인 확인: 안 했거나 로그아웃하면 메인으로 =====
 const onAuth = who => {
   if (!who) return location.replace('/#login');
   me.name = who.name;
-  me.basicUI = !!who.basicUI;   // 안내원에게 기본 UI를 받았는지 (기본 UI 화면은 디자인 후 이 값으로 띄울 자리)
+  me.basicUI = !!who.basicUI;   // 안내원에게 기본 UI를 받았는지 → 받았으면 화면 테두리에 기본 UI
+  if (who.life) { clock.min = clock.saved = who.life.minutes; me.cash = who.life.cash; me.bag = who.life.bag; clock.ready = true; }
+  showHud();
   if (who.tutorialDone && SCENE.name !== 'city') { useScene('city'); me.x = START.x; me.y = START.y; }   // 튜토리얼을 이미 떠났으면 다시 못 들어감
 };
 document.addEventListener('auth', e => onAuth(e.detail));
@@ -80,6 +144,7 @@ talkBox.addEventListener('click', () => {   // 대화창 누르기(또는 E·Ent
     me[gift] = true;
     fetch('/api/' + gift, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {});
     notify(GIFTS[gift] + '를 받았어요!');
+    showHud();
   }
 });
 function interact() {
@@ -205,6 +270,8 @@ function face(p, vx, vy) {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (clock.ready && !document.querySelector('.guide-wrap:not([hidden])')) clock.min += dt;   // 게임 시간 (창이 떠 있으면 멈춤)
+  updateHud();
   // 입력: 방향키 방향 그대로(위 = 화면 위쪽). 두 키를 같이 누르면(↑→ 등) 45도 대각선
   // 장면 바꾸기: 다 어두워지면 장면을 바꾸고 문 앞(안이면 현관 매트 앞)에 섬 → 다시 밝아짐
   if (fade && !fade.done && now - fade.t0 >= FADE) { useScene(fade.sp.to); me.x = fade.sp.at.x; me.y = fade.sp.at.y; me.dir = fade.sp.to === 'home' ? 'n' : fade.sp.to === 'city' ? 'e' : 's'; me.left = fade.sp.to === 'city'; fade.done = true; }   // 도시 입구에서는 왼쪽(도시 쪽)을 봄
