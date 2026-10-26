@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const PORT = +process.env.PORT || 5000, HOST = '127.0.0.1';
+const PORT = +process.env.PORT || 5000, HOST = process.env.HOST || '127.0.0.1';   // 배포할 땐 HOST=0.0.0.0 (Dockerfile이 정함)
 const MAX_ACCOUNTS = 200;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');   // 닉네임·(비밀번호면) 소금·해시 / (구글이면) 구글 고유 번호

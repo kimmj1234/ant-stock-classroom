@@ -15,6 +15,15 @@ node server.js
 
 브라우저에서 http://localhost:5000 을 엽니다.
 
+### 24시간 켜 두기 (배포)
+
+서버는 외부 라이브러리 없이 Node만 쓰고, 계정·세계·시장 데이터를 `data/` 폴더에 **파일로** 저장해요. 그래서 배포할 곳은 ① Node(또는 Docker)를 돌릴 수 있고 ② 서버를 껐다 켜도 `/data` 디스크가 유지되고 ③ 기계를 한 대만 쓰는 곳이어야 해요.
+
+- **Docker 이미지**: `Dockerfile`(HOST=0.0.0.0, PORT=8080, DATA_DIR=/data). `docker run -p 8080:8080 -v 내볼륨:/data 이미지`
+- **Fly.io**(추천, 도쿄 지역): `winget install Fly-io.flyctl` → `fly auth login` → `fly launch --copy-config --no-deploy` → `fly volumes create data --size 1 --region nrt` → `fly deploy`. 설정은 `fly.toml`.
+- 환경변수: `PORT`, `HOST`(기본 127.0.0.1), `DATA_DIR`(기본 ./data), `GOOGLE_CLIENT_ID`. 구글 로그인은 배포한 주소를 Google Cloud Console의 "승인된 자바스크립트 원본"에 추가해야 돼요(닉네임+비밀번호 로그인은 바로 됨).
+- 지금 세계(계정·NPC·주식)를 그대로 옮기려면 `data/` 폴더를 배포한 `/data`에 한 번 복사해요. 안 옮기면 새 세계로 시작해요.
+
 ### 다른 사람에게 보여 주기 (임시 인터넷 주소)
 
 1. 한 번만 설치: `winget install Cloudflare.cloudflared`

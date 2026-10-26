@@ -1,0 +1,26 @@
+# Fly.io 설정: `fly launch --copy-config --no-deploy` → `fly volumes create data --size 1 --region nrt` → `fly deploy`
+# 서버가 파일로 상태를 저장하므로 기계는 꼭 한 대만(수평 확장 금지), 항상 켜 둠(세계 시계는 현실 시간을 따라 흐르지만 시뮬레이션은 켜져 있을 때 돌아감)
+app = "my-second-life"        # 이미 쓰인 이름이면 fly launch가 새 이름을 물어봄
+primary_region = "nrt"        # 도쿄 (한국에서 가장 가까움)
+
+[build]
+
+[env]
+  PORT = "8080"
+  HOST = "0.0.0.0"
+  DATA_DIR = "/data"
+
+[mounts]
+  source = "data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

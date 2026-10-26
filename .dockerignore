@@ -1,0 +1,6 @@
+.git
+.claude
+data
+node_modules
+*.md
+share.bat
