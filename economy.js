@@ -37,6 +37,28 @@ const FUND = { nuri: [18000, 22, 0.12], daehan: [9000, 10, 0.25], haneul: [7000,
 const setFund = (c, cap, per, payout) => { c.shares = Math.max(10000, Math.round(cap * 1e8 / c.price / 10000) * 10000); c.per0 = per; c.profit = cap * 1e8 / per; c.payout = payout; };
 for (const c of COMPANIES) setFund(c, ...(FUND[c.id] || [3000, 12, 0.2]));
 const MARKET_MIN = 390;
+// 신규 상장(IPO) 후보: 시가총액(억 원, 희망 공모가 밴드 가운데 기준) · 업종 PER · 배당성향 · 변동성 · 희망 공모가 하단(원) · 소개
+const IPO_POOL = [
+  { id: 'hanulbio', name: '한울바이오', sector: '제약', region: '마루', cap: 4200, per: 28, payout: 0.03, vol: 4.2, lo: 18000, desc: '항암 신약 후보 물질을 개발하는 바이오 회사' },
+  { id: 'garamtech', name: '가람테크', sector: 'IT', region: '한가람', cap: 2600, per: 20, payout: 0.08, vol: 3.6, lo: 12000, desc: '기업용 클라우드와 보안 서비스를 만드는 회사' },
+  { id: 'saebyeokenergy', name: '새벽에너지', sector: '에너지', region: '새벽곶', cap: 3100, per: 16, payout: 0.1, vol: 3.4, lo: 9000, desc: '해안 풍력 발전 단지를 운영하는 회사' },
+  { id: 'noeulfood', name: '노을푸드', sector: '식품', region: '노을섬', cap: 1800, per: 12, payout: 0.3, vol: 2.4, lo: 14000, desc: '섬 특산물을 가공해 파는 식품 회사' },
+  { id: 'arabarogis', name: '아라로지스', sector: '해운', region: '아라항', cap: 3400, per: 10, payout: 0.25, vol: 3.0, lo: 21000, desc: '컨테이너 물류와 항만 운영을 하는 회사' },
+  { id: 'neulbomhotel', name: '늘봄호텔', sector: '관광', region: '늘봄', cap: 2300, per: 15, payout: 0.2, vol: 3.2, lo: 16000, desc: '온천 호텔과 리조트 체인' },
+  { id: 'solnaematerial', name: '솔내소재', sector: '광업', region: '솔내', cap: 1500, per: 9, payout: 0.3, vol: 3.4, lo: 8000, desc: '2차전지 원료 광물을 가공하는 회사' },
+  { id: 'hanulplay', name: '한울플레이', sector: '게임', region: '한가람', cap: 3800, per: 25, payout: 0.05, vol: 4.5, lo: 25000, desc: '모바일 게임을 만들고 서비스하는 회사' },
+  { id: 'haneulsalt', name: '하늬솔트', sector: '농업', region: '하늬', cap: 700, per: 11, payout: 0.3, vol: 2.8, lo: 6000, desc: '천일염과 소금 가공 식품을 파는 회사' },
+  { id: 'byeolhaparts', name: '별하선박기자재', sector: '조선', region: '별하항', cap: 1900, per: 12, payout: 0.2, vol: 3.0, lo: 11000, desc: '선박 엔진과 부품을 만드는 회사' },
+  { id: 'hanulcast', name: '한울캐스트', sector: '미디어', region: '한가람', cap: 2000, per: 18, payout: 0.1, vol: 3.4, lo: 10000, desc: '인터넷 방송과 영상 제작 회사' },
+  { id: 'pureunmart', name: '푸른마트', sector: '유통', region: '푸른들', cap: 2800, per: 11, payout: 0.3, vol: 2.6, lo: 13000, desc: '농산물 직거래 대형 마트 체인' },
+];
+// 상장한 회사를 회사 목록에 넣음 (시가총액은 공모가 × 발행주식수, 연 순이익은 후보 정보 그대로)
+function registerListed(p) {
+  if (BY_ID[p.def.id]) return BY_ID[p.def.id];
+  const d = p.def, c = { id: d.id, name: d.name, sector: d.sector, region: d.region, price: p.price, vol: d.vol, ipo: true, shares: p.shares, per0: d.per, profit: d.cap * 1e8 / d.per, payout: d.payout };
+  COMPANIES.push(c); BY_ID[c.id] = c;
+  return c;
+}
 const inSector = (...sectors) => COMPANIES.filter(c => sectors.includes(c.sector)).map(c => c.id);
 
 // 호가 단위 (한국 거래소 기준)
@@ -103,21 +125,26 @@ const nextTrading = d => { d++; while (weekdayOf(d) >= 5) d++; return d; };
 const RELEASE_AT = 10 * 60;   // 발표 시각 10:00 (실적은 장 열기 전 08:00)
 
 // ===== 상태 (data/market.json): 회사마다 지금 가격·전날 종가·오늘 시가·고가·저가·오늘 1분 가격들·지난 종가들 + 반영 중인 뉴스 + 뉴스 목록 =====
-function createMarket(file, read, write) {
+function createMarket(file, read, write, opts = {}) {
   const fresh = () => ({ lastMin: null, stocks: Object.fromEntries(COMPANIES.map(c => [c.id, { price: c.price, prev: c.price, open: c.price, high: c.price, low: c.price, hist: [], daily: [], vol: 0, amt: 0 }])), pending: [], news: [] });
   const st = read(file) || fresh();
+  st.ipos ||= [];
+  for (let i = COMPANIES.length - 1; i >= 0; i--) if (COMPANIES[i].ipo && !st.ipos.some(p => p.stage === 'listed' && p.def.id === COMPANIES[i].id)) { delete BY_ID[COMPANIES[i].id]; COMPANIES.splice(i, 1); }   // 다른 세계에서 상장했던 회사는 빼고
+  for (const p of st.ipos) if (p.stage === 'listed') registerListed(p);                                                                                     // 이 세계에서 상장한 회사는 다시 넣음
   st.plans ||= []; st.planN ||= 1; st.flow ||= {}; st.dayFlow ||= {};   // NPC 주문: 아직 가격에 반영 안 된 돈 · 오늘 순매수
   st.fin ||= {}; st.idxHist ||= [];
-  for (const c of COMPANIES) {   // 회사 재무 상태: 최근 네 분기 순이익 · 최근 배당 네 번 · 결정된 배당(배당락일)
-    if (st.fin[c.id]) continue;
+  const initFin = c => {   // 회사 재무 상태: 최근 네 분기 순이익 · 최근 배당 네 번 · 결정된 배당(배당락일)
+    if (st.fin[c.id]) return;
     const q = c.profit / 4;
     st.fin[c.id] = { q: [0.96, 1.02, 0.99, 1.03].map(k => q * k), divs: Array(4).fill(Math.floor(q / c.shares * c.payout / 10) * 10), pend: null };
-  }
+  };
+  COMPANIES.forEach(initFin);
+  const blue = () => COMPANIES.filter(c => !c.ipo);   // 종합지수는 처음 상장한 회사들만 (신규 상장이 지수를 튀게 하지 않게)
   const divListeners = [], divBacklog = [];   // 배당이 나갈 때 계정·세계 시뮬레이션에 알림 (듣는 쪽이 없을 땐 쌓아 뒀다가 flushDividends로)
   const fireDividend = (c, dps, min) => { if (divListeners.length) divListeners.forEach(fn => fn(c.id, dps, min, c.name)); else divBacklog.push([c.id, dps, min, c.name]); };
   let macro = { health: {}, demand: 1 };   // 세계 시뮬레이션이 알려 주는 회사 사정(직원 사기)·경기
   for (const c of COMPANIES) st.stocks[c.id] ||= fresh().stocks[c.id];   // 새로 상장한 회사
-  if (st.idxPrev == null) st.idxPrev = 1000 * COMPANIES.reduce((a, c) => a + st.stocks[c.id].price / BASE_INDEX[c.id], 0) / COMPANIES.length;
+  if (st.idxPrev == null) st.idxPrev = 1000 * blue().reduce((a, c) => a + st.stocks[c.id].price / BASE_INDEX[c.id], 0) / blue().length;
   let dirty = false, savedAt = 0;
 
   // 뉴스: fx의 키가 업종이면 그 업종 회사 모두, 회사 아이디면 그 회사. 영향은 30분(장 시간)에 걸쳐 반영
@@ -169,7 +196,7 @@ function createMarket(file, read, write) {
     st.plans = st.plans.filter(p => !p.done || min - p.release < DAY);
   }
   // 장 마감 시황: 한울종합지수(처음 가격 = 1000) · 오른/내린 종목 수
-  const indexNow = () => 1000 * COMPANIES.reduce((a, c) => a + st.stocks[c.id].price / BASE_INDEX[c.id], 0) / COMPANIES.length;
+  const indexNow = () => 1000 * blue().reduce((a, c) => a + st.stocks[c.id].price / BASE_INDEX[c.id], 0) / blue().length;
   function closeNews(min) {
     const idx = indexNow(), prev = st.idxPrev || idx, ch = (idx / prev - 1) * 100;
     const ups = COMPANIES.filter(c => st.stocks[c.id].price > st.stocks[c.id].prev).length, downs = COMPANIES.filter(c => st.stocks[c.id].price < st.stocks[c.id].prev).length;
@@ -178,13 +205,98 @@ function createMarket(file, read, write) {
     st.news.unshift({ min, text: `[마감] 한울종합지수 ${idx.toFixed(1)} (${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%) · 오른 종목 ${ups}개, 내린 종목 ${downs}개${buyTop}${sellTop}`, ids: [], up: ch >= 0 });
     st.dayFlow = {};
     st.news = st.news.slice(0, 40); st.idxPrev = idx; st.idxHist = [...st.idxHist, +idx.toFixed(1)].slice(-60);
+    const day = Math.floor((min - 1) / DAY);
+    for (const c of COMPANIES) {   // 상장 첫날 마감: 종가와 공모가 대비 수익률 ('따블' = 시초가가 공모가의 2배, '따상' = 거기서 상한가 마감)
+      const o = st.stocks[c.id], p = o.listDay === day && st.ipos.find(x => x.def.id === c.id);
+      if (!p) continue;
+      const upLim = o.price >= toTick(o.limRef * 1.3), ch = (o.price / p.price - 1) * 100;
+      st.news.unshift({ min, text: `[상장 첫날] ${c.name} 종가 ${o.price.toLocaleString('ko-KR')}원 (공모가 대비 ${ch >= 0 ? '+' : ''}${ch.toFixed(0)}%)${p.openMult >= 1.95 && upLim ? ' — 따상!' : p.openMult >= 1.95 ? ' — 따블 출발' : o.price < p.price ? ' — 공모가 아래로' : upLim ? ' — 상한가 마감' : ''}`, ids: [c.id], up: ch >= 0 });
+    }
+    st.news = st.news.slice(0, 40);
   }
+
+  // ===== 신규 상장(IPO): 공시 → 수요예측(공모가 확정) → 일반 청약 이틀(증거금 50%) → 배정·환불 → 상장 첫날(시초가 결정) =====
+  //   분위기(hype 0~1) = 반쯤 + 무작위 + 같은 업종의 최근 주가 + 시장 분위기 → 기관 경쟁률 · 공모가(밴드 하단~상단, 아주 뜨거우면 상단 초과, 아주 식으면 하단 아래) ·
+  //   일반 청약 경쟁률(뜨거우면 수백:1, 식으면 미달) · 상장 첫날 시초가(공모가의 90~200%) · 첫날 흐름(뜨거우면 상한가 '따상', 식으면 공모가 아래로)
+  //   경쟁률이 1보다 크면 균등 배정(신청이 적어도 최소 1주, 많이 신청해도 신청량 ÷ 경쟁률), 미달이면 신청한 만큼 전부
+  const hooks = { ready: !opts.waitForIpoHooks, npcApply: () => 0, playerDemand: () => 0, allocate: () => {} };   // 계정·세계 시뮬레이션이 청약·배정을 맡음 (서버가 setIpoHooks로 연결)
+  const setIpoHooks = h => { Object.assign(hooks, h, { ready: true }); };
+  const md = d => { const [m, dd] = monthDay(doyOf(d)); return m + '월 ' + dd + '일'; };
+  const sectorHeat = sector => {
+    const xs = COMPANIES.filter(c => c.sector === sector && st.stocks[c.id].daily.length > 3).map(c => { const o = st.stocks[c.id]; return o.price / o.daily[Math.max(0, o.daily.length - 10)].close - 1; });
+    return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+  };
+  function ipoStart(min, day) {
+    if (st.ipos.some(p => !['listed', 'withdrawn'].includes(p.stage))) return;
+    st.nextIpo ??= day + 1;
+    if (day < st.nextIpo) return;
+    const used = new Set(st.ipos.map(p => p.def.id)), pool = IPO_POOL.filter(d => !used.has(d.id));
+    if (!pool.length) return;
+    const d = pick(pool), lo = d.lo, hi = Math.round(lo * 1.25 / 100) * 100, mid = (lo + hi) / 2;
+    const shares = Math.round(d.cap * 1e8 / mid / 10000) * 10000, offered = Math.round(shares * 0.2 / 1000) * 1000, pubN = Math.round(offered * 0.25 / 100) * 100;
+    let d1 = day + 2; while (weekdayOf(d1) >= 5) d1++;
+    const d2 = nextTrading(d1), d3 = nextTrading(d2), d4 = nextTrading(d3), d5 = nextTrading(d4);
+    const p = { def: d, stage: 'announce', band: [lo, hi], shares, offered, pub: pubN, tAnn: min, tBook: d1 * DAY + 10 * 60, tSubStart: d2 * DAY + 9 * 60, tSubEnd: d3 * DAY + 16 * 60, tAlloc: d4 * DAY + 9 * 60, tList: d5 * DAY + 9 * 60 };
+    st.ipos.push(p); st.ipos = st.ipos.slice(-10);
+    addNews(min, { text: `[공모] ${d.name}(${d.sector} · ${d.region}) 상장 추진… 희망 공모가 ${lo.toLocaleString('ko-KR')}~${hi.toLocaleString('ko-KR')}원, 공모 ${offered.toLocaleString('ko-KR')}주. 수요예측 ${md(d1)} · 청약 ${md(d2)}~${md(d3)} · 상장 ${md(d5)} 예정`, fx: {}, up: true });
+  }
+  function ipoBook(p, min) {   // 수요예측: 기관 경쟁률로 공모가 확정
+    const heat = sectorHeat(p.def.sector), hype = Math.max(0, Math.min(1, 0.5 + gauss() * 0.22 + Math.max(-0.15, Math.min(0.15, heat * 1.5)) + (st.mood || 0) * 0.03));
+    p.hype = hype; p.inst = Math.round(1 + hype ** 2.4 * 1300 * rand(0.6, 1.4));
+    if (hype < 0.12 && Math.random() < 0.4) {
+      p.stage = 'withdrawn'; st.nextIpo = Math.floor(min / DAY) + 8;
+      addNews(min, { text: `[공모] ${p.def.name} 수요예측 부진(기관 경쟁률 ${p.inst}:1)… 상장 철회`, fx: {}, up: false }); return;
+    }
+    const [lo, hi] = p.band, r = hype * 1.25 - 0.12;
+    p.price = hype < 0.2 ? Math.round(lo * 0.92 / 100) * 100 : r >= 1.05 ? Math.round(hi * 1.1 / 100) * 100 : Math.round((lo + (hi - lo) * Math.max(0, Math.min(1, r))) / 100) * 100;
+    p.stage = 'booked';
+    const where = p.price > hi ? '밴드 상단 초과' : p.price >= hi ? '밴드 상단' : p.price < lo ? '밴드 하단 아래' : p.price <= lo ? '밴드 하단' : '밴드 안';
+    addNews(min, { text: `[공모] ${p.def.name} 수요예측 기관 경쟁률 ${p.inst.toLocaleString('ko-KR')}:1… 공모가 ${p.price.toLocaleString('ko-KR')}원 확정 (${where})`, fx: {}, up: p.inst >= 100 });
+  }
+  function ipoClose(p, min) {   // 청약 마감: 일반 청약 경쟁률 = (세상의 청약 + NPC + 플레이어) ÷ 일반 청약 물량
+    const demand = (p.npc || 0) + (hooks.playerDemand(p) || 0) + p.pub * (p.hype ** 2.2 * 900 * rand(0.7, 1.4) + 0.3);
+    p.ratio = +(demand / p.pub).toFixed(1); p.stage = 'closed';
+    addNews(min, { text: `[청약] ${p.def.name} 일반 청약 경쟁률 ${p.ratio.toLocaleString('ko-KR')}:1${p.ratio < 1 ? ' (미달)' : ''}… ${md(Math.floor(p.tAlloc / DAY))} 배정·환불`, fx: {}, up: p.ratio >= 10 });
+  }
+  function ipoList(p, min) {   // 상장: 회사 목록에 넣고, 시초가(공모가의 90~200%)로 시작. 첫날 가격 제한은 시초가의 ±30%
+    const day = Math.floor(min / DAY), c = registerListed(p);
+    initFin(c);
+    const mult = Math.max(0.9, Math.min(2, 0.9 + p.hype ** 1.6 * 1.1 + (Math.random() - 0.5) * 0.25)), open = Math.max(tickOf(p.price), toTick(p.price * mult));
+    st.stocks[c.id] = { price: open, prev: p.price, open, high: open, low: open, hist: [open], daily: [], vol: 0, amt: 0, hday: day, limRef: open, listDay: day, drift: (p.hype - 0.4) * 0.0014 };
+    p.open = open; p.openMult = +(open / p.price).toFixed(3); p.stage = 'listed'; p.listDay = day;
+    st.nextIpo = day + 8 + Math.floor(Math.random() * 7);
+    addNews(min, { text: `[상장] ${c.name} 오늘 상장! 시초가 ${open.toLocaleString('ko-KR')}원 (공모가 ${p.price.toLocaleString('ko-KR')}원 대비 ${open >= p.price ? '+' : ''}${((open / p.price - 1) * 100).toFixed(0)}%)`, fx: {}, up: open >= p.price });
+    st.news[0].ids = [c.id];
+  }
+  function ipoTick(min) {
+    if (!hooks.ready) return;   // 서버가 청약·배정을 맡을 준비가 되기 전엔 기다림
+    for (const p of st.ipos) {
+      if (p.stage === 'announce' && min >= p.tBook) ipoBook(p, min);
+      if (p.stage === 'booked' && min >= p.tSubStart) {
+        p.npc = hooks.npcApply(p) || 0; p.stage = 'subscribe';
+        addNews(min, { text: `[청약] ${p.def.name} 일반 청약 시작 (${md(Math.floor(p.tSubStart / DAY))}~${md(Math.floor(p.tSubEnd / DAY))}) · 공모가 ${p.price.toLocaleString('ko-KR')}원 · 증거금 50%`, fx: {}, up: true });
+      }
+      if (p.stage === 'subscribe' && min >= p.tSubEnd) ipoClose(p, min);
+      if (p.stage === 'closed' && min >= p.tAlloc) {
+        hooks.allocate(p, p.ratio, min); p.stage = 'allocated';
+        addNews(min, { text: `[배정] ${p.def.name} 공모주 배정·환불 완료 · ${md(Math.floor(p.tList / DAY))} 상장 예정`, fx: {}, up: true });
+      }
+      if (p.stage === 'allocated' && min >= p.tList && marketOpen(min)) ipoList(p, min);
+    }
+  }
+  const ipoOf = id => st.ipos.find(p => p.def.id === id);
+  // 화면에 보낼 공모 정보 (분위기 hype는 숨김 — 수요예측 결과(기관 경쟁률)로만 짐작)
+  const ipoView = () => st.ipos.slice(-6).reverse().map(p => ({
+    id: p.def.id, name: p.def.name, sector: p.def.sector, region: p.def.region, desc: p.def.desc, stage: p.stage, band: p.band, price: p.price ?? null, shares: p.shares, offered: p.offered, pub: p.pub,
+    per: p.def.per, profit: Math.round(p.def.cap * 1e8 / p.def.per), inst: p.inst ?? null, ratio: p.ratio ?? null, open: p.open ?? null, openMult: p.openMult ?? null,
+    maxQty: Math.min(2000, Math.max(10, Math.floor(p.pub * 0.01))), t: { ann: p.tAnn, book: p.tBook, subS: p.tSubStart, subE: p.tSubEnd, alloc: p.tAlloc, list: p.tList },
+  }));
 
   // 게임 1분 진행
   function step(min) {
     const day = Math.floor(min / DAY), t = min - day * DAY;
-    if (t === 0) planDay(day);                                                                       // 자정: 새 계획
-    runPlans(min);
+    if (t === 0) { planDay(day); ipoStart(min, day); }                                                                       // 자정: 새 계획
+    runPlans(min); ipoTick(min);
     if (t === MARKET_CLOSE && marketOpen(min - 1)) closeNews(min);
     if (t === 8 * 60) { const n = weatherNews(day); if (n) addNews(min, n); }                     // 아침 8시 날씨 뉴스
     if (Math.random() < EVENTS_PER_DAY / DAY) {                                                     // 사건 뉴스
@@ -199,7 +311,7 @@ function createMarket(file, read, write) {
       const s = st.stocks[c.id];
       if (s.hday !== day) {   // 그날 첫 거래: 지난 거래일 종가를 기록하고 오늘 시가·고가·저가를 새로 (서버가 마감 때 꺼져 있었어도 맞음)
         if (s.hday != null) { s.daily.push({ day: s.hday, open: s.open, high: s.high, low: s.low, close: s.price, vol: s.vol || 0 }); s.daily = s.daily.slice(-60); s.prev = s.price; }
-        s.hday = day; s.open = s.high = s.low = s.price; s.hist = []; s.vol = 0; s.amt = 0; s.viUntil = 0;
+        s.hday = day; s.open = s.high = s.low = s.price; s.hist = []; s.vol = 0; s.amt = 0; s.viUntil = 0; s.limRef = null; s.drift = 0;
       }
       const fin = st.fin[c.id];
       if (fin.pend && fin.pend.exDay <= day) {   // 배당락: 그날 장 열 때 주식을 가진 사람이 배당을 받고, 가격(기준가)에서 배당금만큼 빠짐
@@ -221,15 +333,16 @@ function createMarket(file, read, write) {
         r += take; p.left -= take; p.gap = false; p.ticks = Math.max(1, p.ticks - 1);
       }
       const fair = fin.q.reduce((a, b) => a + b, 0) / c.shares * c.per0;                              // 실적(EPS)에 걸맞은 가격: 가격이 그쪽으로 아주 천천히 끌림
+      r += s.drift || 0;                                                                               // 상장 첫날: 분위기가 좋으면 오르고 식으면 내림
       const gap = fair / s.price - 1;                                                                  // 실적에 비해 너무 비싸거나 싸면 더 강하게 끌림 (거품은 꺼지고 저평가는 오름)
       r += Math.max(-0.002, Math.min(0.002, gap * 0.00005 * (1 + Math.abs(gap) * 4)));
-      const lim = [toTick(s.prev * 0.7), toTick(s.prev * 1.3)];                                       // 하루 상한·하한 ±30%
+      const lim = [toTick((s.limRef ?? s.prev) * 0.7), toTick((s.limRef ?? s.prev) * 1.3)];                                       // 하루 상한·하한 ±30%
       s.price = Math.min(lim[1], Math.max(lim[0], toTick(s.price * (1 + r))));
       s.high = Math.max(s.high, s.price); s.low = Math.min(s.low, s.price);
       s.hist.push(s.price);
       // 거래량: 하루 발행주식의 0.3~1%쯤(변동성 큰 회사일수록 많이), 장 시작·마감 직전에 몰리고, 가격이 크게 움직이면 늘고, 사람들의 주문만큼 더해짐
       const um = 1 + 1.4 * Math.exp(-(t - MARKET_OPEN) / 18) + 1.0 * Math.exp(-(MARKET_CLOSE - t) / 18);
-      const vv = Math.max(0, Math.round(c.shares * (0.003 + c.vol * 0.0008) / len * um * (0.4 + Math.random() * 1.2) * (1 + Math.abs(r) * 120) + moved / s.price));
+      const vv = Math.max(0, Math.round(c.shares * (0.003 + c.vol * 0.0008) / len * um * (s.listDay === day ? 4 : 1) * (0.4 + Math.random() * 1.2) * (1 + Math.abs(r) * 120) + moved / s.price));
       s.vol = (s.vol || 0) + vv; s.amt = (s.amt || 0) + vv * s.price;
       // 변동성 완화 장치(VI): 5분 사이 5% 넘게, 또는 시가보다 12% 넘게 움직이면 그 종목만 2분간 매매 정지 (20분에 한 번만)
       const ref = s.hist.length > 5 ? s.hist[s.hist.length - 6] : null;
@@ -265,7 +378,7 @@ function createMarket(file, read, write) {
       return { id: c.id, name: c.name, sector: c.sector, region: c.region, price: s.price, prev: s.prev, open: s.open, high: s.high, low: s.low,
         shares: c.shares, cap: s.price * c.shares, eps: Math.round(eps), per: eps > 0 ? +(s.price / eps).toFixed(1) : null, dps: dsum, yield: dsum / s.price, nextDiv: f.pend || null,
         tick: tickOf(s.price), vol: s.vol || 0, amt: s.amt || 0, avgVol: Math.round(c.shares * (0.003 + c.vol * 0.0008)), hi60: hi, lo60: lo,
-        up: toTick(s.prev * 1.3), dn: toTick(s.prev * 0.7), vi: (st.lastMin ?? 0) < (s.viUntil || 0),
+        ipo: !!c.ipo, listDay: s.listDay ?? null, up: toTick((s.limRef ?? s.prev) * 1.3), dn: toTick((s.limRef ?? s.prev) * 0.7), vi: (st.lastMin ?? 0) < (s.viUntil || 0),
         hist: c.id === sel ? s.hist : [], daily: c.id === sel ? s.daily.slice(-40).map(d => [d.day, d.open ?? d.close, d.high ?? d.close, d.low ?? d.close, d.close, d.vol || 0]) : [] };
     }),
     news: st.news.slice(0, 20), index: +indexNow().toFixed(1), idxChg: st.idxPrev ? +((indexNow() / st.idxPrev - 1) * 100).toFixed(2) : 0, idxDaily: st.idxHist.slice(-30),
@@ -280,7 +393,7 @@ function createMarket(file, read, write) {
   const hot = () => COMPANIES.filter(c => { const s = st.stocks[c.id]; return s.prev && s.price / s.prev > 1.08; }).map(c => c.id);
   // 매매 정지 중인지(서킷브레이커·VI) · 가격 제한 · 주문 뒤 오늘 가격이 지나간 길(지정가 체결 판단)
   const haltOf = id => (st.lastMin ?? 0) < (st.cbUntil || 0) ? '서킷브레이커로 모든 매매가 정지돼 있어요.' : (st.lastMin ?? 0) < (st.stocks[id]?.viUntil || 0) ? '변동성 완화장치(VI) 발동 중이에요. 잠시 뒤에 주문해 주세요.' : null;
-  const limitsOf = id => { const s = st.stocks[id]; return s ? { up: toTick(s.prev * 1.3), dn: toTick(s.prev * 0.7), tick: tickOf(s.price), price: s.price } : null; };
+  const limitsOf = id => { const s = st.stocks[id]; return s ? { up: toTick((s.limRef ?? s.prev) * 1.3), dn: toTick((s.limRef ?? s.prev) * 0.7), tick: tickOf(s.price), price: s.price } : null; };
   const pathSince = (id, hday, idx) => { const s = st.stocks[id]; if (!s || s.hday !== hday) return null; const seg = s.hist.slice(idx); return { lo: Math.min(s.price, ...seg), hi: Math.max(s.price, ...seg), last: s.price }; };
   const histLen = id => st.stocks[id]?.hist.length || 0;
   const onDividend = fn => { divListeners.push(fn); };
@@ -289,7 +402,7 @@ function createMarket(file, read, write) {
   // 바깥(세계 시뮬레이션)에서 온 뉴스: 영향은 ±10% 안으로만 받음 (한 사건이 시장을 뒤집지 않게)
   const ingest = (min, n) => { const fx = Object.fromEntries(Object.entries(n.fx).filter(([k]) => BY_ID[k] || inSector(k).length).map(([k, v]) => [k, Math.max(-10, Math.min(10, v))])); if (Object.keys(fx).length) { addNews(min, { text: n.text, fx }); dirty = true; } };
   const quote = id => { const c = BY_ID[id], s = st.stocks[id]; return c && s ? { name: c.name, price: s.price, prev: s.prev } : null; };   // 회사 하나의 지금 시세 (사람들 대화에 씀)
-  return { advance, view, priceOf, BY_ID, ingest, quote, rumors, setMacro, order, hot, haltOf, limitsOf, pathSince, histLen, onDividend, flushDividends, state: st };
+  return { setIpoHooks, ipoView, ipoOf, advance, view, priceOf, BY_ID, ingest, quote, rumors, setMacro, order, hot, haltOf, limitsOf, pathSince, histLen, onDividend, flushDividends, state: st };
 }
 
 module.exports = { createMarket, COMPANIES, BY_ID, tickOf };
@@ -300,13 +413,13 @@ if (require.main === module) {
   const m = createMarket('x', () => null, () => {});
   const start = 480;   // 1일째 월요일 08:00
   m.advance(start);
-  for (let min = start + 1; min < start + DAY * 14; min += 7) {
+  for (let min = start + 1; min < start + DAY * 26; min += 7) {
     const before = m.view().stocks.map(s => s.price);
     m.advance(min);
     const v = m.view().stocks;
     v.forEach((s, i) => {
       assert.strictEqual(s.price % tickOf(s.price), 0, s.name + ' 호가 단위');
-      assert.ok(s.price <= Math.ceil(s.prev * 1.3) && s.price >= Math.floor(s.prev * 0.7), s.name + ' 상하한');
+      assert.ok(s.price <= s.up && s.price >= s.dn, s.name + ' 상하한');   // 상장 첫날은 시초가가 기준 (view의 up·dn)
       if (!marketOpen(min) && !marketOpen(min - 6)) assert.strictEqual(s.price, before[i], s.name + ' 장 닫힘');
     });
   }
@@ -316,6 +429,8 @@ if (require.main === module) {
   assert.ok(v.stocks.every(s => s.shares > 0 && s.cap > 0 && s.eps !== undefined && s.tick > 0 && s.up > s.dn), '재무·호가 단위·상하한가');
   assert.ok(v.stocks.some(s => s.vol > 0 || s.daily.length), '거래량');
   assert.ok(m.state.fin && Object.values(m.state.fin).every(f => f.q.length === 4 && f.divs.length === 4), '재무 상태');
+  assert.ok(m.state.ipos.length >= 1, '신규 상장 공시');
+  { const l = m.state.ipos.find(p => p.stage === 'listed'); if (l) assert.ok(COMPANIES.find(c => c.id === l.def.id)?.ipo && m.view().stocks.some(s => s.id === l.def.id && s.shares > 0), '상장한 회사가 시세판에 오름'); }
   assert.ok(v.news.some(n => n.text.startsWith('[마감]')), '마감 시황');
   console.log('지수', v.index);
   console.log('뉴스', v.news.length, '건:', v.news.slice(0, 4).map(n => n.text).join(' | '));

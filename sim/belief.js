@@ -11,7 +11,7 @@ const brain = require('./brain.js');
 const mind = require('./mind.js');
 
 // 주식 시장과 잇기 (sim/index.js가 연결): 시세·주문·진행 중인 회사 계획
-let M = { quote: () => null, order: () => {}, rumors: () => [] };
+let M = { quote: () => null, order: () => {}, rumors: () => [], ipos: () => [] };
 const connect = m => { M = { ...M, ...m }; };
 const clamp = v => Math.max(-1, Math.min(1, v));
 
@@ -133,6 +133,9 @@ function talkLines(n, ownCo) {
     const co = held[0], q = M.quote(co);
     if (q) { const ret = (q.price / n.cost[co] - 1) * 100; out.push(ret > 3 ? `요즘 ${q.name} 주식으로 ${ret.toFixed(0)}% 벌었어요!` : ret < -3 ? `${q.name} 주식에 물려서 ${(-ret).toFixed(0)}% 손해 보고 있어요…` : `${q.name} 주식 조금 갖고 있어요. 아직은 본전이에요.`); }
   } else if (n.trade?.side === 'sell' && n.trade.gain) out.push(n.trade.gain > 0 ? `얼마 전에 ${n.trade.name} 주식 팔아서 ${Math.round(n.trade.gain / 10000)}만 원 벌었어요.` : `${n.trade.name} 주식으로 ${Math.round(-n.trade.gain / 10000)}만 원 날렸어요. 다신 안 해요…`);
+  const ip = Object.entries(n.ipo || {})[0], info = ip && M.ipos().find(x => x.id === ip[0]);
+  if (info) out.push(`${info.name} 공모주 청약을 ${ip[1].qty}주 넣어 놨어요. ${info.ratio ? '결과가 곧 나와요.' : '경쟁률이 꽤 높다던데, 몇 주나 받을지 모르겠어요.'}`);
+  else { const act = M.ipos().find(x => x.stage === 'booked' || x.stage === 'subscribe'); if (act && hash(n.id, 3003) < 0.5) out.push(`요즘 ${act.name} 공모주 청약이 화제예요. 공모가는 ${act.price.toLocaleString('ko-KR')}원이래요.`); }
   return out;
 }
 

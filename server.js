@@ -168,12 +168,12 @@ const worldMinutes = (t = Date.now()) => world.start + (t - world.epoch) * WORLD
 // ===== 주식 시장 (economy.js): 2초마다 세계 시각까지 게임 분을 진행. 시세·뉴스는 data/market.json =====
 const { marketOpen, nextOpen } = require('./world.js');
 const { createMarket, BY_ID: STOCKS } = require('./economy.js');
-const market = createMarket(path.join(DATA_DIR, 'market.json'), readJSONFile, writeJSONFile);
+const market = createMarket(path.join(DATA_DIR, 'market.json'), readJSONFile, writeJSONFile, { waitForIpoHooks: true });   // 공모주 청약·배정은 계정이 준비된 뒤부터
 market.advance(worldMinutes());
 setInterval(() => { market.advance(worldMinutes()); processOrders(); }, 2000);   // 시세를 진행하고, 예약(지정가) 주문이 체결됐는지 봄
 // ===== 세계 시뮬레이션 (sim/): 사람·일·사건·사회. 2초마다 세계 시각까지 진행(한 번에 최대 40ms), 지역·나라 사건은 주식 뉴스로도 =====
 const { createSim } = require('./sim/index.js');
-const sim = createSim({ file: path.join(DATA_DIR, 'sim.json'), read: readJSONFile, write: writeJSONFile, toMarket: (min, n) => market.ingest(min, n), quote: id => market.quote(id), rumors: () => market.rumors(), order: (id, won) => market.order(id, won), hot: () => market.hot() });
+const sim = createSim({ file: path.join(DATA_DIR, 'sim.json'), read: readJSONFile, write: writeJSONFile, toMarket: (min, n) => market.ingest(min, n), quote: id => market.quote(id), rumors: () => market.rumors(), order: (id, won) => market.order(id, won), hot: () => market.hot(), ipos: () => market.ipoView() });
 sim.advance(worldMinutes());
 setInterval(() => { sim.advance(worldMinutes()); market.setMacro(sim.macro()); }, 2000);   // 회사 사정(직원 사기)·경기를 시장에 알려 줌 (실적·금리 계획의 근거)
 process.on('SIGINT', () => { sim.kernel.save(); process.exit(0); });   // 끌 때 마지막 상태 저장
@@ -231,6 +231,29 @@ market.onDividend((co, dps, min, name) => {   // 배당락일 장 열 때 주식
 });
 market.onDividend((co, dps) => sim.dividend(co, dps));
 market.flushDividends();
+// 공모주: 시장이 청약 시작·마감·배정 때 부름. 계정의 청약(증거금 50%)과 NPC의 청약을 합쳐 경쟁률을 정하고, 같은 경쟁률로 배정·환불
+market.setIpoHooks({
+  npcApply: ipo => sim.ipoApply(ipo),
+  playerDemand: ipo => Object.values(accounts).reduce((n, a) => n + (a.ipoApps?.[ipo.def.id]?.qty || 0), 0),
+  allocate: (ipo, ratio, min) => {
+    sim.ipoAllocate(ipo, ratio);
+    const id = ipo.def.id, name = ipo.def.name;
+    let any = false;
+    for (const a of Object.values(accounts)) {
+      const app = a.ipoApps?.[id];
+      if (!app) continue;
+      let alloc = Math.min(app.qty, ratio > 1 ? Math.max(1, Math.round(app.qty / ratio)) : app.qty);
+      a.cash = (a.cash ?? 50000) + app.deposit;   // 증거금을 돌려받고
+      while (alloc > 0 && a.cash < alloc * ipo.price) alloc--;   // 배정받은 값을 냄 (돈이 모자라면 줄임)
+      const cost = alloc * ipo.price; a.cash -= cost;
+      if (alloc) { const h = { ...(a.holdings || {}) }, cur = h[id] || { qty: 0, cost: 0 }; h[id] = { qty: cur.qty + alloc, cost: cur.cost + cost }; a.holdings = h; logTrade(a, { min: Math.floor(min), id, name, side: 'ipo', qty: alloc, price: ipo.price, fee: 0, tax: 0, pnl: null }); }
+      delete a.ipoApps[id];
+      stockNote(a, alloc ? `${name} 공모주 ${app.qty}주 청약 → ${alloc}주 배정 (경쟁률 ${ipo.ratio}:1) · ${app.deposit - cost >= 0 ? '환불 ' + won(app.deposit - cost) : '추가 납입 ' + won(cost - app.deposit)}원. 상장일부터 거래할 수 있어요.` : `${name} 공모주는 배정되지 않았어요. 증거금 ${won(app.deposit)}원을 돌려받았어요.`);
+      any = true;
+    }
+    if (any) writeJSONFile(ACCOUNTS_FILE, accounts);
+  },
+});
 // 생활 정보: 현금(원), 가방(물건 목록), 서 있던 자리(장면·픽셀 위치, 없으면 처음 자리), 능력치 (게임 시간은 세계 시간 하나라 계정마다 두지 않음)
 // 능력치: 체력·배고픔·기분은 게이지 0~100 (100이 가장 좋음) / 지능·근력은 레벨(1부터, 돈으로 강화 — 나중엔 공부·운동 같은 행동으로도)
 //         매력은 인기도(0부터, 메이플스토리 인기도처럼 다른 사람이 +1/-1을 줌, 마이너스도 됨)
@@ -402,7 +425,7 @@ http.createServer(async (req, res) => {
       const notes = a.mkNotes || [];
       if (notes.length) { a.mkNotes = []; writeJSONFile(ACCOUNTS_FILE, accounts); }
       return json(res, 200, { ok: true, now, open: marketOpen(now), next: nextOpen(now), ...market.view(typeof b.sel === 'string' ? b.sel : null), cash: life.cash, holdings: life.holdings,
-        orders: a.orders || [], trades: (a.trades || []).slice(-60), watch: a.watch || [], realized: a.realized || 0, divIncome: a.divIncome || 0, fees: a.feesPaid || 0, notes });
+        orders: a.orders || [], trades: (a.trades || []).slice(-60), watch: a.watch || [], ipos: market.ipoView(), ipoApps: a.ipoApps || {}, realized: a.realized || 0, divIncome: a.divIncome || 0, fees: a.feesPaid || 0, notes });
     }
     if (name === 'trade') {   // 주문 { id, side: 'buy' | 'sell', qty, type: 'market' | 'limit', limit }: 시장가는 지금 가격에 바로, 지정가는 내가 건 가격이 될 때까지 기다림(당일 유효). 돈·주식 수·정지 여부는 서버가 확인
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
@@ -435,6 +458,25 @@ http.createServer(async (req, res) => {
       const order = { oid: a.orderSeq, id: b.id, name: STOCKS[b.id].name, side: b.side, qty, limit, day: Math.floor(now / 1440), idx: market.histLen(b.id), reserve, min: Math.floor(now) };
       a.orders = [...orders, order]; writeJSONFile(ACCOUNTS_FILE, accounts);
       return json(res, 200, { ok: true, pending: true, order, cash: a.cash, holdings: life.holdings });
+    }
+    if (name === 'ipoapply' || name === 'ipocancel') {   // 공모주 청약 { id, qty }: 청약 기간에만, 증거금 50%를 맡김(한 종목에 한 번) / 청약 취소 { id }: 증거금을 돌려받음
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      const now = worldMinutes(); market.advance(now);
+      const a = accounts[key], ipo = typeof b.id === 'string' ? market.ipoOf(b.id) : null;
+      if (!ipo || ipo.stage !== 'subscribe') return json(res, 400, { ok: false, msg: '지금은 청약 기간이 아니에요.' });
+      const apps = a.ipoApps || {};
+      if (name === 'ipocancel') {
+        if (!apps[b.id]) return json(res, 404, { ok: false, msg: '청약한 내역이 없어요.' });
+        a.cash = (a.cash ?? 50000) + apps[b.id].deposit; const { [b.id]: _, ...rest } = apps; a.ipoApps = rest; writeJSONFile(ACCOUNTS_FILE, accounts);
+        return json(res, 200, { ok: true, cash: a.cash, ipoApps: a.ipoApps });
+      }
+      const maxQty = Math.min(2000, Math.max(10, Math.floor(ipo.pub * 0.01))), qty = b.qty, cash = lifeOf(a).cash;
+      if (apps[b.id]) return json(res, 400, { ok: false, msg: '이미 청약했어요. 취소한 뒤 다시 넣어 주세요.' });
+      if (!Number.isInteger(qty) || qty < 1 || qty > maxQty) return json(res, 400, { ok: false, msg: `청약 수량은 1~${maxQty}주예요.` });
+      const deposit = Math.ceil(qty * ipo.price * 0.5);
+      if (cash < deposit) return json(res, 400, { ok: false, msg: `증거금이 부족해요. (${won(deposit)}원 필요)` });
+      a.cash = cash - deposit; a.ipoApps = { ...apps, [b.id]: { qty, deposit, price: ipo.price, min: Math.floor(now) } }; writeJSONFile(ACCOUNTS_FILE, accounts);
+      return json(res, 200, { ok: true, cash: a.cash, ipoApps: a.ipoApps });
     }
     if (name === 'cancelorder') {   // 예약 주문 취소 { oid }: 묶어 둔 돈을 돌려받음
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });

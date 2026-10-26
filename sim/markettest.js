@@ -6,8 +6,9 @@ const { createSim } = require('./index.js');
 const { createMarket } = require('../economy.js');
 const { DAY } = require('../world.js');
 const market = createMarket('mem', () => null, () => {});
-const sim = createSim({ file: 'mem', read: () => null, write: () => {}, toMarket: (m, n) => market.ingest(m, n), quote: id => market.quote(id), rumors: () => market.rumors(), order: (id, won) => market.order(id, won), hot: () => market.hot() });
+const sim = createSim({ file: 'mem', read: () => null, write: () => {}, toMarket: (m, n) => market.ingest(m, n), quote: id => market.quote(id), rumors: () => market.rumors(), order: (id, won) => market.order(id, won), hot: () => market.hot(), ipos: () => market.ipoView() });
 const divs = []; market.onDividend((co, dps) => { divs.push(co); sim.dividend(co, dps); }); market.flushDividends();   // 배당: 세계 시뮬레이션의 주식 가진 사람에게
+market.setIpoHooks({ npcApply: ipo => sim.ipoApply(ipo), allocate: (ipo, ratio) => sim.ipoAllocate(ipo, ratio) });   // 공모주: NPC 청약·배정
 const start = DAY * (+process.argv[2] || 7) + 6 * 60, S = sim.kernel.state.mods;
 sim.advance(start); market.advance(start);
 const seen = {}, out = [];
@@ -38,6 +39,7 @@ for (const n of talkers) console.log(`[${n.name}]`, sim.talk(n.id, start + 24 * 
 assert.ok(hops[1] > 0 && maxHeard >= 10, '소문이 퍼짐');
 assert.ok(investors > 20, '투자하는 사람');
 assert.ok(match >= moved * 0.4, '발표 전 주가가 결과 쪽으로 기움 (무작위 요소가 있어 40% 이상이면 통과)');
+{ const ip = market.state.ipos, npcHold = people.filter(n => Object.keys(n.port || {}).some(c => ip.some(p => p.def.id === c))).length; console.log('공모', ip.map(p => p.def.name + ':' + p.stage + (p.ratio ? '(' + p.ratio + ':1)' : '')).join(' / '), '· 공모주를 가진 NPC', npcHold, '명'); }
 console.log('배당 지급 회사', divs.length, '곳 (주식 가진 NPC에게 세후 지급)');
 if (DAYS >= 24) assert.ok(divs.length > 0, '실적철에 배당이 나감 (24일 이상 돌릴 때)');
 assert.strictEqual(sim.kernel.ledger.total(), sim.kernel.state.total0, '돈 보존');

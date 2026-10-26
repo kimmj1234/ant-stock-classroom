@@ -11,8 +11,8 @@ const { createSociety } = require('./society.js');
 const { REGIONS } = require('./data.js');
 const belief = require('./belief.js');
 
-function createSim({ file, read, write, toMarket = () => {}, quote = () => null, rumors = () => [], order = () => {}, hot = () => [] }) {
-  belief.connect({ quote, order, rumors, hot });   // 믿음·투자 모듈이 시세를 보고 주문을 냄
+function createSim({ file, read, write, toMarket = () => {}, quote = () => null, rumors = () => [], order = () => {}, hot = () => [], ipos = () => [] }) {
+  belief.connect({ quote, order, rumors, hot, ipos });   // 믿음·투자 모듈이 시세를 보고 주문을 냄
   const kernel = createKernel({ file, read, write });
   const people = createPeople(), work = createWork(), events = createEvents({ toMarket }), society = createSociety();
   // 사회 모듈 상태를 다른 모듈이 먼저 읽으므로 사회를 먼저 만들어 둠(init 순서), 매일 돌리는 순서는 사람 → 일 → 사건 → 사회
@@ -69,6 +69,37 @@ function createSim({ file, read, write, toMarket = () => {}, quote = () => null,
       const W = S().work, count = {};
       for (const n of Object.values(S().people.list)) if (n.emp) count[n.emp] = (count[n.emp] || 0) + 1;
       return Object.values(W.emps).map(e => ({ id: e.id, key: e.key, name: e.name, region: e.region, occ: e.occ, company: e.company, cap: e.cap, staff: (count[e.id] || 0) + (e.players?.length || 0), morale: Math.round(e.morale) }));
+    },
+    // 공모주 청약 (시장이 청약 첫날 부름): 투자하는 어른 NPC가 분위기가 뜨거울수록·모험을 좋아할수록 많이 넣음. 증거금 50%를 장부로 맡기고 넣은 주 수의 합을 돌려줌
+    ipoApply(ipo) {
+      const day = Math.floor(ipo.tSubStart / DAY), price = ipo.price;
+      let total = 0;
+      for (const n of Object.values(S().people.list)) {
+        if (people.ageOf(n, day) < 23 || !belief.isInvestor(n)) continue;
+        if (kernel.rnd(day, n.id, 3001) > 0.12 + ipo.hype * 0.55 * (0.5 + n.tr.o)) continue;
+        const qty = Math.floor(kernel.ledger.bal('p:' + n.id) * (0.03 + 0.12 * kernel.rnd(day, n.id, 3002)) / (price * 0.5)), dep = Math.ceil(qty * price * 0.5);
+        if (qty < 1 || !kernel.ledger.move('p:' + n.id, 'ext', dep)) continue;
+        (n.ipo ||= {})[ipo.def.id] = { qty, dep }; total += qty;
+      }
+      return total;
+    },
+    // 배정·환불: 경쟁률이 1보다 크면 균등 배정(최소 1주, 신청량 ÷ 경쟁률), 미달이면 신청한 만큼. 증거금을 돌려받고 배정받은 값을 냄 → 주식은 상장일부터 거래
+    ipoAllocate(ipo, ratio) {
+      const id = ipo.def.id, day = Math.floor(ipo.tAlloc / DAY);
+      for (const n of Object.values(S().people.list)) {
+        const a = n.ipo?.[id];
+        if (!a) continue;
+        delete n.ipo[id];
+        const acct = 'p:' + n.id;
+        let alloc = Math.min(a.qty, ratio > 1 ? Math.max(1, Math.round(a.qty / ratio)) : a.qty);
+        kernel.ledger.move('ext', acct, a.dep);
+        while (alloc > 0 && !kernel.ledger.move(acct, 'ext', alloc * ipo.price)) alloc--;
+        if (!alloc) continue;
+        n.port ||= {}; n.cost ||= {};
+        const old = n.port[id] || 0;
+        n.cost[id] = ((n.cost[id] || 0) * old + alloc * ipo.price) / (old + alloc); n.port[id] = old + alloc;
+        n.mem.unshift({ d: day, t: `${ipo.def.name} 공모주를 ${alloc}주 배정받았다`, w: 6 }); n.mem.length = Math.min(n.mem.length, 6);
+      }
     },
     // 배당: 주식을 가진 사람에게 (세금 15.4% 뗀 돈 = 장부로 바깥 → 사람, 세금은 나라로)
     dividend(co, dps) {

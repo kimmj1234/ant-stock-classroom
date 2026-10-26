@@ -290,7 +290,7 @@ const capText = v => v >= 1e12 ? (v / 1e12).toFixed(1) + '조' : won(Math.round(
 const volText = v => v >= 1e6 ? (v / 1e6).toFixed(1) + '백만' : v >= 1e4 ? (v / 1e4).toFixed(1) + '만' : won(v);
 const idNum = id => [...id].reduce((a, c) => a + c.charCodeAt(0), 0);
 const starred = id => (phone.data?.watch || []).includes(id);
-const tagsOf = s => (s.vi ? '<em class="mk-tag tv">VI</em>' : '') + (s.price >= s.up ? '<em class="mk-tag tu">상한가</em>' : s.price <= s.dn ? '<em class="mk-tag td">하한가</em>' : '') + (s.nextDiv ? '<em class="mk-tag tg">배당</em>' : '');
+const tagsOf = s => (s.vi ? '<em class="mk-tag tv">VI</em>' : '') + (s.price >= s.up ? '<em class="mk-tag tu">상한가</em>' : s.price <= s.dn ? '<em class="mk-tag td">하한가</em>' : '') + (s.nextDiv ? '<em class="mk-tag tg">배당</em>' : '') + (s.listDay != null && Math.floor(clock.min / DAY) - s.listDay < 5 ? '<em class="mk-tag tn">신규</em>' : '');
 const SORTS = [['def', '기본'], ['up', '상승률'], ['down', '하락률'], ['amt', '거래대금'], ['cap', '시가총액']];
 function sortedStocks(d) {
   const f = { up: s => -(s.price / s.prev), down: s => s.price / s.prev, amt: s => -s.amt, cap: s => -s.cap }[phone.sort || 'def'], a = d.stocks.slice();
@@ -311,7 +311,8 @@ function renderStock() {
   if (phone.tab === 'detail') return renderDetail();
   if (phone.tab === 'list' || phone.tab === 'watch') {
     const list = phone.tab === 'watch' ? sortedStocks(d).filter(s => starred(s.id)) : sortedStocks(d), ups = d.stocks.filter(s => s.price > s.prev).length, downs = d.stocks.filter(s => s.price < s.prev).length;
-    scr.innerHTML = `<div class="mk-chips" role="group" aria-label="정렬">${SORTS.map(([k, label]) => `<button type="button" data-sort="${k}" aria-pressed="${(phone.sort || 'def') === k}">${label}</button>`).join('')}<small>오른 ${ups} · 내린 ${downs}</small></div>`
+    const sub = (d.ipos || []).find(p => p.stage === 'subscribe');
+    scr.innerHTML = (sub ? `<button type="button" class="mk-banner" data-tabgo="ipo">공모주 청약 중 · ${sub.name} (공모가 ${won(sub.price)}원) ›</button>` : '') + `<div class="mk-chips" role="group" aria-label="정렬">${SORTS.map(([k, label]) => `<button type="button" data-sort="${k}" aria-pressed="${(phone.sort || 'def') === k}">${label}</button>`).join('')}<small>오른 ${ups} · 내린 ${downs}</small></div>`
       + (list.length ? '<ul class="mk-list">' + list.map(stockRow).join('') + '</ul>' : '<p class="mk-empty">관심 종목이 없어요. 시세에서 ☆를 눌러 넣어 보세요.</p>');
   } else if (phone.tab === 'mine') {
     const rows = d.stocks.filter(s => d.holdings[s.id]).map(s => ({ s, h: d.holdings[s.id], val: s.price * d.holdings[s.id].qty }));
@@ -320,15 +321,52 @@ function renderStock() {
       + (rows.length ? '<ul class="mk-list">' + rows.map(({ s, h, val: v }) => `<li><button type="button" class="mk-row" data-stock="${s.id}"><span>${s.name}<small>${h.qty}주 · 평균 ${won(Math.round(h.cost / h.qty))}원${s.dps ? ' · 배당 ' + (s.yield * 100).toFixed(1) + '%' : ''}</small></span><span class="mk-price ${tone(v - h.cost)}">${won(v)}<small class="${tone(v - h.cost)}">${signed(v - h.cost)} (${pct(v, h.cost).toFixed(2)}%)</small></span></button></li>`).join('') + '</ul>'
         : '<p class="mk-empty">아직 가진 주식이 없어요. 시세에서 회사를 골라 사 보세요.</p>')
       + ((d.orders || []).length ? '<h3 class="mk-h">예약 주문</h3><ul class="mk-list">' + orderRows(d) + '</ul>' : '');
+  } else if (phone.tab === 'ipo') {
+    renderIpo(d, scr);
   } else if (phone.tab === 'hist') {
     const tr = (d.trades || []).slice().reverse();
     scr.innerHTML = `<div class="mk-sum"><span>실현 손익</span><b class="${tone(d.realized)}">${signed(d.realized)}원</b><span>받은 배당(세후)</span><b>${won(d.divIncome)}원</b><span>낸 수수료·세금</span><b>${won(d.fees)}원</b></div>`
-      + (tr.length ? '<ul class="mk-news">' + tr.map(t => t.side === 'div' ? `<li><small>${whenOf(t.min)}</small><b class="gold">배당</b> ${t.name} ${t.qty}주 × ${won(t.price)}원 <b>+${won(t.pnl)}원</b><small>세금 ${won(t.tax)}원 뗌</small></li>`
+      + (tr.length ? '<ul class="mk-news">' + tr.map(t => t.side === 'ipo' ? `<li><small>${whenOf(t.min)}</small><b class="gold">공모 배정</b> ${t.name} ${t.qty}주 × ${won(t.price)}원<small>상장일부터 거래할 수 있어요</small></li>` : t.side === 'div' ? `<li><small>${whenOf(t.min)}</small><b class="gold">배당</b> ${t.name} ${t.qty}주 × ${won(t.price)}원 <b>+${won(t.pnl)}원</b><small>세금 ${won(t.tax)}원 뗌</small></li>`
         : `<li><small>${whenOf(t.min)}</small><b class="${t.side === 'buy' ? 'up' : 'down'}">${t.side === 'buy' ? '매수' : '매도'}</b> ${t.name} ${t.qty}주 × ${won(t.price)}원${t.pnl != null ? ` <b class="${tone(t.pnl)}">${signed(t.pnl)}원</b>` : ''}<small>수수료 ${won(t.fee)}원${t.tax ? ' · 세금 ' + won(t.tax) + '원' : ''}</small></li>`).join('') + '</ul>' : '<p class="mk-empty">아직 거래가 없어요.</p>');
   } else {
     scr.innerHTML = d.news.length ? '<ul class="mk-news">' + d.news.map(n => `<li><small>${whenOf(n.min)}</small><span class="${n.up ? 'up' : 'down'}">${n.up ? '▲' : '▼'}</span> ${n.text}<small>${n.ids.map(id => d.stocks.find(s => s.id === id)?.name).filter(Boolean).join(' · ')}</small></li>`).join('') + '</ul>'
       : '<p class="mk-empty">아직 뉴스가 없어요.</p>';
   }
+}
+// ===== 공모(신규 상장): 단계 · 공모가 · 경쟁률 · 청약 · 배정 · 상장 =====
+const IPO_NAME = { announce: '수요예측 전', booked: '청약 대기', subscribe: '청약 중', closed: '배정 대기', allocated: '상장 대기', listed: '상장', withdrawn: '철회' };
+const IPO_CUR = { announce: 1, booked: 2, subscribe: 2, closed: 3, allocated: 4, listed: 5, withdrawn: -1 };
+const dayText = m => { const t = today(m); return t.month + '/' + t.date; };
+phone.ipoQty = {};
+function ipoEst(p, d, qty) {
+  const dep = Math.ceil(qty * p.price * 0.5);
+  return `${qty}주 × 공모가 ${won(p.price)}원 = ${won(qty * p.price)}원 · 증거금 50% ${won(dep)}원을 맡겨요 (배정 뒤 남는 돈은 환불) · 현금 ${won(d.cash)}원`;
+}
+function ipoCard(p, d) {
+  const app = (d.ipoApps || {})[p.id], s = d.stocks.find(x => x.id === p.id), have = d.holdings[p.id], mid = (p.band[0] + p.band[1]) / 2, cap = (p.price ?? mid) * p.shares, cur = IPO_CUR[p.stage];
+  const steps = [['공시', p.t.ann], ['수요예측', p.t.book], ['청약', p.t.subS], ['배정·환불', p.t.alloc], ['상장', p.t.list]];
+  const rows = [['희망 공모가', won(p.band[0]) + '~' + won(p.band[1]) + '원'], ['확정 공모가', p.price ? '<b>' + won(p.price) + '원</b>' : '수요예측 뒤 확정'], ['공모 주식', won(p.offered) + '주'], ['일반 청약 물량', won(p.pub) + '주'],
+    ['시가총액(공모가)', capText(cap)], ['PER(공모가)', (Math.round(cap / p.profit * 10) / 10) + '배'], ['기관 경쟁률', p.inst ? won(p.inst) + ':1' : '-'], ['일반 경쟁률', p.ratio != null ? won(p.ratio) + ':1' + (p.ratio < 1 ? ' 미달' : '') : '-']];
+  let act = '';
+  if (p.stage === 'subscribe') {
+    const q = phone.ipoQty[p.id] ?? 1;
+    act = app ? `<p class="ipo-msg">청약 완료: ${won(app.qty)}주 · 증거금 ${won(app.deposit)}원을 맡겼어요. 배정은 ${dayText(p.t.alloc)} 장 열 때 알려 드려요.</p><button type="button" class="ipo-btn cancel" data-ipocancel="${p.id}">청약 취소 (증거금 돌려받기)</button>`
+      : `<div class="mk-order"><button type="button" class="mk-step" data-ipostep="${p.id}" data-d="-1" aria-label="1주 빼기">−</button><input type="number" min="1" max="${p.maxQty}" value="${q}" data-ipoqty="${p.id}" inputmode="numeric" aria-label="청약 수량(주)"><button type="button" class="mk-step" data-ipostep="${p.id}" data-d="1" aria-label="1주 더하기">+</button></div>
+        <div class="mk-est" data-ipoest="${p.id}">${ipoEst(p, d, q)}</div><button type="button" class="ipo-btn" data-ipoapply="${p.id}" ${d.cash < Math.ceil(q * p.price * 0.5) ? 'disabled' : ''}>청약하기 (최대 ${won(p.maxQty)}주)</button>`;
+  } else if (p.stage === 'closed' || p.stage === 'allocated') act = '<p class="ipo-msg">청약이 끝났어요. ' + (p.stage === 'closed' ? dayText(p.t.alloc) + ' 배정·환불' : '배정·환불 완료, ' + dayText(p.t.list) + ' 상장') + '이에요.' + (have && !s ? ' 내가 배정받은 주식: <b>' + have.qty + '주</b> (상장일부터 거래)' : '') + '</p>';
+  else if (p.stage === 'listed') act = `<p class="ipo-msg">시초가 ${won(p.open)}원 (공모가의 ${Math.round(p.openMult * 100)}%)${s ? ' · 지금 ' + won(s.price) + '원 (<span class="' + tone(s.price - p.price) + '">공모가 대비 ' + (s.price >= p.price ? '+' : '') + pct(s.price, p.price).toFixed(1) + '%</span>)' : ''}${have ? ' · 내 주식 <b>' + have.qty + '주</b>' : ''}</p>${s ? `<button type="button" class="ipo-btn" data-stock="${p.id}">시세·주문 보기</button>` : ''}`;
+  else if (p.stage === 'withdrawn') act = '<p class="ipo-msg">수요예측이 부진해 상장을 철회했어요.</p>';
+  else act = '<p class="ipo-msg">수요예측(' + dayText(p.t.book) + ') 결과로 공모가가 정해져요. 기관 경쟁률이 높을수록 공모가가 밴드 상단으로 올라가요.</p>';
+  return `<section class="ipo-card"><div class="ipo-head"><b>${p.name}</b> <em class="mk-tag ${p.stage === 'subscribe' ? 'tu' : p.stage === 'withdrawn' ? 'td' : 'tg'}">${IPO_NAME[p.stage]}</em><small>${p.sector} · ${p.region}</small></div><p class="ipo-desc">${p.desc}</p>
+    <ol class="ipo-steps">${steps.map(([k, m], i) => `<li class="${p.stage === 'withdrawn' ? '' : i < cur ? 'done' : i === cur ? 'now' : ''}"><b>${k}</b><small>${dayText(m)}</small></li>`).join('')}</ol>
+    <div class="mk-grid">${rows.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('')}</div>${act}</section>`;
+}
+function renderIpo(d, scr) {
+  if (scr.contains(document.activeElement) && document.activeElement.matches?.('input')) return;   // 수량을 적는 중엔 화면을 다시 그리지 않음
+  const list = d.ipos || [], active = list.filter(p => p.stage !== 'listed' && p.stage !== 'withdrawn'), done = list.filter(p => p.stage === 'listed' || p.stage === 'withdrawn');
+  scr.innerHTML = '<p class="ipo-help">신규 상장(IPO): 공시 → 수요예측(공모가 확정) → 일반 청약 이틀(증거금 50%) → 배정·환불 → 상장. 경쟁률이 높으면 신청한 양과 관계없이 조금만 배정받고, 미달이면 신청한 만큼 모두 받아요.</p>'
+    + (active.length ? active.map(p => ipoCard(p, d)).join('') : '<p class="mk-empty">지금 공모 중인 회사가 없어요. 새로 상장하려는 회사가 생기면 여기에 공시돼요.</p>')
+    + (done.length ? '<h3 class="mk-h">최근 상장</h3>' + done.map(p => ipoCard(p, d)).join('') : '');
 }
 // 호가창: 매도 호가 다섯(위, 파랑) · 매수 호가 다섯(아래, 빨강). 물량은 그 종목의 하루 거래량에 맞춰 시각마다 조금씩 달라짐
 function bookHTML(s) {
@@ -426,6 +464,13 @@ $hud('phoneScreen').addEventListener('click', async e => {
   const t = e.target;
   const w = t.closest('[data-watch]');
   if (w) { const r = await post('watch', { id: w.dataset.watch }); if (r.ok) { phone.data.watch = r.watch; renderPhone(); } return; }
+  const tg = t.closest('[data-tabgo]'); if (tg) { phone.tab = tg.dataset.tabgo; return renderPhone(); }
+  const ia = t.closest('[data-ipoapply]');
+  if (ia) { const id = ia.dataset.ipoapply, q = Math.floor(+document.querySelector(`[data-ipoqty="${id}"]`).value); ia.disabled = true; const r = await post('ipoapply', { id, qty: q }); notify(r.ok ? '청약했어요! 증거금을 맡겼어요. 배정 결과는 알림으로 알려 드려요.' : r.msg); return loadMarket(); }
+  const ic = t.closest('[data-ipocancel]');
+  if (ic) { const r = await post('ipocancel', { id: ic.dataset.ipocancel }); notify(r.ok ? '청약을 취소했어요. 증거금을 돌려받았어요.' : r.msg); return loadMarket(); }
+  const is = t.closest('[data-ipostep]');
+  if (is) { const id = is.dataset.ipostep, p = phone.data.ipos.find(x => x.id === id), inp = document.querySelector(`[data-ipoqty="${id}"]`); phone.ipoQty[id] = Math.max(1, Math.min(p.maxQty, (+inp.value || 1) + +is.dataset.d)); return renderPhone(); }
   const so = t.closest('[data-sort]');
   if (so) { phone.sort = so.dataset.sort; return renderPhone(); }
   if (t.closest('[data-stock]')) { phone.sel = t.closest('[data-stock]').dataset.stock; phone.tab = 'detail'; renderPhone(); return loadMarket(); }
@@ -447,7 +492,15 @@ $hud('phoneScreen').addEventListener('click', async e => {
   if (r.ok) { me.cash = r.cash; notify(r.pending ? `${s.name} ${side === 'buy' ? '매수' : '매도'} 예약 접수 · ${won(r.order.limit)}원` : `${s.name} ${r.qty}주 ${side === 'buy' ? '매수' : '매도'} 체결 · ${won(r.price)}원`); }
   loadMarket();
 });
-$hud('phoneScreen').addEventListener('input', e => { if (e.target.id === 'mkQty' || e.target.id === 'mkLimit') renderDetail(); });
+$hud('phoneScreen').addEventListener('input', e => {
+  if (e.target.id === 'mkQty' || e.target.id === 'mkLimit') renderDetail();
+  const id = e.target.dataset?.ipoqty;
+  if (id) {   // 청약 수량: 화면을 다시 그리지 않고 설명 글만 바꿈 (적는 중에 커서가 사라지지 않게)
+    const p = phone.data.ipos.find(x => x.id === id), q = Math.max(1, Math.min(p.maxQty, Math.floor(+e.target.value) || 1));
+    phone.ipoQty[id] = q; document.querySelector(`[data-ipoest="${id}"]`).textContent = ipoEst(p, phone.data, q);
+    document.querySelector(`[data-ipoapply="${id}"]`).disabled = phone.data.cash < Math.ceil(q * p.price * 0.5);
+  }
+});
 document.querySelector('.phone-tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { phone.tab = b.dataset.tab; renderPhone(); } });
 // ===== 세계 사람들: 서버 시뮬레이션(sim/)에서 지금 밖에 나와 있는 사람(출근·산책·장보기·구직 …)을 10초마다 받아 맵을 걸어 다니게 함 =====
 // 걷는 모습은 화면 꾸밈이라 이 컴퓨터에서만 정함(보도·잔디·흙길 위를 천천히 돌아다님). 가까이서 E → 그 사람의 지금 삶으로 만든 대사
@@ -591,7 +644,7 @@ function renderWorld(scr) {
 }
 // ===== 휴대폰 앱: 홈 화면에서 앱을 고름 (앞으로 부동산·차량 앱도 여기에 더함) =====
 const APPS = {
-  stock: { name: '한울증권', color: '#d32f2f', mark: '▲', tabs: [['list', '시세'], ['watch', '관심'], ['mine', '내 주식'], ['hist', '내역'], ['news', '뉴스']] },
+  stock: { name: '한울증권', color: '#d32f2f', mark: '▲', tabs: [['list', '시세'], ['watch', '관심'], ['mine', '보유'], ['hist', '내역'], ['ipo', '공모'], ['news', '뉴스']] },
   job: { name: '한울잡', color: '#2f9e5a', mark: '잡', tabs: [['posts', '구인'], ['myjob', '내 일'], ['pay', '급여']] },
   world: { name: '세상', color: '#3d7fd6', mark: '◎', tabs: [['world', '세상']] },
   people: { name: '사람들', color: '#e8708a', mark: '♥', tabs: [['people', '아는 사람']] },
