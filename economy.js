@@ -29,6 +29,14 @@ const COMPANIES = [
   { id: 'neulbom', name: '늘봄리조트', sector: '관광', region: '늘봄', price: 15400, vol: 2.2 },
 ];
 const BY_ID = Object.fromEntries(COMPANIES.map(c => [c.id, c]));
+// 회사 재무 (처음 상장할 때): [시가총액(억 원), 업종 평균 PER, 배당성향]. 시가총액 = 가격 × 발행주식수, 연 순이익 = 시가총액 ÷ PER
+//   → 가격이 오르내려도 발행주식수는 그대로, 분기 실적이 나올 때마다 순이익(EPS)이 바뀌고 PER·배당이 따라 바뀜
+const FUND = { nuri: [18000, 22, 0.12], daehan: [9000, 10, 0.25], haneul: [7000, 11, 0.15], hanulbank: [30000, 6, 0.35], hanultel: [20000, 9, 0.5], hanulmedia: [3500, 14, 0.2], garamstore: [6000, 12, 0.3],
+  hanulgames: [25000, 24, 0.08], hanbit: [80000, 14, 0.2], saebom: [12000, 11, 0.25], bada: [8000, 9, 0.3], byeolbit: [15000, 30, 0.05], pureun: [2500, 12, 0.35], byeolhafish: [800, 10, 0.3],
+  nurigrain: [500, 12, 0.25], eunbit: [9000, 13, 0.15], baram: [2000, 18, 0.1], solnae: [600, 8, 0.3], neulbom: [3500, 14, 0.2] };
+const setFund = (c, cap, per, payout) => { c.shares = Math.max(10000, Math.round(cap * 1e8 / c.price / 10000) * 10000); c.per0 = per; c.profit = cap * 1e8 / per; c.payout = payout; };
+for (const c of COMPANIES) setFund(c, ...(FUND[c.id] || [3000, 12, 0.2]));
+const MARKET_MIN = 390;
 const inSector = (...sectors) => COMPANIES.filter(c => sectors.includes(c.sector)).map(c => c.id);
 
 // 호가 단위 (한국 거래소 기준)
@@ -90,16 +98,26 @@ const CONTRACTS = { 건설: '해외 공항 공사', 조선: '대형 화물선 �
 const BETA = { IT: 1.3, 게임: 1.4, 전자: 1.2, 금융: 1.1, 건설: 1.1, 통신: 0.6, 식품: 0.5, 관광: 0.9 };   // 시장 전체 분위기를 얼마나 따라가는지
 const BASE_INDEX = Object.fromEntries(COMPANIES.map(c => [c.id, c.price]));
 const clampQ = v => Math.max(-1, Math.min(1, v));
-const IMPACT = 400000000;   // 순매수 4억 원 ≈ 가격 +100% 압력 (400만 원 ≈ 1%)
+const IMPACT = 400000000;   // 순매수 4억 원 ≈ 가격 +100% 압력 (400만 원 ≈ 1%) · 시가총액 3,000억 원 회사 기준 (큰 회사일수록 덜, 작은 회사일수록 더 움직임)
+const nextTrading = d => { d++; while (weekdayOf(d) >= 5) d++; return d; };
 const RELEASE_AT = 10 * 60;   // 발표 시각 10:00 (실적은 장 열기 전 08:00)
 
 // ===== 상태 (data/market.json): 회사마다 지금 가격·전날 종가·오늘 시가·고가·저가·오늘 1분 가격들·지난 종가들 + 반영 중인 뉴스 + 뉴스 목록 =====
 function createMarket(file, read, write) {
-  const fresh = () => ({ lastMin: null, stocks: Object.fromEntries(COMPANIES.map(c => [c.id, { price: c.price, prev: c.price, open: c.price, high: c.price, low: c.price, hist: [], daily: [] }])), pending: [], news: [] });
+  const fresh = () => ({ lastMin: null, stocks: Object.fromEntries(COMPANIES.map(c => [c.id, { price: c.price, prev: c.price, open: c.price, high: c.price, low: c.price, hist: [], daily: [], vol: 0, amt: 0 }])), pending: [], news: [] });
   const st = read(file) || fresh();
   st.plans ||= []; st.planN ||= 1; st.flow ||= {}; st.dayFlow ||= {};   // NPC 주문: 아직 가격에 반영 안 된 돈 · 오늘 순매수
+  st.fin ||= {}; st.idxHist ||= [];
+  for (const c of COMPANIES) {   // 회사 재무 상태: 최근 네 분기 순이익 · 최근 배당 네 번 · 결정된 배당(배당락일)
+    if (st.fin[c.id]) continue;
+    const q = c.profit / 4;
+    st.fin[c.id] = { q: [0.96, 1.02, 0.99, 1.03].map(k => q * k), divs: Array(4).fill(Math.floor(q / c.shares * c.payout / 10) * 10), pend: null };
+  }
+  const divListeners = [], divBacklog = [];   // 배당이 나갈 때 계정·세계 시뮬레이션에 알림 (듣는 쪽이 없을 땐 쌓아 뒀다가 flushDividends로)
+  const fireDividend = (c, dps, min) => { if (divListeners.length) divListeners.forEach(fn => fn(c.id, dps, min, c.name)); else divBacklog.push([c.id, dps, min, c.name]); };
   let macro = { health: {}, demand: 1 };   // 세계 시뮬레이션이 알려 주는 회사 사정(직원 사기)·경기
   for (const c of COMPANIES) st.stocks[c.id] ||= fresh().stocks[c.id];   // 새로 상장한 회사
+  if (st.idxPrev == null) st.idxPrev = 1000 * COMPANIES.reduce((a, c) => a + st.stocks[c.id].price / BASE_INDEX[c.id], 0) / COMPANIES.length;
   let dirty = false, savedAt = 0;
 
   // 뉴스: fx의 키가 업종이면 그 업종 회사 모두, 회사 아이디면 그 회사. 영향은 30분(장 시간)에 걸쳐 반영
@@ -111,6 +129,17 @@ function createMarket(file, read, write) {
     st.news = st.news.slice(0, 40);
   }
 
+  // 분기 실적이 나오면: 그 분기 순이익(결과 q 따라 ±45%) → 최근 네 분기 합(EPS)이 바뀜 → 배당 결정 (실적이 크게 나쁘면 무배당) · 배당락일은 닷새 거래일 뒤
+  function onEarnings(min, p, c) {
+    const f = st.fin[c.id], newQ = c.profit / 4 * (1 + p.q * 0.45 + gauss() * 0.03), s = st.stocks[c.id];
+    f.q = [...f.q.slice(-3), newQ];
+    const eps = newQ / c.shares, dps = p.q < -0.5 ? 0 : Math.floor(eps * c.payout * rand(0.8, 1.2) / 10) * 10;
+    if (dps > 0) {
+      let d = Math.floor(min / DAY); for (let i = 0; i < 5; i++) d = nextTrading(d);
+      f.pend = { dps, exDay: d }; const [m, dd] = monthDay(doyOf(d));
+      addNews(min, { text: `[배당] ${c.name} 분기 배당 주당 ${dps.toLocaleString('ko-KR')}원 결정 (시가배당률 ${(dps * 4 / s.price * 100).toFixed(1)}%) · 배당락일 ${m}월 ${dd}일`, fx: { [c.id]: dps * 4 / s.price * 100 * 0.3 }, up: true });
+    } else { f.pend = null; addNews(min, { text: `[배당] ${c.name}, 이번 분기 배당 없음… 실적 악화`, fx: { [c.id]: -1 }, up: false }); }
+  }
   const plan = (min, p) => st.plans.push({ id: st.planN++, made: min, ...p });
   function planDay(day) {
     const c = pick(COMPANIES.filter(c => !st.plans.some(p => p.co === c.id && !p.done && p.kind !== 'earnings'))), r = Math.random();   // 한 회사에 신제품·계약은 한 번에 하나
@@ -134,7 +163,7 @@ function createMarket(file, read, write) {
       const sell = 0;
       if (p.kind === 'product') addNews(min, { text: p.q > 0.4 ? `${c.name} ${p.item} 대박 조짐… 첫날 주문 폭주` : p.q > 0 ? `${c.name} ${p.item} 출시, 반응 무난` : p.q > -0.4 ? `${c.name} ${p.item} 출시했지만 반응 미지근` : `${c.name} ${p.item} 혹평 쏟아져… 실망 매물`, fx: { [p.co]: fair(p.q * rand(7, 14)) }, up: p.q > 0 });
       if (p.kind === 'contract') addNews(min, p.q > 0 ? { text: `${c.name}, ${p.item} 최종 성사`, fx: { [p.co]: fair(rand(3, 8) * (0.5 + v)) }, up: true } : { text: `${c.name} ${p.item} 협상 결국 무산`, fx: { [p.co]: fair(-rand(3, 7) * (0.5 + v)) }, up: false });
-      if (p.kind === 'earnings') addNews(min, { text: p.q > 0.4 ? `${c.name} 분기 실적 '깜짝 성적'… 시장 예상 크게 넘어` : p.q > 0.1 ? `${c.name} 분기 실적 예상보다 조금 좋아` : p.q > -0.1 ? `${c.name} 분기 실적 예상 수준` : p.q > -0.4 ? `${c.name} 분기 실적 기대에 조금 못 미쳐` : `${c.name} 분기 실적 '어닝 쇼크'… 이익 크게 줄어`, fx: { [p.co]: fair(p.q * rand(5, 10)) }, up: p.q >= 0 });
+      if (p.kind === 'earnings') addNews(min, { text: p.q > 0.4 ? `${c.name} 분기 실적 '깜짝 성적'… 시장 예상 크게 넘어` : p.q > 0.1 ? `${c.name} 분기 실적 예상보다 조금 좋아` : p.q > -0.1 ? `${c.name} 분기 실적 예상 수준` : p.q > -0.4 ? `${c.name} 분기 실적 기대에 조금 못 미쳐` : `${c.name} 분기 실적 '어닝 쇼크'… 이익 크게 줄어`, fx: { [p.co]: fair(p.q * rand(5, 10)) }, up: p.q >= 0 }), onEarnings(min, p, c);
       if (p.kind === 'rate') addNews(min, p.q > 0 ? { text: '한울은행, 기준금리 0.25%p 올려… 대출 부담 커져', fx: { '*': -1, 금융: 2.5, 건설: -2.5 }, up: false } : p.q < 0 ? { text: '한울은행, 기준금리 0.25%p 내려… 경기 살리기', fx: { '*': 1, 건설: 2.5, 금융: -1.5 }, up: true } : { text: '한울은행, 기준금리 동결', fx: {} });
     }
     st.plans = st.plans.filter(p => !p.done || min - p.release < DAY);
@@ -148,7 +177,7 @@ function createMarket(file, read, write) {
     const buyTop = flows[0]?.[1] > 100000 ? ` · 개인 순매수 1위 ${BY_ID[flows[0][0]].name}(${man(flows[0][1])})` : '', sellTop = flows.at(-1)?.[1] < -100000 ? ` · 순매도 1위 ${BY_ID[flows.at(-1)[0]].name}(${man(flows.at(-1)[1])})` : '';
     st.news.unshift({ min, text: `[마감] 한울종합지수 ${idx.toFixed(1)} (${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%) · 오른 종목 ${ups}개, 내린 종목 ${downs}개${buyTop}${sellTop}`, ids: [], up: ch >= 0 });
     st.dayFlow = {};
-    st.news = st.news.slice(0, 40); st.idxPrev = idx;
+    st.news = st.news.slice(0, 40); st.idxPrev = idx; st.idxHist = [...st.idxHist, +idx.toFixed(1)].slice(-60);
   }
 
   // 게임 1분 진행
@@ -169,22 +198,51 @@ function createMarket(file, read, write) {
     for (const c of COMPANIES) {
       const s = st.stocks[c.id];
       if (s.hday !== day) {   // 그날 첫 거래: 지난 거래일 종가를 기록하고 오늘 시가·고가·저가를 새로 (서버가 마감 때 꺼져 있었어도 맞음)
-        if (s.hday != null) { s.daily.push({ day: s.hday, close: s.price }); s.daily = s.daily.slice(-60); s.prev = s.price; }
-        s.hday = day; s.open = s.high = s.low = s.price; s.hist = [];
+        if (s.hday != null) { s.daily.push({ day: s.hday, open: s.open, high: s.high, low: s.low, close: s.price, vol: s.vol || 0 }); s.daily = s.daily.slice(-60); s.prev = s.price; }
+        s.hday = day; s.open = s.high = s.low = s.price; s.hist = []; s.vol = 0; s.amt = 0; s.viUntil = 0;
       }
+      const fin = st.fin[c.id];
+      if (fin.pend && fin.pend.exDay <= day) {   // 배당락: 그날 장 열 때 주식을 가진 사람이 배당을 받고, 가격(기준가)에서 배당금만큼 빠짐
+        const dps = fin.pend.dps, tk = tickOf(s.price);
+        s.prev = Math.max(tk, toTick(s.prev - dps)); s.price = Math.max(tk, toTick(s.price - dps)); s.open = s.high = s.low = s.price;
+        fin.divs = [...fin.divs.slice(-3), dps]; fin.pend = null;
+        addNews(min, { text: `[배당락] ${c.name} 오늘 배당락… 주당 ${dps.toLocaleString('ko-KR')}원 (그만큼 주가에서 빠짐)`, fx: {}, up: false });
+        fireDividend(c, dps, min);
+      }
+      if (min < (st.cbUntil || 0) || min < (s.viUntil || 0)) { s.hist.push(s.price); continue; }   // 매매 정지 중: 가격 그대로 (사람들의 주문은 쌓였다가 다시 열리면 반영)
       const len = MARKET_CLOSE - MARKET_OPEN, beta = BETA[c.sector] ?? 1;
       let r = gauss() * c.vol * 0.85 / 100 / Math.sqrt(len) + beta * (st.mood / 100 / len + common * 0.6 / 100 / Math.sqrt(len));   // 종목만의 흔들림 + 시장 전체를 따라감
       const f = st.flow[c.id];
-      if (f) { const take = Math.abs(f) < 20000 ? f : f * 0.2; r += take / IMPACT * Math.sqrt(30000 / c.price); st.flow[c.id] -= take; if (Math.abs(st.flow[c.id]) < 1) delete st.flow[c.id]; }   // 사람들의 주문이 몇 분에 걸쳐 가격에 반영 (작은 회사일수록 크게)
+      let moved = 0;
+      if (f) { const take = Math.abs(f) < 20000 ? f : f * 0.2; moved = Math.abs(take); r += take / IMPACT * (3e11 / (c.shares * s.price)) ** 0.3; st.flow[c.id] -= take; if (Math.abs(st.flow[c.id]) < 1) delete st.flow[c.id]; }   // 사람들의 주문이 몇 분에 걸쳐 가격에 반영 (작은 회사일수록 크게)
       for (const p of st.pending) {
         if (p.id !== c.id) continue;
         const take = p.gap ? p.left * 0.5 : p.left / p.ticks;                                       // 장 닫혀 있을 때 난 뉴스: 장 열리자마자 절반
         r += take; p.left -= take; p.gap = false; p.ticks = Math.max(1, p.ticks - 1);
       }
+      const fair = fin.q.reduce((a, b) => a + b, 0) / c.shares * c.per0;                              // 실적(EPS)에 걸맞은 가격: 가격이 그쪽으로 아주 천천히 끌림
+      const gap = fair / s.price - 1;                                                                  // 실적에 비해 너무 비싸거나 싸면 더 강하게 끌림 (거품은 꺼지고 저평가는 오름)
+      r += Math.max(-0.002, Math.min(0.002, gap * 0.00005 * (1 + Math.abs(gap) * 4)));
       const lim = [toTick(s.prev * 0.7), toTick(s.prev * 1.3)];                                       // 하루 상한·하한 ±30%
       s.price = Math.min(lim[1], Math.max(lim[0], toTick(s.price * (1 + r))));
       s.high = Math.max(s.high, s.price); s.low = Math.min(s.low, s.price);
       s.hist.push(s.price);
+      // 거래량: 하루 발행주식의 0.3~1%쯤(변동성 큰 회사일수록 많이), 장 시작·마감 직전에 몰리고, 가격이 크게 움직이면 늘고, 사람들의 주문만큼 더해짐
+      const um = 1 + 1.4 * Math.exp(-(t - MARKET_OPEN) / 18) + 1.0 * Math.exp(-(MARKET_CLOSE - t) / 18);
+      const vv = Math.max(0, Math.round(c.shares * (0.003 + c.vol * 0.0008) / len * um * (0.4 + Math.random() * 1.2) * (1 + Math.abs(r) * 120) + moved / s.price));
+      s.vol = (s.vol || 0) + vv; s.amt = (s.amt || 0) + vv * s.price;
+      // 변동성 완화 장치(VI): 5분 사이 5% 넘게, 또는 시가보다 12% 넘게 움직이면 그 종목만 2분간 매매 정지 (20분에 한 번만)
+      const ref = s.hist.length > 5 ? s.hist[s.hist.length - 6] : null;
+      if (((ref && Math.abs(s.price / ref - 1) >= 0.05) || Math.abs(s.price / s.open - 1) >= 0.12) && min - (s.viLast ?? -999) > 20) {
+        s.viUntil = min + 2; s.viLast = min;
+        addNews(min, { text: `${c.name} 변동성 완화장치(VI) 발동… ${s.price > s.prev ? '급등' : '급락'}에 2분간 매매 정지`, fx: {}, up: s.price > s.prev });
+      }
+    }
+    // 서킷브레이커: 한울종합지수가 전날보다 8% 넘게 떨어지면 하루에 한 번 20분간 모든 종목 매매 정지
+    const idx = indexNow();
+    if (st.idxPrev && idx / st.idxPrev - 1 <= -0.08 && st.cbDay !== day) {
+      st.cbDay = day; st.cbUntil = min + 20;
+      addNews(min, { text: `[서킷브레이커] 한울종합지수 ${((idx / st.idxPrev - 1) * 100).toFixed(1)}% 급락… 20분간 모든 매매 정지`, fx: {}, up: false });
     }
     st.pending = st.pending.filter(p => Math.abs(p.left) > 0.0005);
   }
@@ -198,10 +256,20 @@ function createMarket(file, read, write) {
     if (dirty && Date.now() - savedAt > 10000) { write(file, st); dirty = false; savedAt = Date.now(); }
   }
 
-  // 화면에 보낼 시세: 회사마다 지금 가격·전날 종가·시가·고가·저가·오늘 1분 가격(최대 390개) + 뉴스 20개
-  const view = () => ({
-    stocks: COMPANIES.map(c => { const s = st.stocks[c.id]; return { id: c.id, name: c.name, sector: c.sector, region: c.region, price: s.price, prev: s.prev, open: s.open, high: s.high, low: s.low, hist: s.hist, daily: s.daily.slice(-20) }; }),
-    news: st.news.slice(0, 20), index: +indexNow().toFixed(1),
+  // 화면에 보낼 시세: 회사마다 지금 가격·전날 종가·시가·고가·저가 + 시가총액·EPS·PER·배당·거래량·상하한가·VI.
+  //   sel(고른 종목)만 오늘 1분 가격(최대 390개)과 일봉(최근 40일)을 같이 보냄 → 목록은 가볍게
+  const view = sel => ({
+    stocks: COMPANIES.map(c => {
+      const s = st.stocks[c.id], f = st.fin[c.id], eps = f.q.reduce((a, b) => a + b, 0) / c.shares, dsum = f.divs.reduce((a, b) => a + b, 0);
+      const days = s.daily.slice(-59), hi = Math.max(s.high, ...days.map(d => d.high ?? d.close)), lo = Math.min(s.low, ...days.map(d => d.low ?? d.close));
+      return { id: c.id, name: c.name, sector: c.sector, region: c.region, price: s.price, prev: s.prev, open: s.open, high: s.high, low: s.low,
+        shares: c.shares, cap: s.price * c.shares, eps: Math.round(eps), per: eps > 0 ? +(s.price / eps).toFixed(1) : null, dps: dsum, yield: dsum / s.price, nextDiv: f.pend || null,
+        tick: tickOf(s.price), vol: s.vol || 0, amt: s.amt || 0, avgVol: Math.round(c.shares * (0.003 + c.vol * 0.0008)), hi60: hi, lo60: lo,
+        up: toTick(s.prev * 1.3), dn: toTick(s.prev * 0.7), vi: (st.lastMin ?? 0) < (s.viUntil || 0),
+        hist: c.id === sel ? s.hist : [], daily: c.id === sel ? s.daily.slice(-40).map(d => [d.day, d.open ?? d.close, d.high ?? d.close, d.low ?? d.close, d.close, d.vol || 0]) : [] };
+    }),
+    news: st.news.slice(0, 20), index: +indexNow().toFixed(1), idxChg: st.idxPrev ? +((indexNow() / st.idxPrev - 1) * 100).toFixed(2) : 0, idxDaily: st.idxHist.slice(-30),
+    halt: (st.lastMin ?? 0) < (st.cbUntil || 0) ? st.cbUntil : null,
   });
   // 아직 발표 안 된 계획 (NPC 대화에 씀 — 결과 q는 서버 밖으로 안 나감, 대화가 흐릿하게만 흘림)
   const rumors = () => st.plans.filter(p => !p.done).map(p => ({ id: p.id, co: p.co, name: BY_ID[p.co]?.name, kind: p.kind, item: p.item, q: p.q, release: p.release, announced: !!p.announced }));
@@ -210,11 +278,18 @@ function createMarket(file, read, write) {
   const order = (id, won) => { if (!BY_ID[id] || !Number.isFinite(won)) return; st.flow[id] = (st.flow[id] || 0) + won; st.dayFlow[id] = (st.dayFlow[id] || 0) + won; dirty = true; };
   // 오늘 많이 오른 종목 (따라 사기)
   const hot = () => COMPANIES.filter(c => { const s = st.stocks[c.id]; return s.prev && s.price / s.prev > 1.08; }).map(c => c.id);
+  // 매매 정지 중인지(서킷브레이커·VI) · 가격 제한 · 주문 뒤 오늘 가격이 지나간 길(지정가 체결 판단)
+  const haltOf = id => (st.lastMin ?? 0) < (st.cbUntil || 0) ? '서킷브레이커로 모든 매매가 정지돼 있어요.' : (st.lastMin ?? 0) < (st.stocks[id]?.viUntil || 0) ? '변동성 완화장치(VI) 발동 중이에요. 잠시 뒤에 주문해 주세요.' : null;
+  const limitsOf = id => { const s = st.stocks[id]; return s ? { up: toTick(s.prev * 1.3), dn: toTick(s.prev * 0.7), tick: tickOf(s.price), price: s.price } : null; };
+  const pathSince = (id, hday, idx) => { const s = st.stocks[id]; if (!s || s.hday !== hday) return null; const seg = s.hist.slice(idx); return { lo: Math.min(s.price, ...seg), hi: Math.max(s.price, ...seg), last: s.price }; };
+  const histLen = id => st.stocks[id]?.hist.length || 0;
+  const onDividend = fn => { divListeners.push(fn); };
+  const flushDividends = () => { while (divBacklog.length) { const d = divBacklog.shift(); divListeners.forEach(fn => fn(...d)); } };
   const priceOf = id => st.stocks[id]?.price;
   // 바깥(세계 시뮬레이션)에서 온 뉴스: 영향은 ±10% 안으로만 받음 (한 사건이 시장을 뒤집지 않게)
   const ingest = (min, n) => { const fx = Object.fromEntries(Object.entries(n.fx).filter(([k]) => BY_ID[k] || inSector(k).length).map(([k, v]) => [k, Math.max(-10, Math.min(10, v))])); if (Object.keys(fx).length) { addNews(min, { text: n.text, fx }); dirty = true; } };
   const quote = id => { const c = BY_ID[id], s = st.stocks[id]; return c && s ? { name: c.name, price: s.price, prev: s.prev } : null; };   // 회사 하나의 지금 시세 (사람들 대화에 씀)
-  return { advance, view, priceOf, BY_ID, ingest, quote, rumors, setMacro, order, hot };
+  return { advance, view, priceOf, BY_ID, ingest, quote, rumors, setMacro, order, hot, haltOf, limitsOf, pathSince, histLen, onDividend, flushDividends, state: st };
 }
 
 module.exports = { createMarket, COMPANIES, BY_ID, tickOf };
@@ -238,6 +313,9 @@ if (require.main === module) {
   const v = m.view();
   console.log(v.stocks.map(s => `${s.name} ${s.price} (${((s.price / COMPANIES.find(c => c.id === s.id).price - 1) * 100).toFixed(1)}%)`).join(' / '));
   assert.ok(v.news.some(n => /예고|출시|성사|무산|실적|금리/.test(n.text)), '계획 발표 뉴스');
+  assert.ok(v.stocks.every(s => s.shares > 0 && s.cap > 0 && s.eps !== undefined && s.tick > 0 && s.up > s.dn), '재무·호가 단위·상하한가');
+  assert.ok(v.stocks.some(s => s.vol > 0 || s.daily.length), '거래량');
+  assert.ok(m.state.fin && Object.values(m.state.fin).every(f => f.q.length === 4 && f.divs.length === 4), '재무 상태');
   assert.ok(v.news.some(n => n.text.startsWith('[마감]')), '마감 시황');
   console.log('지수', v.index);
   console.log('뉴스', v.news.length, '건:', v.news.slice(0, 4).map(n => n.text).join(' | '));

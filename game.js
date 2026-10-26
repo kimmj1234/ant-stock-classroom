@@ -272,9 +272,10 @@ const tone = d => d > 0 ? 'up' : d < 0 ? 'down' : 'flat';
 const signed = (n, f = won) => (n > 0 ? '▲' : n < 0 ? '▼' : '') + f(Math.abs(n));
 const whenOf = min => { const t = today(min); return `${t.month}월 ${t.date}일 ${t.time}`; };
 async function loadMarket() {
-  const r = await post('market');
+  const r = await post('market', { sel: phone.tab === 'detail' ? phone.sel : null });   // 고른 종목만 오늘 가격·일봉을 같이 받음
   if (!r.ok) return;
   phone.data = r; me.cash = r.cash; me.holdings = r.holdings;
+  (r.notes || []).forEach((n, i) => setTimeout(() => notify(n), i * 2700));   // 예약 주문 체결·취소, 배당 알림
   const latest = r.news[0] && r.news[0].min + r.news[0].text;
   if (phone.seen !== null && latest && latest !== phone.seen && $hud('phoneWrap').hidden) notify('[속보] ' + r.news[0].text);   // 휴대폰을 안 보고 있을 때 새 뉴스
   phone.seen = latest || '';
@@ -284,88 +285,169 @@ setInterval(() => { if (me.basicUI && online) loadMarket(); }, 15000);
 document.addEventListener('phoneopen', () => { renderPhone(); if (phone.app === 'stock') loadMarket(); if (phone.app === 'job') loadJob(); });
 setInterval(() => { if (!$hud('phoneWrap').hidden && phone.app === 'stock') loadMarket(); }, 2000);
 
+// ===== 한울증권: 시세(정렬·관심) · 종목(재무·호가·분봉/일봉·주문) · 관심 · 내 주식 · 내역 · 뉴스 =====
+const capText = v => v >= 1e12 ? (v / 1e12).toFixed(1) + '조' : won(Math.round(v / 1e8)) + '억';
+const volText = v => v >= 1e6 ? (v / 1e6).toFixed(1) + '백만' : v >= 1e4 ? (v / 1e4).toFixed(1) + '만' : won(v);
+const idNum = id => [...id].reduce((a, c) => a + c.charCodeAt(0), 0);
+const starred = id => (phone.data?.watch || []).includes(id);
+const tagsOf = s => (s.vi ? '<em class="mk-tag tv">VI</em>' : '') + (s.price >= s.up ? '<em class="mk-tag tu">상한가</em>' : s.price <= s.dn ? '<em class="mk-tag td">하한가</em>' : '') + (s.nextDiv ? '<em class="mk-tag tg">배당</em>' : '');
+const SORTS = [['def', '기본'], ['up', '상승률'], ['down', '하락률'], ['amt', '거래대금'], ['cap', '시가총액']];
+function sortedStocks(d) {
+  const f = { up: s => -(s.price / s.prev), down: s => s.price / s.prev, amt: s => -s.amt, cap: s => -s.cap }[phone.sort || 'def'], a = d.stocks.slice();
+  return f ? a.sort((x, y) => f(x) - f(y)) : a;
+}
+function stockRow(s) {
+  const ch = s.price - s.prev, w = starred(s.id);
+  return `<li class="mk-li"><button type="button" class="mk-star" data-watch="${s.id}" aria-label="${s.name} 관심 종목" aria-pressed="${w}">${w ? '★' : '☆'}</button><button type="button" class="mk-row" data-stock="${s.id}"><span>${s.name} ${tagsOf(s)}<small>${s.sector} · 시총 ${capText(s.cap)} · 거래 ${volText(s.vol)}주</small></span><span class="mk-price ${tone(ch)}">${won(s.price)}<small class="${tone(ch)}">${signed(ch)} (${pct(s.price, s.prev).toFixed(2)}%)</small></span></button></li>`;
+}
+const orderRows = (d, only) => (d.orders || []).filter(o => !only || o.id === only).map(o => `<li class="mk-ord"><span><b class="${o.side === 'buy' ? 'up' : 'down'}">${o.side === 'buy' ? '매수' : '매도'}</b> ${o.name} ${o.qty}주 · ${won(o.limit)}원<small>오늘 장 마감까지 기다려요</small></span><button type="button" data-cancel="${o.oid}">취소</button></li>`).join('');
 function renderStock() {
   const d = phone.data, scr = $hud('phoneScreen');
   if (!d) { scr.innerHTML = '<p class="mk-empty">시세를 불러오는 중…</p>'; return; }
-  const st = $hud('mkStatus'), nx = today(d.next);
-  st.className = 'phone-status ' + (d.open ? 'open' : '');
-  st.textContent = (d.index ? `한울종합 ${d.index.toFixed(1)} · ` : '') + (d.open ? '장 열림 · 15:30에 마감' : `장 마감 · 다음 개장 ${nx.month}월 ${nx.date}일 (${nx.weekday}) 09:00`);
+  const st = $hud('mkStatus'), nx = today(d.next), idx = `한울종합 ${won(d.index)} (${d.idxChg >= 0 ? '+' : ''}${d.idxChg.toFixed(2)}%) · `;
+  st.className = 'phone-status ' + (d.open && !d.halt ? 'open' : '');
+  st.textContent = idx + (d.halt ? '서킷브레이커 발동 중 · 모든 매매 정지' : d.open ? '장 열림 · 15:30에 마감' : `장 마감 · 다음 개장 ${nx.month}월 ${nx.date}일 (${nx.weekday}) 09:00`);
   $hud('phoneClock').textContent = today(clock.min).time;
   if (phone.tab === 'detail') return renderDetail();
-  if (phone.tab === 'list') {
-    scr.innerHTML = '<ul class="mk-list">' + d.stocks.map(s => {
-      const ch = s.price - s.prev;
-      return `<li><button type="button" class="mk-row" data-stock="${s.id}"><span>${s.name}<small>${s.sector} · ${s.region}</small></span><span class="mk-price ${tone(ch)}">${won(s.price)}<small class="${tone(ch)}">${signed(ch)} (${pct(s.price, s.prev).toFixed(2)}%)</small></span></button></li>`;
-    }).join('') + '</ul>';
+  if (phone.tab === 'list' || phone.tab === 'watch') {
+    const list = phone.tab === 'watch' ? sortedStocks(d).filter(s => starred(s.id)) : sortedStocks(d), ups = d.stocks.filter(s => s.price > s.prev).length, downs = d.stocks.filter(s => s.price < s.prev).length;
+    scr.innerHTML = `<div class="mk-chips" role="group" aria-label="정렬">${SORTS.map(([k, label]) => `<button type="button" data-sort="${k}" aria-pressed="${(phone.sort || 'def') === k}">${label}</button>`).join('')}<small>오른 ${ups} · 내린 ${downs}</small></div>`
+      + (list.length ? '<ul class="mk-list">' + list.map(stockRow).join('') + '</ul>' : '<p class="mk-empty">관심 종목이 없어요. 시세에서 ☆를 눌러 넣어 보세요.</p>');
   } else if (phone.tab === 'mine') {
     const rows = d.stocks.filter(s => d.holdings[s.id]).map(s => ({ s, h: d.holdings[s.id], val: s.price * d.holdings[s.id].qty }));
     const val = rows.reduce((a, r) => a + r.val, 0), cost = rows.reduce((a, r) => a + r.h.cost, 0);
-    scr.innerHTML = `<div class="mk-sum"><span>주식 평가금액</span><b>${won(val)}원</b><span>평가 손익</span><b class="${tone(val - cost)}">${signed(val - cost)}원 (${pct(val, cost).toFixed(2)}%)</b><span>현금</span><b>${won(d.cash)}원</b></div>`
-      + (rows.length ? '<ul class="mk-list">' + rows.map(({ s, h, val: v }) => `<li><button type="button" class="mk-row" data-stock="${s.id}"><span>${s.name}<small>${h.qty}주 · 평균 ${won(Math.round(h.cost / h.qty))}원</small></span><span class="mk-price ${tone(v - h.cost)}">${won(v)}<small class="${tone(v - h.cost)}">${signed(v - h.cost)} (${pct(v, h.cost).toFixed(2)}%)</small></span></button></li>`).join('') + '</ul>'
-        : '<p class="mk-empty">아직 가진 주식이 없어요. 시세에서 회사를 골라 사 보세요.</p>');
+    scr.innerHTML = `<div class="mk-sum"><span>주식 평가금액</span><b>${won(val)}원</b><span>평가 손익</span><b class="${tone(val - cost)}">${signed(val - cost)}원 (${pct(val, cost).toFixed(2)}%)</b><span>실현 손익</span><b class="${tone(d.realized)}">${signed(d.realized)}원</b><span>받은 배당</span><b>${won(d.divIncome)}원</b><span>현금</span><b>${won(d.cash)}원</b></div>`
+      + (rows.length ? '<ul class="mk-list">' + rows.map(({ s, h, val: v }) => `<li><button type="button" class="mk-row" data-stock="${s.id}"><span>${s.name}<small>${h.qty}주 · 평균 ${won(Math.round(h.cost / h.qty))}원${s.dps ? ' · 배당 ' + (s.yield * 100).toFixed(1) + '%' : ''}</small></span><span class="mk-price ${tone(v - h.cost)}">${won(v)}<small class="${tone(v - h.cost)}">${signed(v - h.cost)} (${pct(v, h.cost).toFixed(2)}%)</small></span></button></li>`).join('') + '</ul>'
+        : '<p class="mk-empty">아직 가진 주식이 없어요. 시세에서 회사를 골라 사 보세요.</p>')
+      + ((d.orders || []).length ? '<h3 class="mk-h">예약 주문</h3><ul class="mk-list">' + orderRows(d) + '</ul>' : '');
+  } else if (phone.tab === 'hist') {
+    const tr = (d.trades || []).slice().reverse();
+    scr.innerHTML = `<div class="mk-sum"><span>실현 손익</span><b class="${tone(d.realized)}">${signed(d.realized)}원</b><span>받은 배당(세후)</span><b>${won(d.divIncome)}원</b><span>낸 수수료·세금</span><b>${won(d.fees)}원</b></div>`
+      + (tr.length ? '<ul class="mk-news">' + tr.map(t => t.side === 'div' ? `<li><small>${whenOf(t.min)}</small><b class="gold">배당</b> ${t.name} ${t.qty}주 × ${won(t.price)}원 <b>+${won(t.pnl)}원</b><small>세금 ${won(t.tax)}원 뗌</small></li>`
+        : `<li><small>${whenOf(t.min)}</small><b class="${t.side === 'buy' ? 'up' : 'down'}">${t.side === 'buy' ? '매수' : '매도'}</b> ${t.name} ${t.qty}주 × ${won(t.price)}원${t.pnl != null ? ` <b class="${tone(t.pnl)}">${signed(t.pnl)}원</b>` : ''}<small>수수료 ${won(t.fee)}원${t.tax ? ' · 세금 ' + won(t.tax) + '원' : ''}</small></li>`).join('') + '</ul>' : '<p class="mk-empty">아직 거래가 없어요.</p>');
   } else {
     scr.innerHTML = d.news.length ? '<ul class="mk-news">' + d.news.map(n => `<li><small>${whenOf(n.min)}</small><span class="${n.up ? 'up' : 'down'}">${n.up ? '▲' : '▼'}</span> ${n.text}<small>${n.ids.map(id => d.stocks.find(s => s.id === id)?.name).filter(Boolean).join(' · ')}</small></li>`).join('') + '</ul>'
       : '<p class="mk-empty">아직 뉴스가 없어요.</p>';
   }
 }
-// 종목 화면: 처음 한 번 틀을 만들고, 그 뒤엔 숫자·차트만 바꿈(적고 있는 수량이 지워지지 않게)
+// 호가창: 매도 호가 다섯(위, 파랑) · 매수 호가 다섯(아래, 빨강). 물량은 그 종목의 하루 거래량에 맞춰 시각마다 조금씩 달라짐
+function bookHTML(s) {
+  const base = s.avgVol / 390, slot = Math.floor(clock.min / 2), n = idNum(s.id), size = (k, side) => Math.max(1, Math.round(base * (0.3 + hash(slot, n * 13 + k, side) * 1.6) * (1 + (5 - k) * 0.12))), rows = [];
+  for (let k = 5; k >= 1; k--) { const p = s.price + k * s.tick; if (p <= s.up) rows.push(['a', p, size(k, 1)]); }
+  for (let k = 0; k < 5; k++) { const p = s.price - k * s.tick; if (p >= s.dn) rows.push(['b', p, size(k + 6, 2)]); }
+  const mx = Math.max(...rows.map(r => r[2]));
+  return rows.map(([side, p, q]) => `<div class="bk ${side}"><span>${won(p)}</span><i style="width:${Math.max(6, q / mx * 100)}%"></i><b>${won(q)}</b></div>`).join('');
+}
+// 종목 화면: 처음 한 번 틀을 만들고, 그 뒤엔 숫자·차트만 바꿈(적고 있는 수량·가격이 지워지지 않게)
 function renderDetail() {
   const d = phone.data, s = d.stocks.find(s => s.id === phone.sel), scr = $hud('phoneScreen');
   if (!s) { phone.tab = 'list'; return renderPhone(); }
   if (!scr.querySelector('#mkChart') || scr.dataset.shown !== s.id) {
-    scr.dataset.shown = s.id;
-    scr.innerHTML = `<div class="mk-detail"><button type="button" class="mk-back" data-back>‹ 시세</button>
-      <div><b class="mk-name">${s.name}</b> <small>${s.sector} · 본사 ${s.region}</small></div>
+    scr.dataset.shown = s.id; phone.limitSet = false;
+    scr.innerHTML = `<div class="mk-detail"><div class="mk-top"><button type="button" class="mk-back" data-back>‹ 시세</button><button type="button" class="mk-star" data-watch="${s.id}" id="mkStar" aria-label="관심 종목"></button></div>
+      <div><b class="mk-name">${s.name}</b> <span id="mkTags"></span> <small>${s.sector} · 본사 ${s.region}</small></div>
       <div><b class="mk-big" id="mkPrice"></b> <span id="mkChange"></span></div>
-      <canvas id="mkChart" aria-label="오늘 가격 차트"></canvas>
+      <div class="mk-seg" role="group" aria-label="차트 종류"><button type="button" data-chart="min">오늘</button><button type="button" data-chart="day">일봉</button></div>
+      <canvas id="mkChart" aria-label="가격 차트"></canvas>
       <div class="mk-grid" id="mkGrid"></div>
+      <div class="mk-div" id="mkDiv"></div>
+      <div class="mk-book" id="mkBook" aria-label="호가"></div>
       <div class="mk-own" id="mkOwn"></div>
+      <div class="mk-seg" role="group" aria-label="주문 방법"><button type="button" data-ot="market">시장가</button><button type="button" data-ot="limit">지정가</button></div>
+      <div class="mk-order" id="mkLimitRow"><button type="button" class="mk-step" data-lstep="-1" aria-label="한 호가 내리기">−</button><input id="mkLimit" type="number" min="1" inputmode="numeric" aria-label="주문 가격(원)"><button type="button" class="mk-step" data-lstep="1" aria-label="한 호가 올리기">+</button></div>
       <div class="mk-order"><button type="button" class="mk-step" data-step="-1" aria-label="1주 빼기">−</button><input id="mkQty" type="number" min="1" max="100000" value="1" inputmode="numeric" aria-label="주문 수량(주)"><button type="button" class="mk-step" data-step="1" aria-label="1주 더하기">+</button></div>
       <div class="mk-est" id="mkEst"></div>
       <div class="mk-btns"><button type="button" class="mk-buy" data-side="buy">사기</button><button type="button" class="mk-sell" data-side="sell">팔기</button></div>
-      <p class="mk-msg" id="mkMsg" role="status"></p></div>`;
+      <p class="mk-msg" id="mkMsg" role="status"></p><ul class="mk-list" id="mkOrders"></ul></div>`;
   }
-  const ch = s.price - s.prev, h = d.holdings[s.id], qty = Math.max(1, Math.floor(+$hud('mkQty').value || 1));
+  const ch = s.price - s.prev, h = d.holdings[s.id], ot = phone.ot || 'market', qty = Math.max(1, Math.floor(+$hud('mkQty').value || 1));
+  const locked = (d.orders || []).filter(o => o.id === s.id && o.side === 'sell').reduce((n, o) => n + o.qty, 0), halted = s.vi || d.halt;
+  if (ot === 'limit' && !phone.limitSet) { $hud('mkLimit').value = s.price; phone.limitSet = true; }
+  const limit = Math.round(+$hud('mkLimit').value / s.tick) * s.tick, limitOk = limit >= s.dn && limit <= s.up;
+  $hud('mkStar').textContent = starred(s.id) ? '★' : '☆'; $hud('mkStar').setAttribute('aria-pressed', starred(s.id));
+  $hud('mkTags').innerHTML = tagsOf(s);
   $hud('mkPrice').textContent = won(s.price) + '원'; $hud('mkPrice').className = 'mk-big ' + tone(ch);
   $hud('mkChange').innerHTML = `<span class="${tone(ch)}">${signed(ch)} (${pct(s.price, s.prev).toFixed(2)}%)</span>`;
-  $hud('mkGrid').innerHTML = `<span>시가</span><b>${won(s.open)}</b><span>전일 종가</span><b>${won(s.prev)}</b><span>고가</span><b class="up">${won(s.high)}</b><span>저가</span><b class="down">${won(s.low)}</b>`;
-  $hud('mkOwn').innerHTML = h ? `가진 주식 <b>${h.qty}주</b> · 평균 ${won(Math.round(h.cost / h.qty))}원 · <span class="${tone(s.price * h.qty - h.cost)}">${signed(s.price * h.qty - h.cost)}원</span>` : '가진 주식 없음';
-  $hud('mkEst').textContent = `${qty}주 × ${won(s.price)}원 = ${won(s.price * qty)}원 (수수료 0.015%, 팔 때 세금 0.18%) · 현금 ${won(d.cash)}원`;
-  document.querySelector('.mk-buy').disabled = !d.open || d.cash < s.price * qty;
-  document.querySelector('.mk-sell').disabled = !d.open || !h;
+  document.querySelectorAll('[data-chart]').forEach(b => b.setAttribute('aria-pressed', b.dataset.chart === (phone.chart || 'min')));
+  document.querySelectorAll('[data-ot]').forEach(b => b.setAttribute('aria-pressed', b.dataset.ot === ot));
+  $hud('mkLimitRow').hidden = ot !== 'limit';
+  $hud('mkGrid').innerHTML = [['시가', won(s.open)], ['전일 종가', won(s.prev)], ['고가', won(s.high), 'up'], ['저가', won(s.low), 'down'], ['거래량', volText(s.vol) + '주'], ['거래대금', won(Math.round(s.amt / 1e6)) + '백만'],
+    ['시가총액', capText(s.cap)], ['PER', s.per ? s.per + '배' : '적자'], ['EPS', won(s.eps) + '원'], ['배당(연)', s.dps ? won(s.dps) + '원 (' + (s.yield * 100).toFixed(1) + '%)' : '없음'], ['60일 최고', won(s.hi60), 'up'], ['60일 최저', won(s.lo60), 'down'], ['상한가', won(s.up), 'up'], ['하한가', won(s.dn), 'down']]
+    .map(([k, v, c]) => `<span>${k}</span><b class="${c || ''}">${v}</b>`).join('');
+  const nd = s.nextDiv && today(s.nextDiv.exDay * DAY);
+  $hud('mkDiv').textContent = nd ? `배당 예정: 주당 ${won(s.nextDiv.dps)}원 · 배당락일 ${nd.month}월 ${nd.date}일 (그날 장 열 때 가진 주식에 지급, 세금 15.4%)` : '';
+  $hud('mkBook').innerHTML = bookHTML(s);
+  $hud('mkOwn').innerHTML = h ? `가진 주식 <b>${h.qty}주</b>${locked ? ' (예약에 ' + locked + '주 묶임)' : ''} · 평균 ${won(Math.round(h.cost / h.qty))}원 · <span class="${tone(s.price * h.qty - h.cost)}">${signed(s.price * h.qty - h.cost)}원</span>` : '가진 주식 없음';
+  const marketable = ot === 'market' || limit >= s.price, px = ot === 'market' ? s.price : limit;
+  $hud('mkEst').textContent = halted ? (d.halt ? '서킷브레이커로 모든 매매가 정지돼 있어요.' : 'VI 발동 중: 2분간 주문할 수 없어요.')
+    : `${qty}주 × ${won(px)}원 = ${won(px * qty)}원 (수수료 0.015%, 팔 때 세금 0.18%)${ot === 'limit' ? (limitOk ? (limit === s.price ? ' · 지금 가격이라 바로 체결' : ' · 가격이 닿으면 체결, 오늘 장 마감까지') : ' · 가격은 ' + won(s.dn) + '~' + won(s.up) + '원 사이') : ''} · 현금 ${won(d.cash)}원`;
+  const buy = document.querySelector('.mk-buy'), sell = document.querySelector('.mk-sell');
+  buy.textContent = ot === 'limit' && limit < s.price ? '예약 사기' : '사기'; sell.textContent = ot === 'limit' && limit > s.price ? '예약 팔기' : '팔기';
+  buy.disabled = !d.open || halted || (ot === 'limit' && !limitOk) || d.cash < px * qty;
+  sell.disabled = !d.open || halted || (ot === 'limit' && !limitOk) || !h || h.qty - locked < qty;
+  $hud('mkOrders').innerHTML = orderRows(d, s.id) ? '<h3 class="mk-h">내 예약 주문</h3>' + orderRows(d, s.id) : '';
   drawChart(s);
 }
-// 차트: 오늘 1분 가격 선(전일 종가보다 높으면 빨강, 낮으면 파랑) + 전일 종가 점선. 오늘 거래가 없으면 최근 종가들
+// 차트: 오늘(1분 가격 선, 전일 종가 점선) / 일봉(최근 40일 캔들 + 5일 평균선 + 거래량). 빨강 = 전일·시가보다 높음, 파랑 = 낮음
 function drawChart(s) {
   const c = $hud('mkChart'), dpr = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
   if (!w) return;
   c.width = w * dpr; c.height = h * dpr;
   const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-  const pts = s.hist.length > 1 ? s.hist : s.daily.map(x => x.close).concat(s.price);
+  g.fillStyle = '#6a6680'; g.font = "11px Galmuri11, monospace";
+  if ((phone.chart || 'min') === 'day') {
+    const days = s.daily.concat([[0, s.open, s.high, s.low, s.price, s.vol]]), n = days.length;
+    if (n < 2) { g.fillText('일봉은 하루가 지나면 쌓여요', 6, 13); return; }
+    const lo = Math.min(...days.map(d => d[3])), hi = Math.max(...days.map(d => d[2])), pad = (hi - lo) * 0.08 || hi * 0.01, ch = h * 0.74, vmax = Math.max(...days.map(d => d[5]), 1);
+    const y = v => 6 + (hi + pad - v) / (hi - lo + pad * 2) * (ch - 8), bw = (w - 8) / n, x = i => 4 + (i + 0.5) * bw;
+    days.forEach((d, i) => {
+      const up = d[4] >= d[1], col = up ? '#d32f2f' : '#1e5bd8';
+      g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 1; g.beginPath(); g.moveTo(x(i), y(d[2])); g.lineTo(x(i), y(d[3])); g.stroke();
+      const top = y(Math.max(d[1], d[4])), bot = y(Math.min(d[1], d[4]));
+      g.fillRect(x(i) - Math.max(1, bw * 0.3), top, Math.max(2, bw * 0.6), Math.max(1, bot - top));
+      g.globalAlpha = 0.35; g.fillRect(x(i) - Math.max(1, bw * 0.3), h - 2 - d[5] / vmax * (h * 0.2), Math.max(2, bw * 0.6), d[5] / vmax * (h * 0.2)); g.globalAlpha = 1;
+    });
+    g.strokeStyle = '#f2a03d'; g.lineWidth = 1.5; g.beginPath();
+    days.forEach((d, i) => { if (i < 4) return; const ma = days.slice(i - 4, i + 1).reduce((a, b) => a + b[4], 0) / 5; i === 4 ? g.moveTo(x(i), y(ma)) : g.lineTo(x(i), y(ma)); }); g.stroke();
+    g.fillStyle = '#6a6680'; g.fillText('일봉 (최근 ' + n + '일) · 주황 = 5일 평균', 6, 13);
+    return;
+  }
+  const pts = s.hist.length > 1 ? s.hist : [s.prev, s.price];
   const lo = Math.min(...pts, s.prev), hi = Math.max(...pts, s.prev), pad = (hi - lo) * 0.1 || hi * 0.01;
-  const y = v => h - 8 - (v - lo + pad) / (hi - lo + pad * 2) * (h - 16), x = i => s.hist.length > 1 ? 4 + i / 389 * (w - 8) : 4 + i / Math.max(1, pts.length - 1) * (w - 8);
+  const y = v => h - 8 - (v - lo + pad) / (hi - lo + pad * 2) * (h - 16), x = i => 4 + i / 389 * (w - 8);
   g.strokeStyle = '#9a96a8'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, y(s.prev)); g.lineTo(w, y(s.prev)); g.stroke(); g.setLineDash([]);
   const col = s.price >= s.prev ? '#d32f2f' : '#1e5bd8';
   g.beginPath(); pts.forEach((v, i) => i ? g.lineTo(x(i), y(v)) : g.moveTo(x(i), y(v)));
   g.strokeStyle = col; g.lineWidth = 2; g.stroke();
   g.lineTo(x(pts.length - 1), h); g.lineTo(x(0), h); g.closePath(); g.fillStyle = col + '22'; g.fill();
-  g.fillStyle = '#6a6680'; g.font = "11px Galmuri11, monospace"; g.fillText(s.hist.length > 1 ? '오늘 (09:00~15:30)' : '최근 종가', 6, 13);
+  g.fillStyle = '#6a6680'; g.fillText('오늘 (09:00~15:30)', 6, 13);
 }
 $hud('phoneScreen').addEventListener('click', async e => {
   const t = e.target;
-  if (t.closest('[data-stock]')) { phone.sel = t.closest('[data-stock]').dataset.stock; phone.tab = 'detail'; return renderPhone(); }
+  const w = t.closest('[data-watch]');
+  if (w) { const r = await post('watch', { id: w.dataset.watch }); if (r.ok) { phone.data.watch = r.watch; renderPhone(); } return; }
+  const so = t.closest('[data-sort]');
+  if (so) { phone.sort = so.dataset.sort; return renderPhone(); }
+  if (t.closest('[data-stock]')) { phone.sel = t.closest('[data-stock]').dataset.stock; phone.tab = 'detail'; renderPhone(); return loadMarket(); }
   if (t.closest('[data-back]')) { phone.tab = 'list'; return renderPhone(); }
+  const ch = t.closest('[data-chart]'); if (ch) { phone.chart = ch.dataset.chart; return renderDetail(); }
+  const ot = t.closest('[data-ot]'); if (ot) { phone.ot = ot.dataset.ot; return renderDetail(); }
   if (t.closest('[data-step]')) { const q = $hud('mkQty'); q.value = Math.max(1, (+q.value || 1) + +t.closest('[data-step]').dataset.step); return renderDetail(); }
+  const ls = t.closest('[data-lstep]');
+  if (ls) { const s = phone.data.stocks.find(s => s.id === phone.sel), l = $hud('mkLimit'); l.value = Math.min(s.up, Math.max(s.dn, (Math.round(+l.value / s.tick) || Math.round(s.price / s.tick)) * s.tick + +ls.dataset.lstep * s.tick)); return renderDetail(); }
+  const cn = t.closest('[data-cancel]');
+  if (cn) { const r = await post('cancelorder', { oid: +cn.dataset.cancel }); notify(r.ok ? '예약 주문을 취소했어요. 묶어 둔 돈을 돌려받았어요.' : r.msg); return loadMarket(); }
   const side = t.closest('[data-side]')?.dataset.side;
   if (!side) return;
-  const qty = Math.floor(+$hud('mkQty').value), s = phone.data.stocks.find(s => s.id === phone.sel);
+  const s = phone.data.stocks.find(s => s.id === phone.sel), qty = Math.floor(+$hud('mkQty').value), type = phone.ot || 'market', body = { id: phone.sel, side, qty, type };
+  if (type === 'limit') body.limit = +$hud('mkLimit').value;
   t.disabled = true;
-  const r = await post('trade', { id: phone.sel, side, qty });
-  $hud('mkMsg').textContent = r.ok ? `${s.name} ${r.qty}주 ${side === 'buy' ? '샀어요' : '팔았어요'} (${won(r.price)}원)` : r.msg;
-  if (r.ok) { me.cash = r.cash; notify(`${s.name} ${r.qty}주 ${side === 'buy' ? '매수' : '매도'} 체결 · ${won(r.price)}원`); }
+  const r = await post('trade', body);
+  $hud('mkMsg').textContent = r.ok ? (r.pending ? `예약 주문을 걸었어요 (${side === 'buy' ? '매수' : '매도'} ${qty}주 · ${won(r.order.limit)}원, 오늘 장 마감까지)` : `${s.name} ${r.qty}주 ${side === 'buy' ? '샀어요' : '팔았어요'} (${won(r.price)}원)`) : r.msg;
+  if (r.ok) { me.cash = r.cash; notify(r.pending ? `${s.name} ${side === 'buy' ? '매수' : '매도'} 예약 접수 · ${won(r.order.limit)}원` : `${s.name} ${r.qty}주 ${side === 'buy' ? '매수' : '매도'} 체결 · ${won(r.price)}원`); }
   loadMarket();
 });
-$hud('phoneScreen').addEventListener('input', e => { if (e.target.id === 'mkQty') renderDetail(); });
+$hud('phoneScreen').addEventListener('input', e => { if (e.target.id === 'mkQty' || e.target.id === 'mkLimit') renderDetail(); });
 document.querySelector('.phone-tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { phone.tab = b.dataset.tab; renderPhone(); } });
 // ===== 세계 사람들: 서버 시뮬레이션(sim/)에서 지금 밖에 나와 있는 사람(출근·산책·장보기·구직 …)을 10초마다 받아 맵을 걸어 다니게 함 =====
 // 걷는 모습은 화면 꾸밈이라 이 컴퓨터에서만 정함(보도·잔디·흙길 위를 천천히 돌아다님). 가까이서 E → 그 사람의 지금 삶으로 만든 대사
@@ -509,7 +591,7 @@ function renderWorld(scr) {
 }
 // ===== 휴대폰 앱: 홈 화면에서 앱을 고름 (앞으로 부동산·차량 앱도 여기에 더함) =====
 const APPS = {
-  stock: { name: '한울증권', color: '#d32f2f', mark: '▲', tabs: [['list', '시세'], ['mine', '내 주식'], ['news', '뉴스']] },
+  stock: { name: '한울증권', color: '#d32f2f', mark: '▲', tabs: [['list', '시세'], ['watch', '관심'], ['mine', '내 주식'], ['hist', '내역'], ['news', '뉴스']] },
   job: { name: '한울잡', color: '#2f9e5a', mark: '잡', tabs: [['posts', '구인'], ['myjob', '내 일'], ['pay', '급여']] },
   world: { name: '세상', color: '#3d7fd6', mark: '◎', tabs: [['world', '세상']] },
   people: { name: '사람들', color: '#e8708a', mark: '♥', tabs: [['people', '아는 사람']] },

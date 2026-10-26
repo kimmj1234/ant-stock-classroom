@@ -8,9 +8,9 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const PORT = 5000, HOST = '127.0.0.1';
+const PORT = +process.env.PORT || 5000, HOST = '127.0.0.1';
 const MAX_ACCOUNTS = 200;
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');   // 닉네임·(비밀번호면) 소금·해시 / (구글이면) 구글 고유 번호
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');   // 로그인 쿠키 토큰의 해시 → 계정 (토큰 원문은 저장하지 않음)
 const FILES = {
@@ -158,7 +158,7 @@ const AUTH = { login, google: googleLogin, googleName, nameCheck };   // 로그�
 const WORLD_FILE = path.join(DATA_DIR, 'world.json');
 const world = readJSONFile(WORLD_FILE) || { epoch: Date.now(), start: 480 };
 if (!fs.existsSync(WORLD_FILE)) writeJSONFile(WORLD_FILE, world);
-const WORLD_SPEED = 24;   // 현실 1초에 게임 24초 (게임 쪽은 game.js의 TIME_SPEED와 같아야 함)
+const WORLD_SPEED = +process.env.WORLD_SPEED || 24;   // (시험용: 환경변수로 더 빠르게)   // 현실 1초에 게임 24초 (게임 쪽은 game.js의 TIME_SPEED와 같아야 함)
 if ((world.speed || 3) !== WORLD_SPEED) {   // 빠르기를 바꾸면 지금 시각에서 이어서 흐르게 기준을 다시 잡음 (시각이 튀지 않음)
   const t = Date.now(); world.start += (t - world.epoch) * (world.speed || 3) / 60000; world.epoch = t; world.speed = WORLD_SPEED;
   writeJSONFile(WORLD_FILE, world);
@@ -170,14 +170,67 @@ const { marketOpen, nextOpen } = require('./world.js');
 const { createMarket, BY_ID: STOCKS } = require('./economy.js');
 const market = createMarket(path.join(DATA_DIR, 'market.json'), readJSONFile, writeJSONFile);
 market.advance(worldMinutes());
-setInterval(() => market.advance(worldMinutes()), 2000);
+setInterval(() => { market.advance(worldMinutes()); processOrders(); }, 2000);   // 시세를 진행하고, 예약(지정가) 주문이 체결됐는지 봄
 // ===== 세계 시뮬레이션 (sim/): 사람·일·사건·사회. 2초마다 세계 시각까지 진행(한 번에 최대 40ms), 지역·나라 사건은 주식 뉴스로도 =====
 const { createSim } = require('./sim/index.js');
 const sim = createSim({ file: path.join(DATA_DIR, 'sim.json'), read: readJSONFile, write: writeJSONFile, toMarket: (min, n) => market.ingest(min, n), quote: id => market.quote(id), rumors: () => market.rumors(), order: (id, won) => market.order(id, won), hot: () => market.hot() });
 sim.advance(worldMinutes());
 setInterval(() => { sim.advance(worldMinutes()); market.setMacro(sim.macro()); }, 2000);   // 회사 사정(직원 사기)·경기를 시장에 알려 줌 (실적·금리 계획의 근거)
 process.on('SIGINT', () => { sim.kernel.save(); process.exit(0); });   // 끌 때 마지막 상태 저장
+const DIV_TAX = 0.154;   // 배당소득세 15.4%
+const won = n => Math.round(n).toLocaleString('ko-KR');
+const stockNote = (a, text) => { a.mkNotes = [...(a.mkNotes || []), text].slice(-10); };   // 휴대폰을 안 보고 있어도 다음에 시세를 받을 때 알림으로
+const logTrade = (a, t) => { a.trades = [...(a.trades || []), t].slice(-80); };
+// 체결: 주식·평균 매입가·실현 손익·수수료와 세금·거래 내역을 바꾸고, 내 주문이 가격에 영향을 줌(큰 돈일수록 가격이 밀림). reserve = 지정가 매수 때 미리 잡아 둔 돈
+function execTrade(a, id, side, qty, price, now, reserve = 0) {
+  const h = { ...(a.holdings || {}) }, cur = h[id] || { qty: 0, cost: 0 }, amount = price * qty, fee = Math.floor(amount * FEE);
+  let tax = 0, pnl = null;
+  if (side === 'buy') { h[id] = { qty: cur.qty + qty, cost: cur.cost + amount + fee }; a.cash = (a.cash ?? 50000) + reserve - amount - fee; }
+  else {
+    tax = Math.floor(amount * SELL_TAX); const left = cur.qty - qty;
+    pnl = Math.round(amount - fee - tax - cur.cost * qty / cur.qty); a.realized = (a.realized || 0) + pnl;
+    if (left) h[id] = { qty: left, cost: Math.round(cur.cost * left / cur.qty) }; else delete h[id];
+    a.cash = (a.cash ?? 50000) + amount - fee - tax;
+  }
+  a.holdings = h; a.feesPaid = (a.feesPaid || 0) + fee + tax;
+  logTrade(a, { min: Math.floor(now), id, name: STOCKS[id].name, side, qty, price, fee, tax, pnl });
+  market.order(id, side === 'buy' ? amount : -amount);
+}
+// 예약(지정가) 주문: 주문한 뒤 오늘 가격이 지나간 길에서 내가 건 가격에 닿으면 체결, 장이 끝나거나 날이 바뀌면 취소(당일 유효)
+function processOrders() {
+  const now = worldMinutes(), day = Math.floor(now / 1440);
+  let dirty = false;
+  for (const a of Object.values(accounts)) {
+    if (!Array.isArray(a.orders) || !a.orders.length) continue;
+    const keep = [];
+    for (const o of a.orders) {
+      const path = o.day === day && marketOpen(now) ? market.pathSince(o.id, o.day, o.idx) : null;
+      if (!path) { if (o.side === 'buy') a.cash = (a.cash ?? 50000) + o.reserve; stockNote(a, `${o.name} ${o.side === 'buy' ? '매수' : '매도'} 예약(${o.qty}주 · ${won(o.limit)}원)이 체결되지 않아 장 마감으로 취소됐어요.`); dirty = true; continue; }
+      if (!(o.side === 'buy' ? path.lo <= o.limit : path.hi >= o.limit)) { keep.push(o); continue; }
+      const price = o.side === 'buy' ? (path.last <= o.limit ? path.last : o.limit) : (path.last >= o.limit ? path.last : o.limit);   // 지금 가격이 더 유리하면 그 가격에
+      if (o.side === 'sell' && (a.holdings?.[o.id]?.qty || 0) < o.qty) { stockNote(a, `${o.name} 매도 예약이 가진 주식이 모자라 취소됐어요.`); dirty = true; continue; }
+      execTrade(a, o.id, o.side, o.qty, price, now, o.reserve);
+      stockNote(a, `${o.name} ${o.qty}주 ${o.side === 'buy' ? '매수' : '매도'} 예약 체결 · ${won(price)}원`); dirty = true;
+    }
+    a.orders = keep;
+  }
+  if (dirty) writeJSONFile(ACCOUNTS_FILE, accounts);
+}
 const FEE = 0.00015, SELL_TAX = 0.0018;   // 거래 수수료 0.015%(사고팔 때), 파는 금액에 세금 0.18% (현실과 비슷하게)
+market.onDividend((co, dps, min, name) => {   // 배당락일 장 열 때 주식을 가진 계정에 배당 (세금 15.4% 뗀 돈)
+  let any = false;
+  for (const a of Object.values(accounts)) {
+    const qty = a.holdings?.[co]?.qty;
+    if (!qty) continue;
+    const gross = qty * dps, tax = Math.floor(gross * DIV_TAX), net = gross - tax;
+    a.cash = (a.cash ?? 50000) + net; a.divIncome = (a.divIncome || 0) + net; any = true;
+    logTrade(a, { min: Math.floor(min), id: co, name, side: 'div', qty, price: dps, fee: 0, tax, pnl: net });
+    stockNote(a, `${name} 배당 ${won(net)}원이 들어왔어요 (주당 ${won(dps)}원 · 세금 ${won(tax)}원 뗌)`);
+  }
+  if (any) writeJSONFile(ACCOUNTS_FILE, accounts);
+});
+market.onDividend((co, dps) => sim.dividend(co, dps));
+market.flushDividends();
 // 생활 정보: 현금(원), 가방(물건 목록), 서 있던 자리(장면·픽셀 위치, 없으면 처음 자리), 능력치 (게임 시간은 세계 시간 하나라 계정마다 두지 않음)
 // 능력치: 체력·배고픔·기분은 게이지 0~100 (100이 가장 좋음) / 지능·근력은 레벨(1부터, 돈으로 강화 — 나중엔 공부·운동 같은 행동으로도)
 //         매력은 인기도(0부터, 메이플스토리 인기도처럼 다른 사람이 +1/-1을 줌, 마이너스도 됨)
@@ -340,32 +393,62 @@ http.createServer(async (req, res) => {
       if (name !== 'job') writeJSONFile(ACCOUNTS_FILE, accounts);
       return json(res, 200, { ...r, ...jobs.view(a, now), postings: name === 'job' ? jobs.postings(a, lifeOf(a).region) : undefined, inbox: jobs.takeInbox(a), cash: lifeOf(a).cash, stats: lifeOf(a).stats });
     }
-    if (name === 'market') {   // 시세판: 장 열림 여부 · 다음 개장 · 회사별 시세 · 뉴스 · 내 돈과 가진 주식
+    // ===== 주식 (economy.js): 시세판 · 주문 · 예약 주문 · 관심 종목 · 거래 내역 =====
+    if (name === 'market') {   // 시세판 { sel }: 장 열림 · 회사별 시세·재무 · 뉴스 · 내 돈·주식·예약 주문·거래 내역·관심 종목 · 알림 (sel 종목만 오늘 가격·일봉을 같이 보냄)
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
-      const now = worldMinutes(), life = lifeOf(accounts[key]);
-      market.advance(now);
-      return json(res, 200, { ok: true, now, open: marketOpen(now), next: nextOpen(now), ...market.view(), cash: life.cash, holdings: life.holdings });
+      const now = worldMinutes(), a = accounts[key];
+      market.advance(now); processOrders();
+      const life = lifeOf(a);   // 예약 체결 뒤의 돈·주식
+      const notes = a.mkNotes || [];
+      if (notes.length) { a.mkNotes = []; writeJSONFile(ACCOUNTS_FILE, accounts); }
+      return json(res, 200, { ok: true, now, open: marketOpen(now), next: nextOpen(now), ...market.view(typeof b.sel === 'string' ? b.sel : null), cash: life.cash, holdings: life.holdings,
+        orders: a.orders || [], trades: (a.trades || []).slice(-60), watch: a.watch || [], realized: a.realized || 0, divIncome: a.divIncome || 0, fees: a.feesPaid || 0, notes });
     }
-    if (name === 'trade') {   // 사고팔기 { id, side: 'buy' | 'sell', qty } — 장이 열려 있을 때 지금 가격으로. 돈·주식 수는 서버가 확인
+    if (name === 'trade') {   // 주문 { id, side: 'buy' | 'sell', qty, type: 'market' | 'limit', limit }: 시장가는 지금 가격에 바로, 지정가는 내가 건 가격이 될 때까지 기다림(당일 유효). 돈·주식 수·정지 여부는 서버가 확인
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
-      const now = worldMinutes(); market.advance(now);
+      const now = worldMinutes(); market.advance(now); processOrders();
       if (!marketOpen(now)) return json(res, 400, { ok: false, msg: '지금은 장이 닫혀 있어요. (평일 09:00~15:30)' });
-      const qty = b.qty, a = accounts[key], life = lifeOf(a);
-      if (!Object.hasOwn(STOCKS, b.id) || !['buy', 'sell'].includes(b.side)) return json(res, 400, { ok: false, msg: '잘못된 주문이에요.' });
+      const qty = b.qty, a = accounts[key], life = lifeOf(a), lim = Object.hasOwn(STOCKS, b.id) ? market.limitsOf(b.id) : null;
+      if (!lim || !['buy', 'sell'].includes(b.side)) return json(res, 400, { ok: false, msg: '잘못된 주문이에요.' });
       if (!Number.isInteger(qty) || qty < 1 || qty > 100000) return json(res, 400, { ok: false, msg: '수량은 1주 이상으로 적어 주세요.' });
-      const price = market.priceOf(b.id), amount = price * qty, fee = Math.floor(amount * FEE), h = { ...life.holdings }, cur = h[b.id] || { qty: 0, cost: 0 };
-      if (b.side === 'buy') {
-        if (life.cash < amount + fee) return json(res, 400, { ok: false, msg: `돈이 부족해요. (${(amount + fee).toLocaleString('ko-KR')}원 필요)` });
-        a.cash = life.cash - amount - fee; h[b.id] = { qty: cur.qty + qty, cost: cur.cost + amount + fee };
-      } else {
-        if (cur.qty < qty) return json(res, 400, { ok: false, msg: `가진 주식이 ${cur.qty}주뿐이에요.` });
-        const tax = Math.floor(amount * SELL_TAX);
-        a.cash = life.cash + amount - fee - tax;
-        const left = cur.qty - qty;
-        if (left) h[b.id] = { qty: left, cost: Math.round(cur.cost * left / cur.qty) }; else delete h[b.id];
+      const halt = market.haltOf(b.id);
+      if (halt) return json(res, 400, { ok: false, msg: halt });
+      const price = lim.price, type = b.type === 'limit' ? 'limit' : 'market', orders = a.orders || [];
+      const have = life.holdings[b.id]?.qty || 0, locked = orders.filter(o => o.id === b.id && o.side === 'sell').reduce((n, o) => n + o.qty, 0);
+      if (b.side === 'sell' && have - locked < qty) return json(res, 400, { ok: false, msg: `팔 수 있는 주식이 ${have - locked}주뿐이에요.${locked ? ' (예약 주문에 묶인 ' + locked + '주 포함)' : ''}` });
+      let limit = null;
+      if (type === 'limit') {
+        limit = Math.round(+b.limit / lim.tick) * lim.tick;
+        if (!Number.isFinite(limit) || limit < lim.dn || limit > lim.up) return json(res, 400, { ok: false, msg: `주문 가격은 ${won(lim.dn)}원(하한가)~${won(lim.up)}원(상한가) 사이여야 해요.` });
       }
-      a.holdings = h; writeJSONFile(ACCOUNTS_FILE, accounts);
-      return json(res, 200, { ok: true, price, qty, side: b.side, cash: a.cash, holdings: h });
+      const marketable = type === 'market' || (b.side === 'buy' ? limit >= price : limit <= price);   // 바로 사고팔 수 있는 가격이면 지금 가격에 체결
+      if (marketable) {
+        const amount = price * qty, fee = Math.floor(amount * FEE);
+        if (b.side === 'buy' && life.cash < amount + fee) return json(res, 400, { ok: false, msg: `돈이 부족해요. (${won(amount + fee)}원 필요)` });
+        execTrade(a, b.id, b.side, qty, price, now); writeJSONFile(ACCOUNTS_FILE, accounts);
+        return json(res, 200, { ok: true, price, qty, side: b.side, cash: a.cash, holdings: a.holdings });
+      }
+      if (orders.length >= 10) return json(res, 400, { ok: false, msg: '예약 주문은 열 개까지만 걸 수 있어요.' });
+      const reserve = b.side === 'buy' ? Math.ceil(limit * qty * (1 + FEE)) : 0;   // 매수 예약은 돈을 미리 묶어 둠 (취소하면 돌려받음)
+      if (reserve && life.cash < reserve) return json(res, 400, { ok: false, msg: `돈이 부족해요. (${won(reserve)}원 필요)` });
+      a.cash = life.cash - reserve; a.orderSeq = (a.orderSeq || 0) + 1;
+      const order = { oid: a.orderSeq, id: b.id, name: STOCKS[b.id].name, side: b.side, qty, limit, day: Math.floor(now / 1440), idx: market.histLen(b.id), reserve, min: Math.floor(now) };
+      a.orders = [...orders, order]; writeJSONFile(ACCOUNTS_FILE, accounts);
+      return json(res, 200, { ok: true, pending: true, order, cash: a.cash, holdings: life.holdings });
+    }
+    if (name === 'cancelorder') {   // 예약 주문 취소 { oid }: 묶어 둔 돈을 돌려받음
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      const a = accounts[key], o = (a.orders || []).find(x => x.oid === b.oid);
+      if (!o) return json(res, 404, { ok: false, msg: '그 주문은 이미 없어요.' });
+      a.cash = (a.cash ?? 50000) + (o.reserve || 0); a.orders = a.orders.filter(x => x !== o); writeJSONFile(ACCOUNTS_FILE, accounts);
+      return json(res, 200, { ok: true, cash: a.cash, orders: a.orders });
+    }
+    if (name === 'watch') {   // 관심 종목 넣고 빼기 { id }
+      if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
+      if (!Object.hasOwn(STOCKS, b.id)) return json(res, 400, { ok: false, msg: '잘못된 종목이에요.' });
+      const a = accounts[key], w = a.watch || [];
+      a.watch = w.includes(b.id) ? w.filter(x => x !== b.id) : [...w, b.id]; writeJSONFile(ACCOUNTS_FILE, accounts);
+      return json(res, 200, { ok: true, watch: a.watch });
     }
     if (name === 'shop') return json(res, 200, { ok: true, items: Object.entries(ITEMS).map(([id, [n, price]]) => ({ id, name: n, price })), bagSize: BAG_SIZE });   // 마트 상품 목록
     if (name === 'buy') {   // 물건 사기: { id } → 돈이 충분하고 가방에 빈칸이 있으면 돈을 빼고 가방에 넣음

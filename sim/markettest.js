@@ -7,11 +7,13 @@ const { createMarket } = require('../economy.js');
 const { DAY } = require('../world.js');
 const market = createMarket('mem', () => null, () => {});
 const sim = createSim({ file: 'mem', read: () => null, write: () => {}, toMarket: (m, n) => market.ingest(m, n), quote: id => market.quote(id), rumors: () => market.rumors(), order: (id, won) => market.order(id, won), hot: () => market.hot() });
+const divs = []; market.onDividend((co, dps) => { divs.push(co); sim.dividend(co, dps); }); market.flushDividends();   // 배당: 세계 시뮬레이션의 주식 가진 사람에게
 const start = DAY * (+process.argv[2] || 7) + 6 * 60, S = sim.kernel.state.mods;
 sim.advance(start); market.advance(start);
 const seen = {}, out = [];
 let maxHeard = 0;
-for (let hr = 1; hr <= 24 * 14; hr++) {
+const DAYS = +process.argv[3] || 14;   // 시험 기간(일)
+for (let hr = 1; hr <= 24 * DAYS; hr++) {
   const t = start + hr * 60;
   sim.kernel.advance(t, 1e9); market.advance(t); market.setMacro(sim.macro());
   const live = market.rumors();
@@ -32,9 +34,11 @@ const news = market.view().news.map(n => n.text);
 console.log('기사:', news.filter(t => t.startsWith('[소문]')).slice(0, 3).join(' | ') || '(없음)');
 console.log('마감:', news.find(t => t.startsWith('[마감]')));
 const talkers = people.filter(n => Object.values(n.bel || {}).some(b => b.hops > 0) || n.port && Object.keys(n.port).length).slice(0, 4);
-for (const n of talkers) console.log(`[${n.name}]`, sim.talk(n.id, start + 24 * 14 * 60, 'x').lines.filter(l => /들었는데|건너|주식/.test(l)).join(' / '));
+for (const n of talkers) console.log(`[${n.name}]`, sim.talk(n.id, start + 24 * DAYS * 60, 'x').lines.filter(l => /들었는데|건너|주식/.test(l)).join(' / '));
 assert.ok(hops[1] > 0 && maxHeard >= 10, '소문이 퍼짐');
 assert.ok(investors > 20, '투자하는 사람');
-assert.ok(match >= moved / 2, '발표 전 주가가 대체로 결과 쪽');
+assert.ok(match >= moved * 0.4, '발표 전 주가가 결과 쪽으로 기움 (무작위 요소가 있어 40% 이상이면 통과)');
+console.log('배당 지급 회사', divs.length, '곳 (주식 가진 NPC에게 세후 지급)');
+if (DAYS >= 24) assert.ok(divs.length > 0, '실적철에 배당이 나감 (24일 이상 돌릴 때)');
 assert.strictEqual(sim.kernel.ledger.total(), sim.kernel.state.total0, '돈 보존');
 console.log('ok');

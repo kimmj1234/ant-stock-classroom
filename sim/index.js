@@ -70,6 +70,15 @@ function createSim({ file, read, write, toMarket = () => {}, quote = () => null,
       for (const n of Object.values(S().people.list)) if (n.emp) count[n.emp] = (count[n.emp] || 0) + 1;
       return Object.values(W.emps).map(e => ({ id: e.id, key: e.key, name: e.name, region: e.region, occ: e.occ, company: e.company, cap: e.cap, staff: (count[e.id] || 0) + (e.players?.length || 0), morale: Math.round(e.morale) }));
     },
+    // 배당: 주식을 가진 사람에게 (세금 15.4% 뗀 돈 = 장부로 바깥 → 사람, 세금은 나라로)
+    dividend(co, dps) {
+      for (const n of Object.values(S().people.list)) {
+        const sh = n.port?.[co];
+        if (!sh) continue;
+        const gross = sh * dps, tax = Math.floor(gross * 0.154);
+        kernel.ledger.move('ext', 'p:' + n.id, gross); kernel.ledger.move('p:' + n.id, 'gov', tax);
+      }
+    },
     // 플레이어를 일터 직원으로 넣고 빼기 (who = 계정)
     hirePlayer(empId, who) { const e = S().work.emps[empId]; if (!e) return false; e.players = [...new Set([...(e.players || []), who])]; return true; },
     firePlayer(empId, who) { const e = S().work.emps[empId]; if (e) e.players = (e.players || []).filter(p => p !== who); },
