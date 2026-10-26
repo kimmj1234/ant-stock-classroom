@@ -19,6 +19,7 @@ node server.js
 
 서버는 외부 라이브러리 없이 Node만 쓰고, 계정·세계·시장 데이터를 `data/` 폴더에 **파일로** 저장해요. 그래서 배포할 곳은 ① Node(또는 Docker)를 돌릴 수 있고 ② 서버를 껐다 켜도 `/data` 디스크가 유지되고 ③ 기계를 한 대만 쓰는 곳이어야 해요.
 
+- **지금 쓰는 방법 (내 PC + 고정 주소)**: 프로젝트 폴더의 **`온라인-켜기.bat`** 을 더블클릭하면 게임 서버가 켜지고 ngrok의 **고정 주소 https://dispense-enjoyably-overcoat.ngrok-free.dev** 로 열려요(주소는 다시 켜도 안 바뀜, 계정의 ngrok 무료 고정 주소). PC가 켜져 있고 그 창이 열려 있는 동안만 접속돼요. 처음 들어오는 사람에게 ngrok 안내 화면("Visit Site")이 한 번 떠요.
 - **Docker 이미지**: `Dockerfile`(HOST=0.0.0.0, PORT=8080, DATA_DIR=/data). `docker run -p 8080:8080 -v 내볼륨:/data 이미지`
 - **Fly.io**(추천, 도쿄 지역): `winget install Fly-io.flyctl` → `fly auth login` → `fly launch --copy-config --no-deploy` → `fly volumes create data --size 1 --region nrt` → `fly deploy`. 설정은 `fly.toml`.
 - 환경변수: `PORT`, `HOST`(기본 127.0.0.1), `DATA_DIR`(기본 ./data), `GOOGLE_CLIENT_ID`. 구글 로그인은 배포한 주소를 Google Cloud Console의 "승인된 자바스크립트 원본"에 추가해야 돼요(닉네임+비밀번호 로그인은 바로 됨).
