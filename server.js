@@ -205,7 +205,7 @@ function processOrders() {
     const keep = [];
     for (const o of a.orders) {
       const path = o.day === day && marketOpen(now) ? market.pathSince(o.id, o.day, o.idx) : null;
-      if (!path) { if (o.side === 'buy') a.cash = (a.cash ?? 50000) + o.reserve; stockNote(a, `${o.name} ${o.side === 'buy' ? '매수' : '매도'} 예약(${o.qty}주 · ${won(o.limit)}원)이 체결되지 않아 장 마감으로 취소됐어요.`); dirty = true; continue; }
+      if (!path) { if (o.side === 'buy') a.cash = (a.cash ?? 50000) + o.reserve; stockNote(a, `${o.name} ${o.side === 'buy' ? '매수' : '매도'} 예약(${o.qty}주 · ${won(o.limit)}원)이 오늘 안에 체결되지 않아 자정에 취소됐어요.`); dirty = true; continue; }
       if (!(o.side === 'buy' ? path.lo <= o.limit : path.hi >= o.limit)) { keep.push(o); continue; }
       const price = o.side === 'buy' ? (path.last <= o.limit ? path.last : o.limit) : (path.last >= o.limit ? path.last : o.limit);   // 지금 가격이 더 유리하면 그 가격에
       if (o.side === 'sell' && (a.holdings?.[o.id]?.qty || 0) < o.qty) { stockNote(a, `${o.name} 매도 예약이 가진 주식이 모자라 취소됐어요.`); dirty = true; continue; }
@@ -430,7 +430,7 @@ http.createServer(async (req, res) => {
     if (name === 'trade') {   // 주문 { id, side: 'buy' | 'sell', qty, type: 'market' | 'limit', limit }: 시장가는 지금 가격에 바로, 지정가는 내가 건 가격이 될 때까지 기다림(당일 유효). 돈·주식 수·정지 여부는 서버가 확인
       if (!key || !accounts[key]) return json(res, 401, { ok: false, msg: '로그인이 필요해요.' });
       const now = worldMinutes(); market.advance(now); processOrders();
-      if (!marketOpen(now)) return json(res, 400, { ok: false, msg: '지금은 장이 닫혀 있어요. (평일 09:00~15:30)' });
+      if (!marketOpen(now)) return json(res, 400, { ok: false, msg: '지금은 거래할 수 없어요.' });
       const qty = b.qty, a = accounts[key], life = lifeOf(a), lim = Object.hasOwn(STOCKS, b.id) ? market.limitsOf(b.id) : null;
       if (!lim || !['buy', 'sell'].includes(b.side)) return json(res, 400, { ok: false, msg: '잘못된 주문이에요.' });
       if (!Number.isInteger(qty) || qty < 1 || qty > 100000) return json(res, 400, { ok: false, msg: '수량은 1주 이상으로 적어 주세요.' });

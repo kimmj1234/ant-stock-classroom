@@ -46,14 +46,10 @@ function weatherOf(day) {
 
 // 주식시장: 평일(월~금) 09:00 ~ 15:30에만 거래 (현실 한국 거래소와 같음)
 const MARKET_OPEN = 9 * 60, MARKET_CLOSE = 15 * 60 + 30;
-const marketOpen = min => { const day = Math.floor(min / DAY), t = min - day * DAY; return weekdayOf(day) < 5 && t >= MARKET_OPEN && t < MARKET_CLOSE; };
+// 주식 시장은 24시간·주말 없이 항상 열려 있음 (하루의 시작·끝은 자정: 일봉·전일 종가·배당락·예약 주문 유효 기간)
+const marketOpen = () => true;
 // 다음에 장이 열리는 시각(분)
-function nextOpen(min) {
-  let day = Math.floor(min / DAY);
-  if (min - day * DAY >= MARKET_OPEN) day++;
-  while (weekdayOf(day) >= 5) day++;
-  return day * DAY + MARKET_OPEN;
-}
+function nextOpen(min) { return min; }   // 항상 열려 있으니 지금
 
 // 기온(°C): 서울 월평균 기온을 날짜에 맞게 이어 붙이고 + 하루 변화(해 뜰 무렵 가장 춥고 오후 3시 무렵 가장 더움) + 날마다 조금씩 다름 + 날씨(비·눈 오면 서늘하고 하루 변화가 작음)
 const MONTH_TEMP = [-2.4, 0.4, 5.7, 12.5, 17.8, 22.2, 24.9, 25.7, 21.2, 14.8, 7.2, 0.4];   // 1월 ~ 12월 (각 달 15일 무렵)

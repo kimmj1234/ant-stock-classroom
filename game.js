@@ -300,13 +300,13 @@ function stockRow(s) {
   const ch = s.price - s.prev, w = starred(s.id);
   return `<li class="mk-li"><button type="button" class="mk-star" data-watch="${s.id}" aria-label="${s.name} 관심 종목" aria-pressed="${w}">${w ? '★' : '☆'}</button><button type="button" class="mk-row" data-stock="${s.id}"><span>${s.name} ${tagsOf(s)}<small>${s.sector} · 시총 ${capText(s.cap)} · 거래 ${volText(s.vol)}주</small></span><span class="mk-price ${tone(ch)}">${won(s.price)}<small class="${tone(ch)}">${signed(ch)} (${pct(s.price, s.prev).toFixed(2)}%)</small></span></button></li>`;
 }
-const orderRows = (d, only) => (d.orders || []).filter(o => !only || o.id === only).map(o => `<li class="mk-ord"><span><b class="${o.side === 'buy' ? 'up' : 'down'}">${o.side === 'buy' ? '매수' : '매도'}</b> ${o.name} ${o.qty}주 · ${won(o.limit)}원<small>오늘 장 마감까지 기다려요</small></span><button type="button" data-cancel="${o.oid}">취소</button></li>`).join('');
+const orderRows = (d, only) => (d.orders || []).filter(o => !only || o.id === only).map(o => `<li class="mk-ord"><span><b class="${o.side === 'buy' ? 'up' : 'down'}">${o.side === 'buy' ? '매수' : '매도'}</b> ${o.name} ${o.qty}주 · ${won(o.limit)}원<small>오늘 자정까지 기다려요</small></span><button type="button" data-cancel="${o.oid}">취소</button></li>`).join('');
 function renderStock() {
   const d = phone.data, scr = $hud('phoneScreen');
   if (!d) { scr.innerHTML = '<p class="mk-empty">시세를 불러오는 중…</p>'; return; }
   const st = $hud('mkStatus'), nx = today(d.next), idx = `한울종합 ${won(d.index)} (${d.idxChg >= 0 ? '+' : ''}${d.idxChg.toFixed(2)}%) · `;
   st.className = 'phone-status ' + (d.open && !d.halt ? 'open' : '');
-  st.textContent = idx + (d.halt ? '서킷브레이커 발동 중 · 모든 매매 정지' : d.open ? '장 열림 · 15:30에 마감' : `장 마감 · 다음 개장 ${nx.month}월 ${nx.date}일 (${nx.weekday}) 09:00`);
+  st.textContent = idx + (d.halt ? '서킷브레이커 발동 중 · 모든 매매 정지' : d.open ? '24시간 거래 중' : `장 마감 · 다음 개장 ${nx.month}월 ${nx.date}일 (${nx.weekday}) 09:00`);
   $hud('phoneClock').textContent = today(clock.min).time;
   if (phone.tab === 'detail') return renderDetail();
   if (phone.tab === 'list' || phone.tab === 'watch') {
@@ -350,7 +350,7 @@ function ipoCard(p, d) {
   let act = '';
   if (p.stage === 'subscribe') {
     const q = phone.ipoQty[p.id] ?? 1;
-    act = app ? `<p class="ipo-msg">청약 완료: ${won(app.qty)}주 · 증거금 ${won(app.deposit)}원을 맡겼어요. 배정은 ${dayText(p.t.alloc)} 장 열 때 알려 드려요.</p><button type="button" class="ipo-btn cancel" data-ipocancel="${p.id}">청약 취소 (증거금 돌려받기)</button>`
+    act = app ? `<p class="ipo-msg">청약 완료: ${won(app.qty)}주 · 증거금 ${won(app.deposit)}원을 맡겼어요. 배정은 ${dayText(p.t.alloc)} 9시에 알려 드려요.</p><button type="button" class="ipo-btn cancel" data-ipocancel="${p.id}">청약 취소 (증거금 돌려받기)</button>`
       : `<div class="mk-order"><button type="button" class="mk-step" data-ipostep="${p.id}" data-d="-1" aria-label="1주 빼기">−</button><input type="number" min="1" max="${p.maxQty}" value="${q}" data-ipoqty="${p.id}" inputmode="numeric" aria-label="청약 수량(주)"><button type="button" class="mk-step" data-ipostep="${p.id}" data-d="1" aria-label="1주 더하기">+</button></div>
         <div class="mk-est" data-ipoest="${p.id}">${ipoEst(p, d, q)}</div><button type="button" class="ipo-btn" data-ipoapply="${p.id}" ${d.cash < Math.ceil(q * p.price * 0.5) ? 'disabled' : ''}>청약하기 (최대 ${won(p.maxQty)}주)</button>`;
   } else if (p.stage === 'closed' || p.stage === 'allocated') act = '<p class="ipo-msg">청약이 끝났어요. ' + (p.stage === 'closed' ? dayText(p.t.alloc) + ' 배정·환불' : '배정·환불 완료, ' + dayText(p.t.list) + ' 상장') + '이에요.' + (have && !s ? ' 내가 배정받은 주식: <b>' + have.qty + '주</b> (상장일부터 거래)' : '') + '</p>';
@@ -413,12 +413,13 @@ function renderDetail() {
     ['시가총액', capText(s.cap)], ['PER', s.per ? s.per + '배' : '적자'], ['EPS', won(s.eps) + '원'], ['배당(연)', s.dps ? won(s.dps) + '원 (' + (s.yield * 100).toFixed(1) + '%)' : '없음'], ['60일 최고', won(s.hi60), 'up'], ['60일 최저', won(s.lo60), 'down'], ['상한가', won(s.up), 'up'], ['하한가', won(s.dn), 'down']]
     .map(([k, v, c]) => `<span>${k}</span><b class="${c || ''}">${v}</b>`).join('');
   const nd = s.nextDiv && today(s.nextDiv.exDay * DAY);
-  $hud('mkDiv').textContent = nd ? `배당 예정: 주당 ${won(s.nextDiv.dps)}원 · 배당락일 ${nd.month}월 ${nd.date}일 (그날 장 열 때 가진 주식에 지급, 세금 15.4%)` : '';
+  $hud('mkDiv').textContent = nd ? `배당 예정: 주당 ${won(s.nextDiv.dps)}원 · 배당락일 ${nd.month}월 ${nd.date}일 (그날 0시에 가진 주식에 지급, 세금 15.4%)` : '';
   $hud('mkBook').innerHTML = bookHTML(s);
   $hud('mkOwn').innerHTML = h ? `가진 주식 <b>${h.qty}주</b>${locked ? ' (예약에 ' + locked + '주 묶임)' : ''} · 평균 ${won(Math.round(h.cost / h.qty))}원 · <span class="${tone(s.price * h.qty - h.cost)}">${signed(s.price * h.qty - h.cost)}원</span>` : '가진 주식 없음';
   const marketable = ot === 'market' || limit >= s.price, px = ot === 'market' ? s.price : limit;
-  $hud('mkEst').textContent = halted ? (d.halt ? '서킷브레이커로 모든 매매가 정지돼 있어요.' : 'VI 발동 중: 2분간 주문할 수 없어요.')
-    : `${qty}주 × ${won(px)}원 = ${won(px * qty)}원 (수수료 0.015%, 팔 때 세금 0.18%)${ot === 'limit' ? (limitOk ? (limit === s.price ? ' · 지금 가격이라 바로 체결' : ' · 가격이 닿으면 체결, 오늘 장 마감까지') : ' · 가격은 ' + won(s.dn) + '~' + won(s.up) + '원 사이') : ''} · 현금 ${won(d.cash)}원`;
+  const nx = today(d.next);
+  $hud('mkEst').textContent = !d.open ? `장이 닫혀 있어서 지금은 주문할 수 없어요. 다음 개장: ${nx.month}월 ${nx.date}일 (${nx.weekday}) 09:00 (곧 열려요)` : halted ? (d.halt ? '서킷브레이커로 모든 매매가 정지돼 있어요.' : 'VI 발동 중: 2분간 주문할 수 없어요.')
+    : `${qty}주 × ${won(px)}원 = ${won(px * qty)}원 (수수료 0.015%, 팔 때 세금 0.18%)${ot === 'limit' ? (limitOk ? (limit === s.price ? ' · 지금 가격이라 바로 체결' : ' · 가격이 닿으면 체결, 오늘 자정까지') : ' · 가격은 ' + won(s.dn) + '~' + won(s.up) + '원 사이') : ''} · 현금 ${won(d.cash)}원`;
   const buy = document.querySelector('.mk-buy'), sell = document.querySelector('.mk-sell');
   buy.textContent = ot === 'limit' && limit < s.price ? '예약 사기' : '사기'; sell.textContent = ot === 'limit' && limit > s.price ? '예약 팔기' : '팔기';
   buy.disabled = !d.open || halted || (ot === 'limit' && !limitOk) || d.cash < px * qty;
@@ -452,13 +453,13 @@ function drawChart(s) {
   }
   const pts = s.hist.length > 1 ? s.hist : [s.prev, s.price];
   const lo = Math.min(...pts, s.prev), hi = Math.max(...pts, s.prev), pad = (hi - lo) * 0.1 || hi * 0.01;
-  const y = v => h - 8 - (v - lo + pad) / (hi - lo + pad * 2) * (h - 16), x = i => 4 + i / 389 * (w - 8);
+  const y = v => h - 8 - (v - lo + pad) / (hi - lo + pad * 2) * (h - 16), x = i => 4 + i / 1439 * (w - 8);
   g.strokeStyle = '#9a96a8'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, y(s.prev)); g.lineTo(w, y(s.prev)); g.stroke(); g.setLineDash([]);
   const col = s.price >= s.prev ? '#d32f2f' : '#1e5bd8';
   g.beginPath(); pts.forEach((v, i) => i ? g.lineTo(x(i), y(v)) : g.moveTo(x(i), y(v)));
   g.strokeStyle = col; g.lineWidth = 2; g.stroke();
   g.lineTo(x(pts.length - 1), h); g.lineTo(x(0), h); g.closePath(); g.fillStyle = col + '22'; g.fill();
-  g.fillStyle = '#6a6680'; g.fillText('오늘 (09:00~15:30)', 6, 13);
+  g.fillStyle = '#6a6680'; g.fillText('오늘 (00:00~24:00)', 6, 13);
 }
 $hud('phoneScreen').addEventListener('click', async e => {
   const t = e.target;
@@ -488,7 +489,7 @@ $hud('phoneScreen').addEventListener('click', async e => {
   if (type === 'limit') body.limit = +$hud('mkLimit').value;
   t.disabled = true;
   const r = await post('trade', body);
-  $hud('mkMsg').textContent = r.ok ? (r.pending ? `예약 주문을 걸었어요 (${side === 'buy' ? '매수' : '매도'} ${qty}주 · ${won(r.order.limit)}원, 오늘 장 마감까지)` : `${s.name} ${r.qty}주 ${side === 'buy' ? '샀어요' : '팔았어요'} (${won(r.price)}원)`) : r.msg;
+  $hud('mkMsg').textContent = r.ok ? (r.pending ? `예약 주문을 걸었어요 (${side === 'buy' ? '매수' : '매도'} ${qty}주 · ${won(r.order.limit)}원, 오늘 자정까지)` : `${s.name} ${r.qty}주 ${side === 'buy' ? '샀어요' : '팔았어요'} (${won(r.price)}원)`) : r.msg;
   if (r.ok) { me.cash = r.cash; notify(r.pending ? `${s.name} ${side === 'buy' ? '매수' : '매도'} 예약 접수 · ${won(r.order.limit)}원` : `${s.name} ${r.qty}주 ${side === 'buy' ? '매수' : '매도'} 체결 · ${won(r.price)}원`); }
   loadMarket();
 });

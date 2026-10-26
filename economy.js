@@ -297,14 +297,13 @@ function createMarket(file, read, write, opts = {}) {
     const day = Math.floor(min / DAY), t = min - day * DAY;
     if (t === 0) { planDay(day); ipoStart(min, day); }                                                                       // 자정: 새 계획
     runPlans(min); ipoTick(min);
-    if (t === MARKET_CLOSE && marketOpen(min - 1)) closeNews(min);
+    if (t === 0) closeNews(min);                                                                      // 자정: 하루를 마감하는 시황 (지수·순매수·상장 첫날)
     if (t === 8 * 60) { const n = weatherNews(day); if (n) addNews(min, n); }                     // 아침 8시 날씨 뉴스
     if (Math.random() < EVENTS_PER_DAY / DAY) {                                                     // 사건 뉴스
       const total = EVENTS.reduce((a, e) => a + e.w, 0); let r = Math.random() * total;
       const e = EVENTS.find(e => (r -= e.w) < 0) || EVENTS[0];
       addNews(min, e.make());
     }
-    if (!marketOpen(min)) return;
     if (st.moodDay !== day) { st.moodDay = day; st.mood = (st.mood || 0) * 0.4 + gauss() * 0.7 + (macro.demand - 1) * 3; }   // 오늘 시장 분위기(%): 어제를 조금 이어받고 경기를 따라감
     const common = gauss();                                                                          // 이번 분 모든 종목이 같이 받는 흔들림
     for (const c of COMPANIES) {
@@ -322,7 +321,7 @@ function createMarket(file, read, write, opts = {}) {
         fireDividend(c, dps, min);
       }
       if (min < (st.cbUntil || 0) || min < (s.viUntil || 0)) { s.hist.push(s.price); continue; }   // 매매 정지 중: 가격 그대로 (사람들의 주문은 쌓였다가 다시 열리면 반영)
-      const len = MARKET_CLOSE - MARKET_OPEN, beta = BETA[c.sector] ?? 1;
+      const len = DAY, beta = BETA[c.sector] ?? 1;
       let r = gauss() * c.vol * 0.85 / 100 / Math.sqrt(len) + beta * (st.mood / 100 / len + common * 0.6 / 100 / Math.sqrt(len));   // 종목만의 흔들림 + 시장 전체를 따라감
       const f = st.flow[c.id];
       let moved = 0;
@@ -341,7 +340,7 @@ function createMarket(file, read, write, opts = {}) {
       s.high = Math.max(s.high, s.price); s.low = Math.min(s.low, s.price);
       s.hist.push(s.price);
       // 거래량: 하루 발행주식의 0.3~1%쯤(변동성 큰 회사일수록 많이), 장 시작·마감 직전에 몰리고, 가격이 크게 움직이면 늘고, 사람들의 주문만큼 더해짐
-      const um = 1 + 1.4 * Math.exp(-(t - MARKET_OPEN) / 18) + 1.0 * Math.exp(-(MARKET_CLOSE - t) / 18);
+      const um = 1.8 * (0.25 + 1.1 * Math.exp(-((((t / 60) - 12.5) / 4.5) ** 2)) + 0.9 * Math.exp(-Math.abs(t - MARKET_OPEN) / 20) + 0.6 * Math.exp(-Math.abs(t - MARKET_CLOSE) / 20));
       const vv = Math.max(0, Math.round(c.shares * (0.003 + c.vol * 0.0008) / len * um * (s.listDay === day ? 4 : 1) * (0.4 + Math.random() * 1.2) * (1 + Math.abs(r) * 120) + moved / s.price));
       s.vol = (s.vol || 0) + vv; s.amt = (s.amt || 0) + vv * s.price;
       // 변동성 완화 장치(VI): 5분 사이 5% 넘게, 또는 시가보다 12% 넘게 움직이면 그 종목만 2분간 매매 정지 (20분에 한 번만)
@@ -420,7 +419,6 @@ if (require.main === module) {
     v.forEach((s, i) => {
       assert.strictEqual(s.price % tickOf(s.price), 0, s.name + ' 호가 단위');
       assert.ok(s.price <= s.up && s.price >= s.dn, s.name + ' 상하한');   // 상장 첫날은 시초가가 기준 (view의 up·dn)
-      if (!marketOpen(min) && !marketOpen(min - 6)) assert.strictEqual(s.price, before[i], s.name + ' 장 닫힘');
     });
   }
   const v = m.view();
